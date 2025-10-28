@@ -1,0 +1,72 @@
+[package]
+name = "ym2149"
+version = "0.1.0"
+edition = "2021"
+authors = ["slippyex"]
+description = "Cycle-accurate YM2149 PSG emulator with real-time streaming audio output"
+license = "MIT"
+repository = "https://github.com/slippyex/ym2149-rs"
+homepage = "https://github.com/slippyex/ym2149-rs"
+documentation = "https://docs.rs/ym2149"
+readme = "README.md"
+keywords = ["emulator", "ym2149", "psg", "atari", "sound"]
+categories = ["emulators", "multimedia::audio"]
+
+[dependencies]
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Audio output
+hound = "3.5"  # WAV file writing
+rodio = { version = "0.17", optional = true }  # Audio playback (streaming feature)
+
+# Synchronization
+parking_lot = "0.12"  # Better synchronization primitives
+
+# Binary parsing
+nom = "7.1"
+
+# Compression support (LHA/LZH decompression for YM files)
+delharc = "0.6"  # LHA/LZH archive decompression
+tempfile = "3.8"  # Safe temporary file handling with automatic cleanup
+
+# Serialization (for future configuration)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Utilities
+bitflags = "2.0"
+num-derive = "0.4"
+num-traits = "0.2"
+csv = "1.3"
+
+[dev-dependencies]
+# Testing utilities
+approx = "0.5"
+
+[features]
+default = [
+    "emulator",
+    "ym-format",
+    "replayer",
+    "visualization",
+]
+
+# Core YM2149 emulator
+emulator = []
+
+# YM file parsing and loading (YM2/3/4/5/6)
+ym-format = []
+
+# Replayer (depends on ym-format)
+replayer = ["ym-format"]
+
+# Streaming audio output (enables rodio-based AudioDevice)
+streaming = ["dep:rodio"]
+
+# Terminal visualization helpers
+visualization = []
+
+# Optional softsynth backend
+softsynth = []
