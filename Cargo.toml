@@ -1,6 +1,6 @@
 [package]
 name = "ym2149"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["slippyex"]
 description = "Cycle-accurate YM2149 PSG emulator with real-time streaming audio output"
