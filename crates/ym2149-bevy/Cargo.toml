@@ -16,4 +16,4 @@ serde = { workspace = true, features = ["derive"] }
 parking_lot.workspace = true
 
 [dev-dependencies]
-bevy = { version = "0.17", features = ["bevy_audio", "bevy_render", "x11"] }
+bevy = { version = "0.17", features = ["bevy_audio"] }
