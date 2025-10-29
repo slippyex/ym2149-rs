@@ -15,9 +15,7 @@ mod cli {
     use std::sync::Arc;
     use std::time::Instant;
 
-    use ym2149::replayer::{
-        load_song, PlaybackController, Player, Ym6Info, Ym6Player, YmFileFormat,
-    };
+    use ym2149::replayer::{load_song, PlaybackController, Player, Ym6Player};
     #[cfg(feature = "softsynth")]
     use ym2149::softsynth::SoftPlayer;
     use ym2149::streaming::{
@@ -25,6 +23,8 @@ mod cli {
     };
     use ym2149::visualization::{create_channel_status, create_volume_bar};
     use ym2149::{AudioDevice, RealtimePlayer};
+    #[cfg(feature = "softsynth")]
+    use ym2149::{Ym6Info, YmFileFormat};
 
     const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
     const NOTE_NAMES: [&str; 12] = [
@@ -133,6 +133,7 @@ mod cli {
     trait RealtimeChip: PlaybackController + Send {
         fn generate_samples(&mut self, count: usize) -> Vec<f32>;
         fn visual_snapshot(&self) -> VisualSnapshot;
+        #[allow(dead_code)]
         fn set_color_filter(&mut self, enabled: bool);
         fn set_channel_mute(&mut self, channel: usize, mute: bool);
         fn is_channel_muted(&self, channel: usize) -> bool;

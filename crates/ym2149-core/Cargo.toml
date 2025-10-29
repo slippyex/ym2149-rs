@@ -1,0 +1,64 @@
+[package]
+name = "ym2149"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Cycle-accurate YM2149 PSG emulator with real-time streaming audio output"
+documentation = "https://docs.rs/ym2149"
+readme = "../../README.md"
+keywords = ["emulator", "ym2149", "psg", "atari", "sound"]
+categories = ["emulators", "multimedia::audio"]
+
+[dependencies]
+# Error handling
+thiserror.workspace = true
+
+# Audio output
+rodio = { workspace = true, optional = true }  # Audio playback (streaming feature)
+
+# Synchronization
+parking_lot.workspace = true  # Better synchronization primitives
+
+# Compression support (LHA/LZH decompression for YM files)
+delharc.workspace = true  # LHA/LZH archive decompression
+tempfile.workspace = true  # Safe temporary file handling with automatic cleanup
+
+# Utilities
+bitflags.workspace = true
+
+[dev-dependencies]
+# Testing utilities
+approx.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = [
+    "emulator",
+    "ym-format",
+    "replayer",
+    "visualization",
+]
+
+# Core YM2149 emulator
+emulator = []
+
+# YM file parsing and loading (YM2/3/4/5/6)
+ym-format = []
+
+# Replayer (depends on ym-format)
+replayer = ["ym-format"]
+
+# Streaming audio output (enables rodio-based AudioDevice)
+streaming = ["dep:rodio"]
+
+# Terminal visualization helpers
+visualization = []
+
+# Optional softsynth backend
+softsynth = []

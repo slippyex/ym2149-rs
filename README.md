@@ -15,19 +15,36 @@ Cycle‑accurate Yamaha YM2149 PSG (Atari ST) emulator in Rust, with optional YM
 This crate can replay YM files (YM2–YM6) through a simple frame‑based replayer.
 You can render to a buffer or stream in real‑time. Effects encoded in YM5/YM6 are supported; YM2 Mad Max digi‑drums are handled as well.
 
-Minimal example:
+Minimal example (buffer-based):
 
 ```rust
 use ym2149::{replayer::PlaybackController, replayer::load_song};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let data = std::fs::read("examples/Scaven6.ym")?;
-    let (mut player, _summary) = load_song(&data)?; // auto-detects YM version
+    // Buffer-based API: pass bytes directly (auto-detects + decompresses)
+    let data = std::fs::read("examples/Scaven6.ym")?; // LHA-compressed OK
+    let (mut player, _summary) = load_song(&data)?;    // YM2–YM6 supported
     player.play()?;
     let samples = player.generate_samples(44_100);  // render ~1s at 44.1kHz
     println!("{} samples", samples.len());
     Ok(())
 }
+```
+
+### Loading YM Data (files or buffers)
+
+If you want parsed register frames instead of a player, use the file loader:
+
+```rust
+// From a file path (auto-detects format, transparently decompresses LHA)
+use ym2149::ym_loader::load_file;
+let frames = load_file("examples/Scaven6.ym")?; // Vec<[u8; 16]>
+println!("{} frames", frames.len());
+
+// From an in-memory buffer
+use ym2149::ym_loader::load_bytes;
+let data = std::fs::read("examples/Scaven6.ym")?;
+let frames = load_bytes(&data)?;
 ```
 
 ### Real‑Time Streaming (replayer + streaming)
