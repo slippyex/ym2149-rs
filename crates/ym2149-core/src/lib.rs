@@ -39,8 +39,9 @@
 //! # {
 //! use ym2149::replayer::PlaybackController;
 //! use ym2149::{load_song, Ym6Player};
+//! // Buffer-based API: pass bytes (LHA-compressed OK)
 //! let data = std::fs::read("song.ym").unwrap();
-//! let (mut player, summary) = load_song(&data).unwrap();
+//! let (mut player, summary) = load_song(&data).unwrap(); // YM2–YM6 auto-detect
 //! player.play().unwrap();
 //! let audio = player.generate_samples(summary.samples_per_frame as usize);
 //! # }
@@ -59,6 +60,21 @@
 //! let stream = RealtimePlayer::new(cfg).unwrap();
 //! let _dev = AudioDevice::new(cfg.sample_rate, cfg.channels, stream.get_buffer()).unwrap();
 //! // push samples into the stream in a loop
+//! # }
+//! ```
+
+//! ## File loader (frames from files or buffers)
+//! ```no_run
+//! # #[cfg(feature = "ym-format")]
+//! # {
+//! // From a file path
+//! let frames = ym2149::ym_loader::load_file("song.ym").unwrap();
+//! assert!(!frames.is_empty());
+//!
+//! // From an in-memory buffer
+//! let data = std::fs::read("song.ym").unwrap();
+//! let frames2 = ym2149::ym_loader::load_bytes(&data).unwrap();
+//! assert_eq!(frames.len(), frames2.len());
 //! # }
 //! ```
 
