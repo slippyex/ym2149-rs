@@ -22,7 +22,7 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 bevy = "0.15"
-ym2149-bevy = "0.1"
+ym2149-bevy = "0.5"
 ```
 
 ### Minimal Example
