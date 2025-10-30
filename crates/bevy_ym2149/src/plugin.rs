@@ -16,6 +16,7 @@ impl Plugin for Ym2149Plugin {
     fn build(&self, app: &mut App) {
         app.register_asset_loader(Ym2149Loader)
             .insert_resource(Ym2149Settings::default())
+            .insert_resource(visualization::OscilloscopeBuffer::new(256))
             .add_systems(
                 Update,
                 (
@@ -27,6 +28,7 @@ impl Plugin for Ym2149Plugin {
                     visualization::update_channel_levels,
                     visualization::update_detailed_channel_display,
                     visualization::update_channel_bars,
+                    visualization::update_oscilloscope,
                 )
                     .chain(),
             );
@@ -135,6 +137,7 @@ fn update_playback(
     mut playbacks: Query<&mut Ym2149Playback>,
     settings: Res<Ym2149Settings>,
     time: Res<Time>,
+    mut oscilloscope_buffer: ResMut<visualization::OscilloscopeBuffer>,
     mut frame_count: Local<u32>,
     mut prev_state: Local<Option<PlaybackState>>,
     mut time_since_last_frame: Local<f32>,
@@ -206,6 +209,11 @@ fn update_playback(
                             for sample in &mut samples {
                                 *sample *= playback.volume;
                             }
+                        }
+
+                        // Push samples to oscilloscope buffer for visualization
+                        for sample in &samples {
+                            oscilloscope_buffer.push_sample(*sample);
                         }
 
                         // Push samples to audio device if available

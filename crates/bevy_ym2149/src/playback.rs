@@ -8,7 +8,7 @@
 //!
 //! ```no_run
 //! use bevy::prelude::*;
-//! use ym2149_bevy::Ym2149Playback;
+//! use bevy_ym2149::Ym2149Playback;
 //!
 //! fn setup(mut commands: Commands) {
 //!     commands.spawn(Ym2149Playback::new("path/to/song.ym"));
@@ -19,7 +19,7 @@
 //!
 //! ```no_run
 //! use bevy::prelude::*;
-//! use ym2149_bevy::Ym2149Playback;
+//! use bevy_ym2149::Ym2149Playback;
 //!
 //! fn control(mut playbacks: Query<&mut Ym2149Playback>) {
 //!     for mut pb in playbacks.iter_mut() {
@@ -56,7 +56,7 @@ use ym2149::replayer::Ym6Player;
 ///
 /// ```no_run
 /// use bevy::prelude::*;
-/// use ym2149_bevy::Ym2149Playback;
+/// use bevy_ym2149::Ym2149Playback;
 ///
 /// fn my_system(mut playbacks: Query<&mut Ym2149Playback>) {
 ///     for mut pb in playbacks.iter_mut() {
@@ -247,7 +247,7 @@ impl Default for Ym2149Playback {
 ///
 /// ```no_run
 /// use bevy::prelude::*;
-/// use ym2149_bevy::Ym2149Settings;
+/// use bevy_ym2149::Ym2149Settings;
 ///
 /// fn toggle_loop(mut settings: ResMut<Ym2149Settings>) {
 ///     settings.loop_enabled = !settings.loop_enabled;

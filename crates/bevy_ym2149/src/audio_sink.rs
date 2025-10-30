@@ -12,7 +12,7 @@
 //! # Implementing a Custom Sink
 //!
 //! ```ignore
-//! use ym2149_bevy::audio_sink::AudioSink;
+//! use bevy_ym2149::audio_sink::AudioSink;
 //! use std::sync::Arc;
 //!
 //! struct MyCustomSink {

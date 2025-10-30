@@ -1,12 +1,12 @@
 //! Basic YM2149 playback example with visualization
 //!
-//! This example demonstrates how to use the ym2149-bevy plugin to load and play
+//! This example demonstrates how to use the bevy_ym2149 plugin to load and play
 //! YM chiptune files in a Bevy application with real-time visualization.
 
 use bevy::prelude::*;
-use ym2149_bevy::{
-    create_detailed_channel_display, create_status_display, Ym2149Playback, Ym2149Plugin,
-    Ym2149Settings,
+use bevy_ym2149::{
+    create_detailed_channel_display, create_oscilloscope, create_status_display, Ym2149Playback,
+    Ym2149Plugin, Ym2149Settings,
 };
 
 fn main() {
@@ -50,7 +50,7 @@ fn setup(mut commands: Commands) {
     // Create a playback entity
     // The path will be set via drag-and-drop or manually loaded
     // You can also specify a default file path if desired
-    let playback = Ym2149Playback::new("examples/ND-Toxygene.ym");
+    let playback = Ym2149Playback::new("./examples/ND-Toxygene.ym");
     // Note: playback starts in Idle state; drag-and-drop or keyboard controls will start it
     commands.spawn(playback);
 
@@ -60,8 +60,11 @@ fn setup(mut commands: Commands) {
     // Create detailed channel information display
     create_detailed_channel_display(&mut commands);
 
+    // Create oscilloscope display
+    create_oscilloscope(&mut commands);
+
     // Create channel visualizations (3 channels for YM2149)
-    let _channels = ym2149_bevy::visualization::create_channel_visualization(&mut commands, 3);
+    let _channels = bevy_ym2149::visualization::create_channel_visualization(&mut commands, 3);
 }
 
 /// Handle keyboard input for playback control

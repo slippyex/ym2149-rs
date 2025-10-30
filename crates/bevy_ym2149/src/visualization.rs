@@ -64,6 +64,45 @@ pub struct ChannelBar {
     pub channel_index: usize,
 }
 
+/// Component for oscilloscope visualization
+#[derive(Component)]
+pub struct Oscilloscope;
+
+/// Resource to store recent audio samples for oscilloscope
+#[derive(Resource, Clone)]
+pub struct OscilloscopeBuffer {
+    samples: Vec<f32>,
+    capacity: usize,
+    index: usize,
+}
+
+impl OscilloscopeBuffer {
+    /// Create a new oscilloscope buffer with given capacity
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            samples: vec![0.0; capacity],
+            capacity,
+            index: 0,
+        }
+    }
+
+    /// Add a sample to the buffer
+    pub fn push_sample(&mut self, sample: f32) {
+        self.samples[self.index] = sample.clamp(-1.0, 1.0);
+        self.index = (self.index + 1) % self.capacity;
+    }
+
+    /// Get the current samples in order
+    pub fn get_samples(&self) -> Vec<f32> {
+        let mut result = Vec::with_capacity(self.capacity);
+        for i in 0..self.capacity {
+            let idx = (self.index + i) % self.capacity;
+            result.push(self.samples[idx]);
+        }
+        result
+    }
+}
+
 /// System to update song info display
 pub fn update_song_info(
     playbacks: Query<&Ym2149Playback>,
@@ -137,9 +176,9 @@ pub fn update_channel_levels(
 
             for mut channel_viz in channel_visualizations.iter_mut() {
                 let level = match channel_viz.channel_index {
-                    0 => ch1.abs(),
-                    1 => ch2.abs(),
-                    2 => ch3.abs(),
+                    0 => ch1.abs() * 2.5,
+                    1 => ch2.abs() * 2.5,
+                    2 => ch3.abs() * 2.5,
                     _ => 0.0,
                 };
                 channel_viz.output_level = level;
@@ -320,6 +359,102 @@ pub fn create_detailed_channel_display(commands: &mut Commands) -> Entity {
             DetailedChannelDisplay,
         ))
         .id()
+}
+
+/// Create a frequency spectrum analyzer display
+pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(280.0),
+                right: Val::Px(10.0),
+                width: Val::Px(340.0),
+                height: Val::Px(140.0),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(8.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.9)), // Dark background
+        ))
+        .with_children(|parent| {
+            // Title
+            parent.spawn((
+                Text::new("~ Oscilloscope ~"),
+                Node {
+                    width: Val::Percent(100.0),
+                    margin: UiRect::bottom(Val::Px(4.0)),
+                    ..default()
+                },
+            ));
+
+            // Waveform display canvas
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Px(100.0),
+                        position_type: PositionType::Relative,
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.0, 0.05, 0.0)), // Dark green background
+                    Oscilloscope,
+                ))
+                .with_children(|canvas| {
+                    // Create 256 waveform sample points
+                    for _ in 0..256 {
+                        canvas.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                width: Val::Px(1.0),
+                                height: Val::Px(1.0),
+                                left: Val::Px(0.0),
+                                top: Val::Px(50.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.0, 1.0, 0.2)), // Bright oscilloscope green
+                        ));
+                    }
+                });
+        })
+        .id()
+}
+
+/// System to update oscilloscope display with actual waveform data
+pub fn update_oscilloscope(
+    oscilloscope_buffer: Res<OscilloscopeBuffer>,
+    oscilloscope_displays: Query<&Children, With<Oscilloscope>>,
+    mut nodes: Query<&mut Node>,
+) {
+    // Get the samples from the buffer
+    let samples = oscilloscope_buffer.get_samples();
+
+    if !samples.is_empty() {
+        // Update waveform display
+        for oscilloscope_canvas in oscilloscope_displays.iter() {
+            let children: Vec<_> = oscilloscope_canvas.iter().collect();
+
+            for (point_index, &child) in children.iter().enumerate() {
+                if point_index < samples.len() {
+                    // Map sample value (-1 to 1) to display position
+                    let sample_value = samples[point_index].clamp(-1.0, 1.0);
+
+                    // Calculate x position (spread across width)
+                    let x_pos = (point_index as f32 / samples.len() as f32) * 324.0; // 340 - 16px padding
+
+                    // Calculate y position (inverted so positive = up)
+                    // Sample -1.0 -> top (0px), 0.0 -> middle (50px), 1.0 -> bottom (100px)
+                    let y_pos = 50.0 - (sample_value * 50.0);
+
+                    // Update node position
+                    if let Ok(mut node) = nodes.get_mut(child) {
+                        node.left = Val::Px(x_pos);
+                        node.top = Val::Px(y_pos);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Create channel visualization bars with proper flexbox layout
