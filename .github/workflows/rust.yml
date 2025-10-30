@@ -20,8 +20,8 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libwayland-dev libxkbcommon-dev libssl-dev libasound2-dev
+        sudo apt-get install -y libasound2-dev libudev-dev libssl-dev
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --lib
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --lib

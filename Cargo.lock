@@ -1511,6 +1511,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_ym2149"
+version = "0.5.1"
+dependencies = [
+ "bevy",
+ "parking_lot",
+ "serde",
+ "thiserror 1.0.69",
+ "ym2149",
+]
+
+[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5654,7 +5665,7 @@ checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "ym2149"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "approx",
  "bitflags 2.10.0",
@@ -5667,13 +5678,9 @@ dependencies = [
 
 [[package]]
 name = "ym2149-bevy"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
- "bevy",
- "parking_lot",
- "serde",
- "thiserror 1.0.69",
- "ym2149",
+ "bevy_ym2149",
 ]
 
 [[package]]

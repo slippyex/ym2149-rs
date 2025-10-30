@@ -2,6 +2,10 @@
 
 Cycle‑accurate Yamaha YM2149 PSG (Atari ST) emulator in Rust, with optional YM file replay, real‑time streaming, and an experimental softsynth.
 
+[![Crates.io](https://img.shields.io/crates/v/ym2149.svg)](https://crates.io/crates/ym2149)
+[![Docs.rs](https://docs.rs/ym2149/badge.svg)](https://docs.rs/ym2149)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 ## Highlights
 
 - Integer‑accurate YM2149 core (envelope, LFSR noise, mixer, color filter)

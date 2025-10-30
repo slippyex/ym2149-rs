@@ -1,12 +1,13 @@
 [workspace]
 members = [
     "crates/ym2149-core",
+    "crates/bevy_ym2149",
     "crates/ym2149-bevy",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 authors = ["slippyex"]
 license = "MIT"
