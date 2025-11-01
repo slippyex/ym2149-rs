@@ -3,11 +3,27 @@
 //! This example demonstrates how to use the bevy_ym2149 plugin to load and play
 //! YM chiptune files in a Bevy application with real-time visualization.
 
+#![cfg(feature = "visualization")]
+
 use bevy::prelude::*;
+use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{
-    create_detailed_channel_display, create_oscilloscope, create_status_display, Ym2149Playback,
-    Ym2149Plugin, Ym2149Settings,
+    audio_bridge::{AudioBridgeMix, AudioBridgeMixes},
+    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
+    create_status_display, AudioBridgeRequest, AudioBridgeTargets, Ym2149Playback, Ym2149Plugin,
+    Ym2149Settings,
 };
+
+#[derive(Resource)]
+struct PlaybackEntity(Entity);
+
+#[derive(Component)]
+struct BridgeMixLabel;
+
+#[derive(Resource)]
+struct BridgeControl {
+    enabled: bool,
+}
 
 fn main() {
     App::new()
@@ -18,9 +34,17 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(Ym2149Plugin)
+        .add_plugins(Ym2149Plugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, playback_controls)
+        .add_systems(
+            Update,
+            (
+                handle_file_drop,
+                playback_controls,
+                bridge_mix_controls,
+                update_bridge_mix_label,
+            ),
+        )
         .run();
 }
 
@@ -37,11 +61,19 @@ fn setup(mut commands: Commands) {
              - SPACE: Play/Pause\n\
              - R: Restart\n\
              - L: Toggle Looping\n\
-             - UP/DOWN: Volume Control",
+             - UP/DOWN: Volume Control\n\
+             - B: Toggle Bridge Audio\n\
+             - Z/X: Bridge Volume (+/-1 dB)\n\
+             - A/D: Bridge Pan (+/-0.1)",
         ),
+        TextFont {
+            font_size: 18.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.85, 0.88, 0.94)),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(90.0),
+            top: Val::Px(130.0),
             left: Val::Px(10.0),
             ..default()
         },
@@ -51,11 +83,9 @@ fn setup(mut commands: Commands) {
     // The path will be set via drag-and-drop or manually loaded
     // You can also specify a default file path if desired
     let playback = Ym2149Playback::new("./examples/ND-Toxygene.ym");
-    // Note: playback starts in Idle state; drag-and-drop or keyboard controls will start it
-    commands.spawn(playback);
-
-    // Create top panel with song info and status display
-    create_status_display(&mut commands);
+    let playback_entity = commands.spawn(playback).id();
+    commands.insert_resource(PlaybackEntity(playback_entity));
+    commands.insert_resource(BridgeControl { enabled: false });
 
     // Create detailed channel information display
     create_detailed_channel_display(&mut commands);
@@ -64,7 +94,27 @@ fn setup(mut commands: Commands) {
     create_oscilloscope(&mut commands);
 
     // Create channel visualizations (3 channels for YM2149)
-    let _channels = bevy_ym2149::visualization::create_channel_visualization(&mut commands, 3);
+    let _channels = create_channel_visualization(&mut commands, 3);
+
+    // Create top panel with song info and status display
+    create_status_display(&mut commands);
+
+    // Display bridge mix information and controls hint
+    commands.spawn((
+        Text::new("Bridge Audio: disabled\nVolume: --.- dB\nPan: --.--\n[B] Toggle"),
+        TextFont {
+            font_size: 18.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.85, 0.88, 0.94)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(360.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        BridgeMixLabel,
+    ));
 }
 
 /// Handle keyboard input for playback control
@@ -111,6 +161,111 @@ fn playback_controls(
             let new_volume = (playback.volume - 0.1).max(0.0);
             playback.set_volume(new_volume);
             println!("Volume: {:.0}%", new_volume * 100.0);
+        }
+    }
+}
+
+fn handle_file_drop(
+    mut drop_events: MessageReader<FileDragAndDrop>,
+    mut playbacks: Query<&mut Ym2149Playback>,
+) {
+    for event in drop_events.read() {
+        if let FileDragAndDrop::DroppedFile { path_buf, .. } = event {
+            let path_str = path_buf.to_string_lossy().to_string();
+            if !path_str.to_lowercase().ends_with(".ym") {
+                warn!("Dropped file is not a YM file: {}", path_str);
+                continue;
+            }
+
+            if let Some(mut playback) = playbacks.iter_mut().next() {
+                playback.set_source_path(path_str.clone());
+                playback.play();
+                info!("Loaded YM file from drag-and-drop: {}", path_str);
+            }
+        }
+    }
+}
+
+fn bridge_mix_controls(
+    playback: Option<Res<PlaybackEntity>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut mixes: ResMut<AudioBridgeMixes>,
+    mut targets: ResMut<AudioBridgeTargets>,
+    mut control: ResMut<BridgeControl>,
+    mut requests: MessageWriter<AudioBridgeRequest>,
+    mut labels: Query<&mut Text, With<BridgeMixLabel>>,
+) {
+    let Some(playback) = playback else { return };
+    let mut mix = mixes.get(playback.0);
+    let mut changed = false;
+
+    if keyboard.just_pressed(KeyCode::KeyB) {
+        control.enabled = !control.enabled;
+        if control.enabled {
+            mixes.set(playback.0, AudioBridgeMix::CENTER);
+            mix = AudioBridgeMix::CENTER;
+            requests.write(AudioBridgeRequest { entity: playback.0 });
+        } else {
+            targets.0.remove(&playback.0);
+        }
+    }
+
+    if control.enabled {
+        if keyboard.any_just_pressed([KeyCode::KeyZ, KeyCode::KeyX]) {
+            let step_db = if keyboard.just_pressed(KeyCode::KeyZ) {
+                -1.0
+            } else {
+                1.0
+            };
+            mix = mix.with_volume_db(mix.volume_db() + step_db);
+            changed = true;
+        }
+
+        if keyboard.any_just_pressed([KeyCode::KeyA, KeyCode::KeyD]) {
+            let delta = if keyboard.just_pressed(KeyCode::KeyA) {
+                -0.1
+            } else {
+                0.1
+            };
+            mix = mix.with_pan((mix.pan + delta).clamp(-1.0, 1.0));
+            changed = true;
+        }
+    }
+
+    if changed {
+        mixes.set(playback.0, mix);
+    }
+
+    if let Some(mut label) = labels.iter_mut().next() {
+        if control.enabled {
+            label.0 = format!(
+                "Bridge Audio: enabled\nVolume: {:+.1} dB\nPan: {:+.2}\n[B] Toggle",
+                mix.volume_db(),
+                mix.pan
+            );
+        } else {
+            label.0 = "Bridge Audio: disabled\nVolume: --.- dB\nPan: --.--\n[B] Toggle".to_string();
+        }
+    }
+}
+
+fn update_bridge_mix_label(
+    playback: Option<Res<PlaybackEntity>>,
+    mixes: Res<AudioBridgeMixes>,
+    control: Res<BridgeControl>,
+    mut labels: Query<&mut Text, With<BridgeMixLabel>>,
+) {
+    let Some(playback) = playback else { return };
+    let mix = mixes.get(playback.0);
+    for mut text in &mut labels {
+        if control.enabled {
+            text.0 = format!(
+                "Bridge Audio: enabled\nVolume: {:+.1} dB\nPan: {:+.2}\n[B] Toggle",
+                mix.volume_db(),
+                mix.pan
+            );
+        } else {
+            text.0 = "Bridge Audio: disabled\nVolume: --.- dB\nPan: --.--\n[B] Toggle".to_string();
         }
     }
 }

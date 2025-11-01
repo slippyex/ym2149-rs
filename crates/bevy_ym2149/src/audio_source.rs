@@ -56,6 +56,7 @@ impl Ym2149AudioSource {
 pub struct Ym2149LoadError(String);
 
 /// Asset loader for YM2149 files
+#[derive(Default)]
 pub struct Ym2149Loader;
 
 impl AssetLoader for Ym2149Loader {

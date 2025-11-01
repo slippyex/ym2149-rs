@@ -29,7 +29,7 @@
 //! fn main() {
 //!     App::new()
 //!         .add_plugins(DefaultPlugins)
-//!         .add_plugins(Ym2149Plugin)
+//!         .add_plugins(Ym2149Plugin::default())
 //!         .add_systems(Startup, setup)
 //!         .run();
 //! }
@@ -106,19 +106,46 @@
 //! - [`audio_source`] - YM file loading and metadata extraction
 //! - [`visualization`] - UI components and display helpers
 
+pub mod audio_bridge;
 pub mod audio_sink;
 pub mod audio_source;
+pub mod diagnostics;
+pub mod events;
+pub mod music_state;
 pub mod playback;
+pub mod playlist;
 pub mod plugin;
+pub mod spatial;
+#[cfg(feature = "visualization")]
+pub mod uniforms;
+#[cfg(feature = "visualization")]
 pub mod visualization;
 
+pub use ::ym2149::*;
+pub use audio_bridge::{
+    AudioBridgeBuffers, AudioBridgeMix, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice,
+    BridgeAudioSinks,
+};
 pub use audio_sink::{AudioSink, BoxedAudioSink};
 pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
+pub use diagnostics::{update_diagnostics, BUFFER_FILL_PATH, FRAME_POSITION_PATH};
+pub use events::{
+    AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, TrackFinished,
+    TrackStarted,
+};
+pub use music_state::{process_music_state_requests, MusicStateDefinition, MusicStateGraph};
 pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
-pub use plugin::Ym2149Plugin;
+pub use playlist::{
+    advance_playlist_players, handle_playlist_requests, register_playlist_assets, PlaylistMode,
+    PlaylistSource, Ym2149Playlist, Ym2149PlaylistLoader, Ym2149PlaylistPlayer,
+};
+pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
+pub use spatial::{Ym2149Listener, Ym2149SpatialAudio};
+#[cfg(feature = "visualization")]
 pub use visualization::{
     create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
-    create_song_info_display, create_status_display, update_channel_bars, update_oscilloscope,
-    ChannelBar, ChannelVisualization, DetailedChannelDisplay, Oscilloscope, OscilloscopeBuffer,
-    PlaybackStatusDisplay, SongInfoDisplay,
+    create_song_info_display, create_status_display, update_oscilloscope, ChannelFreqLabel,
+    ChannelNoteLabel, DetailedChannelDisplay, LoopStatusLabel, Oscilloscope, OscilloscopeBuffer,
+    OscilloscopeHead, OscilloscopePoint, PlaybackStatusDisplay, SongInfoDisplay, SongProgressFill,
+    SongProgressLabel, SpectrumBar,
 };

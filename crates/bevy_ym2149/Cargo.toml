@@ -8,12 +8,20 @@ repository.workspace = true
 homepage.workspace = true
 description = "Bevy audio plugin for YM2149 PSG emulator"
 
+[features]
+default = ["visualization"]
+visualization = []
+
 [dependencies]
 ym2149 = { path = "../ym2149-core", version = "0.5", features = ["emulator", "ym-format", "replayer", "streaming"] }
 bevy = { version = "0.17", features = ["bevy_audio"] }
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 parking_lot.workspace = true
+anyhow = "1"
+ron = "0.8"
+hound = "3"
+rodio = { version = "0.17", default-features = true }
 
 [dev-dependencies]
 bevy = { version = "0.17", features = ["bevy_audio"] }

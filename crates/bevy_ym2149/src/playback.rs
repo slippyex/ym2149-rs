@@ -45,7 +45,8 @@ use ym2149::replayer::Ym6Player;
 ///
 /// # Fields
 ///
-/// - `source_path`: Path to the YM file to play
+/// - `source_path`: Optional filesystem path to a YM file
+/// - `source_asset`: Optional Bevy asset handle referencing a YM file
 /// - `state`: Current playback state (Idle, Playing, Paused, Finished)
 /// - `frame_position`: Current frame in the song
 /// - `volume`: Volume multiplier (0.0 = silent, 1.0 = full)
@@ -71,13 +72,21 @@ use ym2149::replayer::Ym6Player;
 #[derive(Component)]
 pub struct Ym2149Playback {
     /// Path to the YM file to load and play
-    pub source_path: String,
+    pub source_path: Option<String>,
+    /// In-memory YM data buffer
+    pub source_bytes: Option<Arc<Vec<u8>>>,
+    /// Handle to a YM2149 asset
+    pub source_asset: Option<Handle<crate::audio_source::Ym2149AudioSource>>,
     /// Current playback state
     pub state: PlaybackState,
     /// Current frame position in the song
     pub frame_position: u32,
     /// Volume level (0.0 = mute, 1.0 = full volume)
     pub volume: f32,
+    /// Left channel gain used during spatial mixing.
+    pub left_gain: f32,
+    /// Right channel gain used during spatial mixing.
+    pub right_gain: f32,
     /// Internal YM player instance (created by plugin systems)
     pub(crate) player: Option<Arc<Mutex<Ym6Player>>>,
     /// Audio output device (created by plugin systems)
@@ -117,10 +126,52 @@ impl Ym2149Playback {
     /// * `source_path` - Path to a YM file (YM2-YM6 formats supported)
     pub fn new(source_path: impl Into<String>) -> Self {
         Self {
-            source_path: source_path.into(),
+            source_path: Some(source_path.into()),
+            source_bytes: None,
+            source_asset: None,
             state: PlaybackState::Idle,
             frame_position: 0,
             volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            player: None,
+            audio_device: None,
+            needs_reload: false,
+            song_title: String::new(),
+            song_author: String::new(),
+        }
+    }
+
+    /// Create a new playback component that will stream from a loaded Bevy asset.
+    pub fn from_asset(handle: Handle<crate::audio_source::Ym2149AudioSource>) -> Self {
+        Self {
+            source_path: None,
+            source_bytes: None,
+            source_asset: Some(handle),
+            state: PlaybackState::Idle,
+            frame_position: 0,
+            volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            player: None,
+            audio_device: None,
+            needs_reload: false,
+            song_title: String::new(),
+            song_author: String::new(),
+        }
+    }
+
+    /// Create a new playback component backed by an in-memory YM buffer.
+    pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
+        Self {
+            source_path: None,
+            source_bytes: Some(Arc::new(bytes.into())),
+            source_asset: None,
+            state: PlaybackState::Idle,
+            frame_position: 0,
+            volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
             player: None,
             audio_device: None,
             needs_reload: false,
@@ -207,6 +258,51 @@ impl Ym2149Playback {
         self.volume = volume.clamp(0.0, 1.0);
     }
 
+    /// Set stereo gains (pan/attenuation) applied during mixing.
+    pub fn set_stereo_gain(&mut self, left: f32, right: f32) {
+        self.left_gain = left.clamp(0.0, 1.0);
+        self.right_gain = right.clamp(0.0, 1.0);
+    }
+
+    /// Replace the playback source with a new filesystem path.
+    pub fn set_source_path(&mut self, path: impl Into<String>) {
+        self.source_path = Some(path.into());
+        self.source_bytes = None;
+        self.source_asset = None;
+        self.needs_reload = true;
+    }
+
+    /// Replace the playback source with a Bevy asset handle.
+    pub fn set_source_asset(&mut self, handle: Handle<crate::audio_source::Ym2149AudioSource>) {
+        self.source_asset = Some(handle);
+        self.source_path = None;
+        self.source_bytes = None;
+        self.needs_reload = true;
+    }
+
+    /// Replace the playback source with in-memory bytes.
+    pub fn set_source_bytes(&mut self, bytes: impl Into<Vec<u8>>) {
+        self.source_bytes = Some(Arc::new(bytes.into()));
+        self.source_path = None;
+        self.source_asset = None;
+        self.needs_reload = true;
+    }
+
+    /// Access the configured filesystem path, if any.
+    pub fn source_path(&self) -> Option<&str> {
+        self.source_path.as_deref()
+    }
+
+    /// Access the configured asset handle, if any.
+    pub fn source_asset(&self) -> Option<&Handle<crate::audio_source::Ym2149AudioSource>> {
+        self.source_asset.as_ref()
+    }
+
+    /// Access the configured in-memory bytes, if any.
+    pub fn source_bytes(&self) -> Option<Arc<Vec<u8>>> {
+        self.source_bytes.as_ref().map(Arc::clone)
+    }
+
     /// Check if currently playing
     ///
     /// Returns true if the playback state is `Playing`.
@@ -225,10 +321,14 @@ impl Ym2149Playback {
 impl Default for Ym2149Playback {
     fn default() -> Self {
         Self {
-            source_path: String::new(),
+            source_path: None,
+            source_bytes: None,
+            source_asset: None,
             state: PlaybackState::Idle,
             frame_position: 0,
             volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
             player: None,
             audio_device: None,
             needs_reload: false,
