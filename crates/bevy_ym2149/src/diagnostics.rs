@@ -29,7 +29,7 @@ pub fn update_diagnostics(
             fill_sum += device.buffer_fill_level() as f64;
             device_count += 1.0;
         }
-        max_frame = max_frame.max(playback.frame_position as f64);
+        max_frame = max_frame.max(playback.frame_position() as f64);
     }
 
     if device_count > 0.0 {

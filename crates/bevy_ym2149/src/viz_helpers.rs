@@ -1,9 +1,9 @@
-pub(super) const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
-pub(super) const NOTE_NAMES: [&str; 12] = [
+pub(crate) const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
+pub(crate) const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 
-pub(super) fn get_channel_period(lo: u8, hi: u8) -> Option<u16> {
+pub(crate) fn get_channel_period(lo: u8, hi: u8) -> Option<u16> {
     let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
     if period == 0 {
         None
@@ -12,11 +12,11 @@ pub(super) fn get_channel_period(lo: u8, hi: u8) -> Option<u16> {
     }
 }
 
-pub(super) fn period_to_frequency(period: u16) -> f32 {
+pub(crate) fn period_to_frequency(period: u16) -> f32 {
     PSG_MASTER_CLOCK_HZ / (16.0 * period as f32)
 }
 
-pub(super) fn frequency_to_note(freq: f32) -> Option<String> {
+pub(crate) fn frequency_to_note(freq: f32) -> Option<String> {
     if !freq.is_finite() || freq <= 0.0 {
         return None;
     }
@@ -31,7 +31,7 @@ pub(super) fn frequency_to_note(freq: f32) -> Option<String> {
     Some(format!("{}{}", NOTE_NAMES[note_index as usize], octave))
 }
 
-pub(super) fn format_note_label(note: Option<&str>) -> String {
+pub(crate) fn format_note_label(note: Option<&str>) -> String {
     let value = match note {
         Some(n) if !n.is_empty() => n,
         _ => "--",
@@ -39,7 +39,7 @@ pub(super) fn format_note_label(note: Option<&str>) -> String {
     format!("{:^4}", value)
 }
 
-pub(super) fn format_freq_label(freq: Option<f32>) -> String {
+pub(crate) fn format_freq_label(freq: Option<f32>) -> String {
     if let Some(value) = freq {
         format!("{:>6.1}Hz", value)
     } else {

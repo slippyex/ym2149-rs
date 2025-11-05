@@ -116,10 +116,31 @@ pub mod rodio {
         started: Mutex<bool>,
     }
 
-    // RodioAudioSink is Send + Sync because:
-    // - ring_buffer is Arc<Mutex> which is Send + Sync
-    // - device/started are parking_lot::Mutex which are Send + Sync
-    // - sample_rate and channels are Copy types
+    /// SAFETY: RodioAudioSink is Send + Sync
+    ///
+    /// Field-by-field justification:
+    /// - `ring_buffer: Arc<Mutex<RingBuffer>>`: Both Arc and parking_lot::Mutex are Send + Sync.
+    ///   The Arc allows shared ownership across threads, and the Mutex ensures exclusive
+    ///   access to the RingBuffer contents. RingBuffer itself is Send (contains only primitive types
+    ///   and usize indices).
+    /// - `device: Mutex<Option<AudioDevice>>`: parking_lot::Mutex<T> is Send + Sync when T is
+    ///   Send. AudioDevice from rodio is implemented Send (via cpal's safety constraints).
+    ///   The Mutex ensures only one thread accesses the device at a time.
+    /// - `started: Mutex<bool>`: parking_lot::Mutex<bool> is Send + Sync (bool is Copy, trivially safe).
+    /// - `sample_rate: u32`, `channels: u16`: Both are Copy primitive types, inherently Send + Sync.
+    ///
+    /// Threading model:
+    /// - Multiple threads may call `push_samples()` concurrently; the ring_buffer lock serializes access.
+    /// - The audio output thread holds `device` lock only while calling device methods.
+    /// - The playback thread holds `started` lock only during initialization check.
+    /// - Critically: We never hold both `device` and `ring_buffer` locks simultaneously,
+    ///   preventing deadlock scenarios.
+    ///
+    /// Concurrent access patterns guaranteed safe:
+    /// - `push_samples(&self, ...)` acquires ring_buffer lock only
+    /// - `pause()/resume()` acquire device lock only
+    /// - `buffer_fill_level()` acquires ring_buffer lock only (read-only access)
+    /// - `start()` acquires started lock then device lock in that order (consistent ordering)
     unsafe impl Send for RodioAudioSink {}
     unsafe impl Sync for RodioAudioSink {}
 

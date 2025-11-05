@@ -1,10 +1,14 @@
-//! Basic YM2149 playback example with visualization
+//! Advanced YM2149 playback example with visualization and audio bridge mixing
 //!
-//! This example demonstrates how to use the bevy_ym2149 plugin to load and play
-//! YM chiptune files in a Bevy application with real-time visualization.
+//! This example demonstrates advanced features of the bevy_ym2149 plugin including:
+//! - Real-time visualization (oscilloscope, channel display, spectrum analysis)
+//! - File drag-and-drop loading
+//! - Audio bridge mixing with volume and pan controls
+//! - Keyboard-based playback control
 
 #![cfg(feature = "visualization")]
 
+use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{
@@ -13,6 +17,7 @@ use bevy_ym2149::{
     create_status_display, AudioBridgeRequest, AudioBridgeTargets, Ym2149Playback, Ym2149Plugin,
     Ym2149Settings,
 };
+use bevy_ym2149_examples::ASSET_BASE;
 
 #[derive(Resource)]
 struct PlaybackEntity(Entity);
@@ -27,13 +32,20 @@ struct BridgeControl {
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "YM2149 goes Bevy".into(),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "YM2149 goes Bevy".into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: ASSET_BASE.into(),
+                    ..default()
+                }),
+        )
         .add_plugins(Ym2149Plugin::default())
         .add_systems(Startup, setup)
         .add_systems(
@@ -51,7 +63,7 @@ fn main() {
 /// Set up the initial scene with a YM2149 playback entity and visualization
 fn setup(mut commands: Commands) {
     // Spawn a camera for the window
-    commands.spawn(Camera2d::default());
+    commands.spawn(Camera2d);
 
     // Create title/instructions display (positioned below top panel)
     commands.spawn((
@@ -82,7 +94,7 @@ fn setup(mut commands: Commands) {
     // Create a playback entity
     // The path will be set via drag-and-drop or manually loaded
     // You can also specify a default file path if desired
-    let playback = Ym2149Playback::new("./examples/ND-Toxygene.ym");
+    let playback = Ym2149Playback::new("examples/Odyssey.ym");
     let playback_entity = commands.spawn(playback).id();
     commands.insert_resource(PlaybackEntity(playback_entity));
     commands.insert_resource(BridgeControl { enabled: false });

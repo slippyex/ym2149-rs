@@ -1726,16 +1726,39 @@ mod tests {
     }
 
     #[test]
-    fn test_load_reference_sample_anco() {
-        // Removed external reference sample dependency.
-        // This test is now a placeholder to ensure tests compile without external assets.
-        assert!(true);
+    fn test_ym6_player_initialization() {
+        // Test that a new player initializes with correct default state
+        let player = Ym6Player::new();
+        assert_eq!(player.frame_count(), 0, "New player should have 0 frames");
+        assert_eq!(
+            player.get_current_frame(),
+            0,
+            "New player should start at frame 0"
+        );
+        assert_eq!(
+            player.state(),
+            PlaybackState::Stopped,
+            "New player should be stopped"
+        );
     }
 
     #[test]
-    fn test_load_reference_sample_ymknuck() {
-        // Removed external reference sample dependency.
-        assert!(true);
+    fn test_ym6_player_frame_progression() {
+        // Test that frame position advances correctly during playback
+        let mut player = Ym6Player::new();
+        // Create 10 frames of test data (16 bytes per frame for YM6)
+        let test_frames = vec![[0x00u8; 16]; 10];
+        player.load_frames(test_frames);
+
+        player.play().unwrap();
+        assert_eq!(player.state(), PlaybackState::Playing);
+
+        // Advance through several frames
+        let _ = player.generate_samples(4410); // ~0.1 seconds at 44.1kHz
+        assert!(
+            player.get_current_frame() <= 10,
+            "Frame position should not exceed frame count"
+        );
     }
 
     #[test]

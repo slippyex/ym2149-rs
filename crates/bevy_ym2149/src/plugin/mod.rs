@@ -1,10 +1,8 @@
 //! Plugin orchestration for YM2149 playback within Bevy.
 //!
-//! This module wires together the playback systems, asset loaders, optional
-//! visualization helpers, and the auxiliary features (playlists, channel
-//! events, spatial audio, etc.) that live elsewhere in the crate.
+//! This module contains the main Bevy plugin definition, configuration, and
+//! system wiring that integrates YM2149 playback into any Bevy application.
 
-mod config;
 mod systems;
 
 use self::systems::{initialize_playback, update_playback};
@@ -27,12 +25,83 @@ use crate::spatial::update_spatial_audio;
 #[cfg(feature = "visualization")]
 use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
 #[cfg(feature = "visualization")]
-use crate::visualization::{
+use crate::viz_components::OscilloscopeBuffer;
+#[cfg(feature = "visualization")]
+use crate::viz_systems::{
     update_detailed_channel_display, update_oscilloscope, update_song_info, update_song_progress,
-    update_status_display, OscilloscopeBuffer,
+    update_status_display,
 };
 use bevy::prelude::*;
-pub use config::Ym2149PluginConfig;
+
+/// Configuration object used to enable/disable individual subsystems of the plugin.
+#[derive(Debug, Clone, Resource)]
+pub struct Ym2149PluginConfig {
+    pub visualization: bool,
+    pub playlists: bool,
+    pub channel_events: bool,
+    pub spatial_audio: bool,
+    pub music_state: bool,
+    pub shader_uniforms: bool,
+    pub diagnostics: bool,
+    pub bevy_audio_bridge: bool,
+}
+
+impl Default for Ym2149PluginConfig {
+    fn default() -> Self {
+        Self {
+            visualization: cfg!(feature = "visualization"),
+            playlists: true,
+            channel_events: true,
+            spatial_audio: true,
+            music_state: true,
+            shader_uniforms: cfg!(feature = "visualization"),
+            diagnostics: true,
+            bevy_audio_bridge: true,
+        }
+    }
+}
+
+impl Ym2149PluginConfig {
+    pub fn visualization(mut self, enabled: bool) -> Self {
+        self.visualization = enabled;
+        self
+    }
+
+    pub fn playlists(mut self, enabled: bool) -> Self {
+        self.playlists = enabled;
+        self
+    }
+
+    pub fn channel_events(mut self, enabled: bool) -> Self {
+        self.channel_events = enabled;
+        self
+    }
+
+    pub fn spatial_audio(mut self, enabled: bool) -> Self {
+        self.spatial_audio = enabled;
+        self
+    }
+
+    pub fn music_state(mut self, enabled: bool) -> Self {
+        self.music_state = enabled;
+        self
+    }
+
+    pub fn shader_uniforms(mut self, enabled: bool) -> Self {
+        self.shader_uniforms = enabled;
+        self
+    }
+
+    pub fn diagnostics(mut self, enabled: bool) -> Self {
+        self.diagnostics = enabled;
+        self
+    }
+
+    pub fn bevy_audio_bridge(mut self, enabled: bool) -> Self {
+        self.bevy_audio_bridge = enabled;
+        self
+    }
+}
 
 /// Bevy plugin responsible for YM2149 playback integration.
 #[derive(Default)]

@@ -1,8 +1,17 @@
-//! Advanced YM2149 feature showcase
+//! Comprehensive YM2149 feature showcase
 //!
-//! Demonstrates playlists, music state graph transitions, diagnostics, and
-//! audio bridging with mix controls without relying on the visualization UI.
+//! Demonstrates advanced features including:
+//! - Multiple simultaneous YM file playbacks
+//! - Playlist management with automatic progression
+//! - Music state graphs for dynamic music transitions
+//! - Audio bridge mixing with real-time parameter control
+//! - Playback diagnostics and frame position tracking
+//! - Event-driven architecture for track transitions
+//! - Optional visualization integration
+//!
+//! This example shows how to build a sophisticated music system without relying solely on UI.
 
+use bevy::asset::AssetPlugin;
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use bevy_ym2149::audio_bridge::{AudioBridgeMix, AudioBridgeMixes};
@@ -13,9 +22,13 @@ use bevy_ym2149::{
     AudioBridgeTargets, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig, Ym2149Settings,
     FRAME_POSITION_PATH,
 };
+use bevy_ym2149_examples::ASSET_BASE;
 
 #[derive(Resource)]
 struct DemoPlayback(Entity);
+
+#[derive(Resource)]
+struct SecondaryPlayback(Entity);
 
 #[derive(Resource, Default)]
 struct BridgeRequestSent(bool);
@@ -25,7 +38,10 @@ struct BridgeMixLabel;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(AssetPlugin {
+            file_path: ASSET_BASE.into(),
+            ..default()
+        }))
         .add_plugins(Ym2149Plugin::with_config(
             Ym2149PluginConfig::default().visualization(false),
         ))
@@ -42,11 +58,12 @@ fn setup_demo(
     mut playlists: ResMut<Assets<Ym2149Playlist>>,
     mut mixes: ResMut<AudioBridgeMixes>,
 ) {
-    commands.spawn(Camera2d::default());
+    commands.spawn(Camera2d);
 
-    let mut settings = Ym2149Settings::default();
-    settings.loop_enabled = true;
-    commands.insert_resource(settings);
+    commands.insert_resource(Ym2149Settings {
+        loop_enabled: true,
+        ..Default::default()
+    });
 
     let playlist_handle = playlists.add(Ym2149Playlist {
         tracks: vec![
@@ -66,6 +83,7 @@ fn setup_demo(
         mode: PlaylistMode::Loop,
     });
 
+    // Primary playback with playlist and state transitions
     let playback_entity = commands
         .spawn((
             Ym2149Playback::default(),
@@ -73,7 +91,14 @@ fn setup_demo(
         ))
         .id();
 
+    // Secondary playback for simultaneous music playback demonstration
+    // This shows that multiple YM2149 players can run independently
+    let secondary_entity = commands
+        .spawn(Ym2149Playback::new("examples/Scout.ym"))
+        .id();
+
     commands.insert_resource(DemoPlayback(playback_entity));
+    commands.insert_resource(SecondaryPlayback(secondary_entity));
     commands.insert_resource(BridgeRequestSent::default());
 
     let mut graph = MusicStateGraph::default();
@@ -91,15 +116,20 @@ fn setup_demo(
 
     commands.spawn((
         Text::new(
-            "Advanced Feature Showcase\n\
-             Controls:\n\
+            "Comprehensive YM2149 Feature Showcase\n\n\
+             Primary Playback (Playlist + State Graph):\n\
              - [Space] Play/Pause\n\
              - [P] Next playlist entry\n\
              - [1] State: title\n\
              - [2] State: intense\n\
              - [3] State: playlist\n\
-             - [A/D] Bridge pan\n\
-             - [Z/X] Bridge volume (dB)\n",
+             - [L] Toggle looping\n\n\
+             Secondary Playback (Independent):\n\
+             - [S] Play/Pause\n\
+             - [U/O] Volume control\n\n\
+             Audio Bridge Controls:\n\
+             - [A/D] Pan (+/- 0.1)\n\
+             - [Z/X] Volume (+/- 1 dB)\n",
         ),
         Node {
             position_type: PositionType::Absolute,
@@ -125,6 +155,7 @@ fn setup_demo(
 
 fn demo_keyboard_controls(
     playback: Option<Res<DemoPlayback>>,
+    secondary: Option<Res<SecondaryPlayback>>,
     mut playbacks: Query<&mut Ym2149Playback>,
     mut settings: ResMut<Ym2149Settings>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -136,11 +167,14 @@ fn demo_keyboard_controls(
         return;
     };
 
+    // Primary playback controls
     if keyboard.just_pressed(KeyCode::Space) {
         if player.is_playing() {
             player.pause();
+            info!("Primary playback paused");
         } else {
             player.play();
+            info!("Primary playback resumed");
         }
     }
 
@@ -149,6 +183,7 @@ fn demo_keyboard_controls(
             entity: playback.0,
             index: None,
         });
+        info!("Advancing to next playlist entry");
     }
 
     if keyboard.just_pressed(KeyCode::Digit1) {
@@ -156,23 +191,53 @@ fn demo_keyboard_controls(
             state: "title".into(),
             target: Some(playback.0),
         });
+        info!("Transitioning to 'title' state");
     }
     if keyboard.just_pressed(KeyCode::Digit2) {
         state_requests.write(MusicStateRequest {
             state: "intense".into(),
             target: Some(playback.0),
         });
+        info!("Transitioning to 'intense' state");
     }
     if keyboard.just_pressed(KeyCode::Digit3) {
         state_requests.write(MusicStateRequest {
             state: "playlist".into(),
             target: Some(playback.0),
         });
+        info!("Transitioning to 'playlist' state");
     }
 
     if keyboard.just_pressed(KeyCode::KeyL) {
         settings.loop_enabled = !settings.loop_enabled;
-        info!("Looping: {}", settings.loop_enabled);
+        info!("Primary playback looping: {}", settings.loop_enabled);
+    }
+
+    // Secondary playback controls (independent)
+    if let Some(secondary) = secondary {
+        if let Ok(mut secondary_player) = playbacks.get_mut(secondary.0) {
+            if keyboard.just_pressed(KeyCode::KeyS) {
+                if secondary_player.is_playing() {
+                    secondary_player.pause();
+                    info!("Secondary playback paused");
+                } else {
+                    secondary_player.play();
+                    info!("Secondary playback started");
+                }
+            }
+
+            if keyboard.just_pressed(KeyCode::KeyU) {
+                let new_volume = (secondary_player.volume + 0.1).min(1.0);
+                secondary_player.set_volume(new_volume);
+                info!("Secondary volume: {:.0}%", new_volume * 100.0);
+            }
+
+            if keyboard.just_pressed(KeyCode::KeyO) {
+                let new_volume = (secondary_player.volume - 0.1).max(0.0);
+                secondary_player.set_volume(new_volume);
+                info!("Secondary volume: {:.0}%", new_volume * 100.0);
+            }
+        }
     }
 }
 

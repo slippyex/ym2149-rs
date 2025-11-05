@@ -1,11 +1,11 @@
-use super::config::Ym2149PluginConfig;
 use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
 use crate::audio_sink;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
 use crate::events::{ChannelSnapshot, TrackFinished, TrackStarted};
 use crate::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+use crate::plugin::Ym2149PluginConfig;
 #[cfg(feature = "visualization")]
-use crate::visualization::OscilloscopeBuffer;
+use crate::viz_components::OscilloscopeBuffer;
 use bevy::prelude::*;
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -188,7 +188,7 @@ pub(super) fn update_playback(
         }
 
         if playback.state != PlaybackState::Playing {
-            playback.frame_position = player.get_current_frame() as u32;
+            playback.seek(player.get_current_frame() as u32);
             continue;
         }
 
@@ -271,10 +271,10 @@ pub(super) fn update_playback(
             }
         }
 
-        playback.frame_position = player.get_current_frame() as u32;
+        playback.seek(player.get_current_frame() as u32);
         let total_frames = player.frame_count();
 
-        if playback.frame_position as usize >= total_frames {
+        if playback.frame_position() as usize >= total_frames {
             entry.time_since_last_frame = 0.0;
             if settings.loop_enabled {
                 if let Err(err) = player.play() {
@@ -282,7 +282,7 @@ pub(super) fn update_playback(
                     playback.state = PlaybackState::Finished;
                 } else {
                     entry.frames_rendered = 0;
-                    playback.frame_position = 0;
+                    playback.seek(0);
                     if config.channel_events {
                         started_events.write(TrackStarted { entity });
                     }

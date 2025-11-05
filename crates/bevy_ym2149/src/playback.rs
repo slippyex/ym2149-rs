@@ -62,7 +62,7 @@ use ym2149::replayer::Ym6Player;
 /// fn my_system(mut playbacks: Query<&mut Ym2149Playback>) {
 ///     for mut pb in playbacks.iter_mut() {
 ///         if pb.is_playing() {
-///             println!("Frame: {}", pb.frame_position);
+///             println!("Frame: {}", pb.frame_position());
 ///             println!("Title: {}", pb.song_title);
 ///             pb.set_volume(0.5);
 ///         }
@@ -80,13 +80,16 @@ pub struct Ym2149Playback {
     /// Current playback state
     pub state: PlaybackState,
     /// Current frame position in the song
-    pub frame_position: u32,
+    /// Use the [`frame_position()`](Self::frame_position) getter or [`seek()`](Self::seek) method to access/modify
+    pub(crate) frame_position: u32,
     /// Volume level (0.0 = mute, 1.0 = full volume)
     pub volume: f32,
     /// Left channel gain used during spatial mixing.
-    pub left_gain: f32,
+    /// Use the [`set_stereo_gain()`](Self::set_stereo_gain) method to modify
+    pub(crate) left_gain: f32,
     /// Right channel gain used during spatial mixing.
-    pub right_gain: f32,
+    /// Use the [`set_stereo_gain()`](Self::set_stereo_gain) method to modify
+    pub(crate) right_gain: f32,
     /// Internal YM player instance (created by plugin systems)
     pub(crate) player: Option<Arc<Mutex<Ym6Player>>>,
     /// Audio output device (created by plugin systems)

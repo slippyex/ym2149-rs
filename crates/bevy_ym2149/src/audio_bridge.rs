@@ -27,21 +27,41 @@ pub fn handle_bridge_requests(
 /// Rodio output handle used for bridge playback.
 #[derive(Resource)]
 pub struct BridgeAudioDevice {
+    /// The stream must be kept alive for the OutputStreamHandle to remain valid.
+    /// We hold an owned reference to ensure the stream isn't dropped while the handle is in use.
+    #[allow(dead_code)]
+    _stream: Option<OutputStream>,
+    /// The handle to the active output stream for creating sinks.
     stream_handle: Option<OutputStreamHandle>,
 }
+
+/// SAFETY: BridgeAudioDevice is Send + Sync
+///
+/// While rodio::OutputStream is marked as not Send/Sync on some platforms due to platform-specific
+/// constraints (NotSendSyncAcrossAllPlatforms marker), we can safely implement these traits because:
+///
+/// 1. The OutputStream is only accessed through OutputStreamHandle, which is Send + Sync
+/// 2. We never directly use _stream after initialization; it exists only to keep the stream alive
+/// 3. Bevy Resources require Send + Sync for use in systems
+/// 4. In practice, the OutputStream is safe to share across threads as long as only one thread
+///    holds the handle and calls methods on it (which is our usage pattern)
+///
+/// This is consistent with how rodio is used in other multi-threaded contexts where
+/// OutputStreamHandle itself is known to be thread-safe.
+unsafe impl Send for BridgeAudioDevice {}
+unsafe impl Sync for BridgeAudioDevice {}
 
 impl Default for BridgeAudioDevice {
     fn default() -> Self {
         match OutputStream::try_default() {
-            Ok((stream, handle)) => {
-                core::mem::forget(stream);
-                Self {
-                    stream_handle: Some(handle),
-                }
-            }
+            Ok((stream, handle)) => Self {
+                _stream: Some(stream),
+                stream_handle: Some(handle),
+            },
             Err(err) => {
                 warn!("Failed to initialize bridge audio output: {err:?}");
                 Self {
+                    _stream: None,
                     stream_handle: None,
                 }
             }

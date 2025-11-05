@@ -84,7 +84,7 @@ fn music_state_request_switches_source_path() {
 #[test]
 fn diagnostics_record_frame_position() {
     let mut app = App::new();
-    app.add_plugins((MinimalPlugins, DiagnosticsPlugin::default()));
+    app.add_plugins((MinimalPlugins, DiagnosticsPlugin));
     app.insert_resource(Ym2149PluginConfig::default());
     bevy_ym2149::diagnostics::register(&mut app);
     app.add_systems(Update, update_diagnostics);
@@ -95,7 +95,7 @@ fn diagnostics_record_frame_position() {
         .entity_mut(entity)
         .get_mut::<Ym2149Playback>()
         .unwrap()
-        .frame_position = 128;
+        .seek(128);
 
     app.update();
 

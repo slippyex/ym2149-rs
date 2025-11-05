@@ -1,2 +1,20 @@
-/target
+# OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+*.swp
+*~
+*.swo
+*.swn
+.vscode/
+.idea/
+
+# Cargo build artifacts
+/target/
+Cargo.lock

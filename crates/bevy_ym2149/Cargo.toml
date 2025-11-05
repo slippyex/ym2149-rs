@@ -15,6 +15,7 @@ visualization = []
 [dependencies]
 ym2149 = { path = "../ym2149-core", version = "0.5", features = ["emulator", "ym-format", "replayer", "streaming"] }
 bevy = { version = "0.17", features = ["bevy_audio"] }
+bevy_mesh = "0.17"
 thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 parking_lot.workspace = true

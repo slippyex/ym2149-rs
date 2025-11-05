@@ -1528,12 +1528,23 @@ version = "0.5.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "bevy_mesh",
  "hound",
  "parking_lot",
  "rodio 0.17.3",
  "ron 0.8.1",
  "serde",
  "thiserror 1.0.69",
+ "ym2149",
+]
+
+[[package]]
+name = "bevy_ym2149_examples"
+version = "0.5.1"
+dependencies = [
+ "bevy",
+ "bevy_mesh",
+ "bevy_ym2149",
  "ym2149",
 ]
 

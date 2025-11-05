@@ -1,5 +1,5 @@
-use super::components::*;
-use super::helpers::{format_freq_label, format_note_label};
+use crate::viz_components::*;
+use crate::viz_helpers::{format_freq_label, format_note_label};
 use bevy::prelude::*;
 
 pub fn create_status_display(commands: &mut Commands) -> Entity {

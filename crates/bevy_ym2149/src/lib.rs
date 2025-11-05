@@ -110,6 +110,7 @@ pub mod audio_bridge;
 pub mod audio_sink;
 pub mod audio_source;
 pub mod diagnostics;
+pub mod error;
 pub mod events;
 pub mod music_state;
 pub mod playback;
@@ -119,7 +120,13 @@ pub mod spatial;
 #[cfg(feature = "visualization")]
 pub mod uniforms;
 #[cfg(feature = "visualization")]
-pub mod visualization;
+pub mod viz_builders;
+#[cfg(feature = "visualization")]
+pub mod viz_components;
+#[cfg(feature = "visualization")]
+pub mod viz_helpers;
+#[cfg(feature = "visualization")]
+pub mod viz_systems;
 
 pub use ::ym2149::*;
 pub use audio_bridge::{
@@ -129,6 +136,7 @@ pub use audio_bridge::{
 pub use audio_sink::{AudioSink, BoxedAudioSink};
 pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
 pub use diagnostics::{update_diagnostics, BUFFER_FILL_PATH, FRAME_POSITION_PATH};
+pub use error::{BevyYm2149Error, Result};
 pub use events::{
     AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, TrackFinished,
     TrackStarted,
@@ -142,10 +150,15 @@ pub use playlist::{
 pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
 pub use spatial::{Ym2149Listener, Ym2149SpatialAudio};
 #[cfg(feature = "visualization")]
-pub use visualization::{
+pub use viz_builders::{
     create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
-    create_song_info_display, create_status_display, update_oscilloscope, ChannelFreqLabel,
-    ChannelNoteLabel, DetailedChannelDisplay, LoopStatusLabel, Oscilloscope, OscilloscopeBuffer,
-    OscilloscopeHead, OscilloscopePoint, PlaybackStatusDisplay, SongInfoDisplay, SongProgressFill,
-    SongProgressLabel, SpectrumBar,
+    create_song_info_display, create_status_display,
 };
+#[cfg(feature = "visualization")]
+pub use viz_components::{
+    ChannelFreqLabel, ChannelNoteLabel, DetailedChannelDisplay, LoopStatusLabel, Oscilloscope,
+    OscilloscopeBuffer, OscilloscopeHead, OscilloscopePoint, PlaybackStatusDisplay,
+    SongInfoDisplay, SongProgressFill, SongProgressLabel, SpectrumBar,
+};
+#[cfg(feature = "visualization")]
+pub use viz_systems::update_oscilloscope;

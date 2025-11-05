@@ -19,7 +19,30 @@ pub struct AudioOutputDevice {
     started: Arc<Mutex<bool>>,
 }
 
-// Ensure AudioOutputDevice is Send + Sync
+/// SAFETY: AudioOutputDevice is Send + Sync
+///
+/// Field-by-field justification:
+/// - `ring_buffer: Arc<Mutex<RingBuffer>>`: Both Arc and parking_lot::Mutex are Send + Sync.
+///   The Arc allows shared ownership across threads, and the Mutex ensures exclusive access
+///   to the RingBuffer contents. RingBuffer itself is Send (contains only primitive types).
+/// - `device: Arc<Mutex<Option<AudioDevice>>>`: Arc<Mutex<T>> is Send + Sync when T is Send.
+///   AudioDevice from rodio is Send (via cpal's safety model). The Arc allows shared ownership,
+///   and the Mutex ensures exclusive access.
+/// - `started: Arc<Mutex<bool>>`: Arc<Mutex<bool>> is Send + Sync (bool is Copy, trivially safe).
+/// - `sample_rate: u32`, `channels: u16`: Copy primitive types, inherently Send + Sync.
+///
+/// Threading model:
+/// - Multiple threads may call methods concurrently; each acquires only the needed lock.
+/// - `push_samples()` acquires ring_buffer lock only (producer access).
+/// - `pause()/resume()` acquire device lock only.
+/// - `buffer_fill_level()` acquires ring_buffer lock only (read-only).
+/// - `start()` acquires started lock then device lock in consistent order to prevent deadlock.
+/// - Design invariant: No method holds multiple locks simultaneously.
+///
+/// Concurrent access patterns guaranteed safe:
+/// - Producer thread calls `push_samples()` repeatedly without contention with pause/resume.
+/// - Multiple reader threads can call `buffer_fill_level()` concurrently (only acquires one lock).
+/// - Audio output thread holds device lock only during brief pause/play/seek operations.
 unsafe impl Send for AudioOutputDevice {}
 unsafe impl Sync for AudioOutputDevice {}
 

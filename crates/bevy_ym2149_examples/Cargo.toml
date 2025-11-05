@@ -1,0 +1,39 @@
+[package]
+name = "bevy_ym2149_examples"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Example applications demonstrating bevy_ym2149 plugin features"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["visualization"]
+visualization = []
+
+[dependencies]
+bevy_ym2149 = { path = "../bevy_ym2149" }
+bevy = { version = "0.17", features = ["bevy_audio"] }
+bevy_mesh = "0.17"
+ym2149 = { path = "../ym2149-core", version = "0.5", features = ["emulator", "ym-format", "replayer", "streaming"] }
+
+[[example]]
+name = "basic_example"
+path = "examples/basic_example.rs"
+
+[[example]]
+name = "advanced_example"
+path = "examples/advanced_example.rs"
+
+[[example]]
+name = "feature_showcase"
+path = "examples/feature_showcase.rs"
+
+[[example]]
+name = "demoscene"
+path = "examples/demoscene.rs"

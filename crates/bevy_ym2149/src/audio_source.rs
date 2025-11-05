@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ym2149::ym_loader;
 
+use crate::error::{BevyYm2149Error, Result};
+
 /// A loaded YM2149 audio file ready to be played
 #[derive(Asset, TypePath, Clone)]
 pub struct Ym2149AudioSource {
@@ -32,7 +34,7 @@ pub struct Ym2149Metadata {
 
 impl Ym2149AudioSource {
     /// Create a new audio source from raw YM file data
-    pub fn new(data: Vec<u8>) -> Result<Self, String> {
+    pub fn new(data: Vec<u8>) -> Result<Self> {
         // Extract metadata
         let metadata = extract_metadata(&data)?;
 
@@ -69,14 +71,14 @@ impl AssetLoader for Ym2149Loader {
         reader: &mut dyn bevy::asset::io::Reader,
         _settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
-    ) -> Result<Self::Asset, Self::Error> {
+    ) -> std::result::Result<Self::Asset, Self::Error> {
         let mut data = Vec::new();
         reader
             .read_to_end(&mut data)
             .await
             .map_err(|e| Ym2149LoadError(format!("Failed to read asset: {}", e)))?;
 
-        Ym2149AudioSource::new(data).map_err(Ym2149LoadError)
+        Ym2149AudioSource::new(data).map_err(|e| Ym2149LoadError(e.to_string()))
     }
 
     fn extensions(&self) -> &[&str] {
@@ -85,13 +87,14 @@ impl AssetLoader for Ym2149Loader {
 }
 
 /// Extract metadata from YM file data
-fn extract_metadata(data: &[u8]) -> Result<Ym2149Metadata, String> {
-    let _frames =
-        ym_loader::load_bytes(data).map_err(|e| format!("Failed to load frames: {}", e))?;
+fn extract_metadata(data: &[u8]) -> Result<Ym2149Metadata> {
+    let _frames = ym_loader::load_bytes(data).map_err(|e| {
+        BevyYm2149Error::MetadataExtraction(format!("Failed to load frames: {}", e))
+    })?;
 
     // Use load_song to get the player with metadata
-    let (player, summary) =
-        ym2149::load_song(data).map_err(|e| format!("Failed to load song: {}", e))?;
+    let (player, summary) = ym2149::load_song(data)
+        .map_err(|e| BevyYm2149Error::MetadataExtraction(format!("Failed to load song: {}", e)))?;
 
     let frame_count = summary.frame_count;
 

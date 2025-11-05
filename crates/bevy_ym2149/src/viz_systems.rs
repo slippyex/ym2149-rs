@@ -1,10 +1,10 @@
-use super::components::*;
-use super::helpers::{
+use crate::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
+use crate::viz_components::*;
+use crate::viz_helpers::{
     format_freq_label, format_note_label, frequency_to_note, get_channel_period,
     period_to_frequency,
 };
-use crate::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
-use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
 use bevy::prelude::*;
 use bevy::ui::ComputedNode;
 use std::array::from_fn;
@@ -47,7 +47,7 @@ pub fn update_status_display(
                 PlaybackState::Finished => "[END]",
             };
 
-            let frame_pos = playback.frame_position;
+            let frame_pos = playback.frame_position();
             let volume_percent = (playback.volume * 100.0) as u32;
             let buffer_fill = if let Some(device) = &playback.audio_device {
                 (device.buffer_fill_level() * 100.0) as u32
@@ -155,7 +155,7 @@ pub fn update_song_progress(
         if let Some(player) = &playback.player {
             let player_locked = player.lock();
             let total_frames = player_locked.frame_count().max(1);
-            let current = playback.frame_position.min(total_frames as u32) as f32;
+            let current = playback.frame_position().min(total_frames as u32) as f32;
             ratio = (current / total_frames as f32).clamp(0.0, 1.0);
         }
     }
@@ -288,8 +288,8 @@ pub fn update_oscilloscope(
                 sum_cos += *sample * phase.cos();
                 sum_sin += *sample * phase.sin();
             }
-            let magnitude = (sum_cos * sum_cos + sum_sin * sum_sin).sqrt()
-                / sample_count_f32.max(1.0);
+            let magnitude =
+                (sum_cos * sum_cos + sum_sin * sum_sin).sqrt() / sample_count_f32.max(1.0);
             spectrum[ch][bin] = magnitude;
         }
     }

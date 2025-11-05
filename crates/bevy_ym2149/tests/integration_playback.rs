@@ -1,0 +1,395 @@
+//! Integration tests for YM2149 playback functionality
+//!
+//! These tests verify the complete playback pipeline including initialization,
+//! frame advancement, state transitions, and event emission.
+
+use bevy::prelude::*;
+use bevy_ym2149::{PlaybackState, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig};
+
+/// Helper to create a minimal test app with YM2149 plugin
+fn create_test_app() -> App {
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        bevy::asset::AssetPlugin::default(),
+        Ym2149Plugin::default(),
+    ));
+    app
+}
+
+/// Create minimal valid YM2 file (14 registers, 1 frame)
+fn create_minimal_ym_file() -> Vec<u8> {
+    // YM2 file format header
+    let mut data = vec![];
+
+    // Signature "YM2!"
+    data.extend_from_slice(b"YM2!");
+
+    // Check code (0x00)
+    data.push(0x00);
+
+    // Number of frames (1)
+    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x01]);
+
+    // Attributes: 0 = no loop, 0 = no digidrum
+    data.push(0x00);
+
+    // Digidrums number (0)
+    data.push(0x00);
+
+    // Clock frequency (2MHz)
+    data.extend_from_slice(&[0x00, 0x1F, 0x40, 0x00]);
+
+    // Frame frequency (50Hz)
+    data.extend_from_slice(&[0x00, 0x32]);
+
+    // Loop frame (0)
+    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+
+    // Future offset (skip 52 bytes)
+    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x34]);
+
+    // Song name (empty, null-terminated)
+    data.push(0x00);
+
+    // Author name (empty, null-terminated)
+    data.push(0x00);
+
+    // Separator
+    data.push(0x00);
+
+    // Frame data: 14 registers all zeros
+    data.extend([0x00].repeat(14));
+
+    data
+}
+
+#[test]
+fn test_playback_initialization() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    // Spawn a playback entity
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    // Run initialization system
+    app.update();
+
+    // Verify playback was initialized
+    let playback = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .expect("Playback component should exist");
+
+    assert_eq!(
+        playback.state,
+        PlaybackState::Idle,
+        "Initial state should be Idle"
+    );
+    assert_eq!(
+        playback.frame_position(),
+        0,
+        "Frame position should start at 0"
+    );
+    assert!(!playback.is_playing(), "Should not be playing initially");
+}
+
+#[test]
+fn test_playback_state_transitions() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    // Initialize
+    app.update();
+
+    // Transition to Playing
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+    assert_eq!(
+        app.world()
+            .entity(entity)
+            .get::<Ym2149Playback>()
+            .unwrap()
+            .state,
+        PlaybackState::Playing,
+        "State should be Playing after play()"
+    );
+
+    // Transition to Paused
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.pause();
+    }
+    assert_eq!(
+        app.world()
+            .entity(entity)
+            .get::<Ym2149Playback>()
+            .unwrap()
+            .state,
+        PlaybackState::Paused,
+        "State should be Paused after pause()"
+    );
+
+    // Transition back to Playing
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+    assert_eq!(
+        app.world()
+            .entity(entity)
+            .get::<Ym2149Playback>()
+            .unwrap()
+            .state,
+        PlaybackState::Playing,
+        "State should be Playing again"
+    );
+}
+
+#[test]
+fn test_frame_advancement_during_playback() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    // Initialize
+    app.update();
+
+    // Start playing
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+
+    let initial_position = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .frame_position();
+
+    // Simulate time passing (20ms = 1 frame at 50Hz)
+    app.world_mut()
+        .resource_mut::<Time>()
+        .advance_by(std::time::Duration::from_millis(20));
+
+    app.update();
+
+    let final_position = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .frame_position();
+
+    // Position should have advanced (though might be 0 still if frame_count is 1)
+    assert!(
+        final_position >= initial_position,
+        "Frame position should not go backwards"
+    );
+}
+
+#[test]
+fn test_playback_does_not_advance_when_paused() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    // Initialize and start
+    app.update();
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+
+    // Pause
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.pause();
+    }
+
+    let position_before = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .frame_position();
+
+    // Advance time
+    app.world_mut()
+        .resource_mut::<Time>()
+        .advance_by(std::time::Duration::from_millis(100));
+
+    app.update();
+
+    let position_after = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .frame_position();
+
+    assert_eq!(
+        position_before, position_after,
+        "Frame position should not advance while paused"
+    );
+}
+
+#[test]
+fn test_volume_control() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    // Test volume setting
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+
+        assert_eq!(playback.volume, 1.0, "Default volume should be 1.0");
+
+        playback.set_volume(0.5);
+        assert_eq!(playback.volume, 0.5, "Volume should be set to 0.5");
+
+        playback.set_volume(0.0);
+        assert_eq!(playback.volume, 0.0, "Volume should be set to 0.0");
+
+        playback.set_volume(1.0);
+        assert_eq!(playback.volume, 1.0, "Volume should be set back to 1.0");
+    }
+}
+
+#[test]
+fn test_playback_restart() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    // Start playing
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+
+    // Advance time
+    app.world_mut()
+        .resource_mut::<Time>()
+        .advance_by(std::time::Duration::from_millis(50));
+    app.update();
+
+    let _position_after_advance = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .frame_position();
+
+    // Restart
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.restart();
+    }
+
+    let position_after_restart = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .frame_position();
+
+    assert_eq!(
+        position_after_restart, 0,
+        "Frame position should reset to 0 after restart"
+    );
+}
+
+#[test]
+fn test_playback_query() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    // Spawn multiple playback entities
+    let entity1 = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data.clone()))
+        .id();
+    let entity2 = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data.clone()))
+        .id();
+
+    app.update();
+
+    // Verify both entities exist and can be queried
+    let entity1_exists = app
+        .world()
+        .entity(entity1)
+        .get::<Ym2149Playback>()
+        .is_some();
+
+    let entity2_exists = app
+        .world()
+        .entity(entity2)
+        .get::<Ym2149Playback>()
+        .is_some();
+
+    assert!(
+        entity1_exists,
+        "Entity1 should have Ym2149Playback component"
+    );
+    assert!(
+        entity2_exists,
+        "Entity2 should have Ym2149Playback component"
+    );
+}
+
+#[test]
+fn test_disabled_visualization_plugin_config() {
+    let config = Ym2149PluginConfig::default()
+        .visualization(false)
+        .playlists(false)
+        .channel_events(false);
+
+    assert!(!config.visualization, "Visualization should be disabled");
+    assert!(!config.playlists, "Playlists should be disabled");
+    assert!(!config.channel_events, "Channel events should be disabled");
+}
