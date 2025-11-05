@@ -50,12 +50,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (
-                handle_file_drop,
-                playback_controls,
-                bridge_mix_controls,
-                update_bridge_mix_label,
-            ),
+            (handle_file_drop, playback_controls, bridge_mix_controls),
         )
         .run();
 }
@@ -94,7 +89,7 @@ fn setup(mut commands: Commands) {
     // Create a playback entity
     // The path will be set via drag-and-drop or manually loaded
     // You can also specify a default file path if desired
-    let playback = Ym2149Playback::new("examples/Odyssey.ym");
+    let playback = Ym2149Playback::new("examples/ND-Toxygene.ym");
     let playback_entity = commands.spawn(playback).id();
     commands.insert_resource(PlaybackEntity(playback_entity));
     commands.insert_resource(BridgeControl { enabled: false });
@@ -154,25 +149,27 @@ fn playback_controls(
         // Toggle looping on 'L'
         if keyboard.just_pressed(KeyCode::KeyL) {
             settings.loop_enabled = !settings.loop_enabled;
-            let status = if settings.loop_enabled {
-                "enabled"
-            } else {
-                "disabled"
-            };
-            println!("Looping {}", status);
+            info!(
+                "Looping {}",
+                if settings.loop_enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
         }
 
         // Volume control with arrow keys
         if keyboard.just_pressed(KeyCode::ArrowUp) {
             let new_volume = (playback.volume + 0.1).min(1.0);
             playback.set_volume(new_volume);
-            println!("Volume: {:.0}%", new_volume * 100.0);
+            info!("Volume: {:.0}%", new_volume * 100.0);
         }
 
         if keyboard.just_pressed(KeyCode::ArrowDown) {
             let new_volume = (playback.volume - 0.1).max(0.0);
             playback.set_volume(new_volume);
-            println!("Volume: {:.0}%", new_volume * 100.0);
+            info!("Volume: {:.0}%", new_volume * 100.0);
         }
     }
 }
@@ -220,6 +217,7 @@ fn bridge_mix_controls(
         } else {
             targets.0.remove(&playback.0);
         }
+        changed = true; // Update label when toggling
     }
 
     if control.enabled {
@@ -245,39 +243,22 @@ fn bridge_mix_controls(
     }
 
     if changed {
-        mixes.set(playback.0, mix);
-    }
-
-    if let Some(mut label) = labels.iter_mut().next() {
         if control.enabled {
-            label.0 = format!(
-                "Bridge Audio: enabled\nVolume: {:+.1} dB\nPan: {:+.2}\n[B] Toggle",
-                mix.volume_db(),
-                mix.pan
-            );
-        } else {
-            label.0 = "Bridge Audio: disabled\nVolume: --.- dB\nPan: --.--\n[B] Toggle".to_string();
+            mixes.set(playback.0, mix);
         }
-    }
-}
 
-fn update_bridge_mix_label(
-    playback: Option<Res<PlaybackEntity>>,
-    mixes: Res<AudioBridgeMixes>,
-    control: Res<BridgeControl>,
-    mut labels: Query<&mut Text, With<BridgeMixLabel>>,
-) {
-    let Some(playback) = playback else { return };
-    let mix = mixes.get(playback.0);
-    for mut text in &mut labels {
-        if control.enabled {
-            text.0 = format!(
-                "Bridge Audio: enabled\nVolume: {:+.1} dB\nPan: {:+.2}\n[B] Toggle",
-                mix.volume_db(),
-                mix.pan
-            );
-        } else {
-            text.0 = "Bridge Audio: disabled\nVolume: --.- dB\nPan: --.--\n[B] Toggle".to_string();
+        // Update label whenever something changes
+        if let Some(mut label) = labels.iter_mut().next() {
+            if control.enabled {
+                label.0 = format!(
+                    "Bridge Audio: enabled\nVolume: {:+.1} dB\nPan: {:+.2}\n[B] Toggle",
+                    mix.volume_db(),
+                    mix.pan
+                );
+            } else {
+                label.0 =
+                    "Bridge Audio: disabled\nVolume: --.- dB\nPan: --.--\n[B] Toggle".to_string();
+            }
         }
     }
 }

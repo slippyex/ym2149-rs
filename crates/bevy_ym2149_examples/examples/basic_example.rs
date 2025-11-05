@@ -5,6 +5,7 @@
 //! - Load and play a YM file
 //! - Control playback with basic keyboard input
 
+use bevy::log::info;
 use bevy::prelude::*;
 use bevy_ym2149::{Ym2149Playback, Ym2149Plugin};
 use bevy_ym2149_examples::example_plugins;
@@ -59,10 +60,10 @@ fn playback_control(
         if keyboard.just_pressed(KeyCode::Space) {
             if playback.is_playing() {
                 playback.pause();
-                println!("Paused");
+                info!("Paused");
             } else {
                 playback.play();
-                println!("Playing");
+                info!("Playing");
             }
         }
 
@@ -70,20 +71,20 @@ fn playback_control(
         if keyboard.just_pressed(KeyCode::KeyR) {
             playback.restart();
             playback.play();
-            println!("Restarted");
+            info!("Restarted");
         }
 
         // Volume control with arrow keys
         if keyboard.just_pressed(KeyCode::ArrowUp) {
             let new_volume = (playback.volume + 0.1).min(1.0);
             playback.set_volume(new_volume);
-            println!("Volume: {:.0}%", new_volume * 100.0);
+            info!("Volume: {:.0}%", new_volume * 100.0);
         }
 
         if keyboard.just_pressed(KeyCode::ArrowDown) {
             let new_volume = (playback.volume - 0.1).max(0.0);
             playback.set_volume(new_volume);
-            println!("Volume: {:.0}%", new_volume * 100.0);
+            info!("Volume: {:.0}%", new_volume * 100.0);
         }
     }
 }

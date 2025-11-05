@@ -7,12 +7,13 @@ struct Params {
     height: f32,
     mouse: vec4<f32>,
     frame: u32,
+    crt_enabled: u32,
 };
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> U : Params;
 
 // ===== Sequencing =====
-const SCENE_COUNT         : u32 = 18u;  // 17 Einzelszenen + 1 JellyCube
+const SCENE_COUNT         : u32 = 13u;  // 12 Einzelszenen + 1 JellyCube
 const SCENE_DURATION      : f32 = 6.0;  // Sekunden pro Szene
 const TRANSITION_DURATION : f32 = 1.0;  // Crossfade-Dauer
 
@@ -388,249 +389,7 @@ fn Flow(uv_in: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(base * (0.62 + 0.38 * vig), 1.0);
 }
 
-// ===== Signed Distance Helper Types =====
-struct SdfSample {
-    dist: f32,
-    color: vec3<f32>,
-}
-
-struct TraceResult {
-    t: f32,
-    color: vec3<f32>,
-    hit: bool,
-}
-
-fn sdf_sphere(p: vec3<f32>, radius: f32) -> f32 {
-    return length(p) - radius;
-}
-
-fn sdf_box(p: vec3<f32>, b: vec3<f32>) -> f32 {
-    let q = abs(p) - b;
-    return length(max(q, vec3<f32>(0.0, 0.0, 0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
-}
-
-fn sdf_torus(p: vec3<f32>, t: vec2<f32>) -> f32 {
-    let q = vec2<f32>(length(p.xz) - t.x, p.y);
-    return length(q) - t.y;
-}
-
-fn sdf_plane(p: vec3<f32>, normal: vec3<f32>, height: f32) -> f32 {
-    return dot(p, normal) + height;
-}
-
-fn sdf_union(a: SdfSample, b: SdfSample) -> SdfSample {
-    if (a.dist < b.dist) { return a; }
-    return b;
-}
-
-fn sdf_smooth_union(a: SdfSample, b: SdfSample, k: f32) -> SdfSample {
-    let h = clamp(0.5 + 0.5 * (b.dist - a.dist) / k, 0.0, 1.0);
-    let dist = mix(b.dist, a.dist, h) - k * h * (1.0 - h);
-    let color = mix(b.color, a.color, h);
-    return SdfSample(dist, color);
-}
-
-fn sdf_scene(p_in: vec3<f32>) -> SdfSample {
-    let time = U.time;
-    var p = p_in;
-
-    // animated sphere
-    let sphere_center = vec3<f32>(0.0, -0.2 + 0.25 * sin(time * 0.8), 0.0);
-    let sphere = SdfSample(
-        sdf_sphere(p - sphere_center, 0.6),
-        vec3<f32>(0.92, 0.45, 0.34)
-    );
-
-    // rotating box
-    var box_p = p - vec3<f32>(1.05, -0.25, 0.4 * sin(time * 0.7));
-    let rot_y = rot2(time * 0.6);
-    let bz = rot2(time * 0.9);
-    let xz = rot_y * box_p.xz; box_p = vec3<f32>(xz.x, box_p.y, xz.y);
-    let yz = bz * box_p.yz; box_p = vec3<f32>(box_p.x, yz.x, yz.y);
-    let box = SdfSample(
-        sdf_box(box_p, vec3<f32>(0.35, 0.22, 0.35)),
-        vec3<f32>(0.32, 0.68, 0.9)
-    );
-
-    // torus
-    var torus_p = p - vec3<f32>(-1.1, -0.05, 0.45 * cos(time * 0.6));
-    let txz = rot2(time * 0.4) * torus_p.xz; torus_p = vec3<f32>(txz.x, torus_p.y, txz.y);
-    let torus = SdfSample(
-        sdf_torus(torus_p, vec2<f32>(0.6, 0.18)),
-        vec3<f32>(0.85, 0.8, 0.42)
-    );
-
-    // small orbiting sphere
-    let orbit = vec3<f32>(
-        sin(time * 1.6) * 0.9,
-        -0.05 + 0.25 * cos(time * 1.2),
-        cos(time * 1.4) * 0.9
-    );
-    let small_sphere = SdfSample(
-        sdf_sphere(p - orbit, 0.18),
-        vec3<f32>(0.9, 0.72, 0.95)
-    );
-
-    // ground plane
-    let floor_sample = SdfSample(
-        sdf_plane(p, vec3<f32>(0.0, 1.0, 0.0), 1.2),
-        vec3<f32>(0.18, 0.2, 0.24)
-    );
-
-    // blend shapes together
-    var res = sdf_smooth_union(sphere, torus, 0.45);
-    res = sdf_smooth_union(res, box, 0.32);
-    res = sdf_smooth_union(res, small_sphere, 0.28);
-    res = sdf_union(res, floor_sample);
-
-    return res;
-}
-
-fn sdf_normal(p: vec3<f32>) -> vec3<f32> {
-    let eps = 0.001;
-    let ex = vec3<f32>(eps, 0.0, 0.0);
-    let ey = vec3<f32>(0.0, eps, 0.0);
-    let ez = vec3<f32>(0.0, 0.0, eps);
-    let dx = sdf_scene(p + ex).dist - sdf_scene(p - ex).dist;
-    let dy = sdf_scene(p + ey).dist - sdf_scene(p - ey).dist;
-    let dz = sdf_scene(p + ez).dist - sdf_scene(p - ez).dist;
-    return normalize(vec3<f32>(dx, dy, dz));
-}
-
-fn sdf_ambient_occlusion(p: vec3<f32>, normal: vec3<f32>) -> f32 {
-    var occ = 0.0;
-    var scale = 1.0;
-    for (var i = 0; i < 5; i = i + 1) {
-        let step_dist = 0.05 * (f32(i) + 1.0);
-        let sample = sdf_scene(p + normal * step_dist).dist;
-        occ = occ + (step_dist - sample) * scale;
-        scale = scale * 0.5;
-    }
-    return clamp(1.0 - occ * 0.9, 0.0, 1.0);
-}
-
-fn sdf_soft_shadow(ro: vec3<f32>, rd: vec3<f32>, t_min: f32, t_max: f32, softness: f32) -> f32 {
-    var res = 1.0;
-    var t = t_min;
-    for (var i = 0; i < 48; i = i + 1) {
-        let h = sdf_scene(ro + rd * t).dist;
-        if (h < 0.001) {
-            return 0.0;
-        }
-        res = min(res, softness * h / t);
-        t = t + clamp(h, 0.01, 0.2);
-        if (t > t_max) {
-            break;
-        }
-    }
-    return clamp(res, 0.0, 1.0);
-}
-
-fn sdf_trace(ro: vec3<f32>, rd: vec3<f32>) -> TraceResult {
-    var t = 0.0;
-    let max_t = 35.0;
-    for (var i = 0; i < 160; i = i + 1) {
-        let pos = ro + rd * t;
-        let sample = sdf_scene(pos);
-        if (sample.dist < 0.001) {
-            return TraceResult(t, sample.color, true);
-        }
-        t = t + sample.dist;
-        if (t > max_t) {
-            break;
-        }
-    }
-    return TraceResult(t, vec3<f32>(0.0, 0.0, 0.0), false);
-}
-
 // ===== Glenz Vectors =====
-fn GlenzVectors(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    let res = vec2<f32>(U.width, U.height);
-    let t = U.time;
-    var uv = uv_in * 2.0 - vec2<f32>(1.0, 1.0);
-    uv.x = uv.x * (res.x / max(res.y, 1.0));
-
-    var V = array<vec3<f32>, 4>(
-        normalize(vec3<f32>(1.0, 1.0, 1.0)),
-        normalize(vec3<f32>(-1.0, -1.0, 1.0)),
-        normalize(vec3<f32>(-1.0, 1.0, -1.0)),
-        normalize(vec3<f32>(1.0, -1.0, -1.0))
-    );
-    var F = array<vec3<i32>, 4>(
-        vec3<i32>(0, 1, 2),
-        vec3<i32>(0, 3, 1),
-        vec3<i32>(0, 2, 3),
-        vec3<i32>(1, 3, 2)
-    );
-    var C = array<vec3<f32>, 4>(
-        vec3<f32>(1.0, 0.4, 0.8),
-        vec3<f32>(0.3, 1.0, 0.9),
-        vec3<f32>(1.0, 0.9, 0.3),
-        vec3<f32>(0.7, 0.6, 1.0)
-    );
-
-    let Rx = mat3x3<f32>(
-        vec3<f32>(1.0, 0.0, 0.0),
-        vec3<f32>(0.0, cos(t * 0.41), -sin(t * 0.41)),
-        vec3<f32>(0.0, sin(t * 0.41), cos(t * 0.41))
-    );
-    let Ry = mat3x3<f32>(
-        vec3<f32>(cos(t * 0.83), 0.0, sin(t * 0.83)),
-        vec3<f32>(0.0, 1.0, 0.0),
-        vec3<f32>(-sin(t * 0.83), 0.0, cos(t * 0.83))
-    );
-    let Rz = mat3x3<f32>(
-        vec3<f32>(cos(t * 0.57), -sin(t * 0.57), 0.0),
-        vec3<f32>(sin(t * 0.57), cos(t * 0.57), 0.0),
-        vec3<f32>(0.0, 0.0, 1.0)
-    );
-    let R3 = Rz * Ry * Rx;
-
-    for (var i = 0; i < 4; i = i + 1) {
-        V[i] = (R3 * V[i]) * 0.9;
-        V[i].z = V[i].z + 2.3;
-    }
-
-    var P = array<vec2<f32>, 4>(
-        V[0].xy / V[0].z,
-        V[1].xy / V[1].z,
-        V[2].xy / V[2].z,
-        V[3].xy / V[3].z
-    );
-
-    var col = vec3<f32>(0.0, 0.0, 0.0);
-    var alpha = 0.0;
-
-    for (var fi = 0; fi < 4; fi = fi + 1) {
-        let id = F[fi];
-        let a = P[u32(id.x)];
-        let b = P[u32(id.y)];
-        let c = P[u32(id.z)];
-        let faceN = edgef(a, b, c);
-        let back = select(0.0, 1.0, faceN < 0.0);
-        let w = bary(a, b, c, uv);
-        if (all(w >= vec3<f32>(0.0, 0.0, 0.0))) {
-            let z = 1.0 / (w.x * V[u32(id.x)].z + w.y * V[u32(id.y)].z + w.z * V[u32(id.z)].z);
-            let e0 = abs(edgef(a, b, uv)) / max(length(b - a), 1e-4);
-            let e1 = abs(edgef(b, c, uv)) / max(length(c - b), 1e-4);
-            let e2 = abs(edgef(c, a, uv)) / max(length(a - c), 1e-4);
-            let min_edge = min(e0, min(e1, e2));
-            let edge_soft = clamp(1.0 - smoothstep(0.0, 0.02, min_edge), 0.0, 1.0);
-            let aFace = 0.32 * edge_soft * z * mix(1.0, 0.55, back);
-            let faceCol = C[fi] * (0.6 + 0.4 * cos(vec3<f32>(0.0, 2.0, 4.0) + vec3<f32>(t, t, t) + vec3<f32>(f32(fi), f32(fi), f32(fi))));
-            col = col + faceCol * aFace;
-            alpha = alpha + aFace * 0.5;
-        }
-    }
-
-    let r = length(uv);
-    col = col + vec3<f32>(0.08 / (r * 12.0 + 0.2));
-    col = col * smoothstep(1.3, 0.2, r);
-    col = pow(col, vec3<f32>(0.9, 0.9, 0.9));
-    return vec4<f32>(clamp(col, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0)), clamp(alpha, 0.0, 1.0));
-}
-
 // ===== IFS Fractal Flames =====
 fn FractalFlame(uv_in: vec2<f32>) -> vec4<f32> {
     if (!check_border(uv_in)) { return BORDERCOLOR; }
@@ -819,110 +578,8 @@ fn FractalClouds(uv_in: vec2<f32>) -> vec4<f32> {
 }
 
 // ===== SDF Scene with Soft Shadows =====
-fn SdfSoftScene(uv_in: vec2<f32>, fragCoord: vec2<f32>, res: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    let aspect = res.x / max(res.y, 1.0);
-    var uv = uv_in * 2.0 - 1.0;
-    uv.x = uv.x * aspect;
-
-    let time = U.time * 0.5;
-    let cam_pos = vec3<f32>(
-        sin(time * 0.7) * 2.2,
-        0.4 + 0.3 * sin(time * 0.9),
-        3.4 + 0.4 * cos(time * 0.5)
-    );
-    let look_at = vec3<f32>(0.0, -0.2, 0.0);
-    let forward = normalize(look_at - cam_pos);
-    let right = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), forward));
-   let up = cross(forward, right);
-    let fov = 1.2;
-    let ray_dir = normalize(forward + uv.x * right * fov + uv.y * up * fov);
-
-    let trace = sdf_trace(cam_pos, ray_dir);
-    if (!trace.hit) {
-        let sky_grad = clamp(uv.y * 0.4 + 0.6, 0.0, 1.0);
-        let sky = mix(vec3<f32>(0.06, 0.07, 0.1), vec3<f32>(0.38, 0.45, 0.55), sky_grad);
-        let stars = hash21(fragCoord / 2.0) * 0.02;
-        return vec4<f32>(sky + stars, 1.0);
-    }
-
-    let hit_pos = cam_pos + ray_dir * trace.t;
-    let normal = sdf_normal(hit_pos);
-    let light_dir = normalize(vec3<f32>(-0.6, 0.85, 0.4));
-    let light_color = vec3<f32>(1.0, 0.97, 0.92);
-
-    let base_color = trace.color;
-    let diffuse = max(dot(normal, light_dir), 0.0);
-    let shadow = sdf_soft_shadow(hit_pos + normal * 0.02, light_dir, 0.05, 10.0, 18.0);
-    let ao = sdf_ambient_occlusion(hit_pos, normal);
-
-    let view_dir = normalize(cam_pos - hit_pos);
-    let half_dir = normalize(light_dir + view_dir);
-    let specular = pow(max(dot(normal, half_dir), 0.0), 48.0);
-
-    var color = base_color * (0.3 + 0.7 * diffuse * shadow) * ao;
-    color = color + light_color * specular * shadow * 0.6;
-
-    let bounce = 0.15 + 0.1 * max(dot(normal, vec3<f32>(0.0, 1.0, 0.0)), 0.0);
-    color = color + vec3<f32>(0.15, 0.18, 0.2) * bounce;
-
-    let rim = pow(max(dot(normal, -view_dir), 0.0), 3.0);
-    color = color + vec3<f32>(0.12, 0.14, 0.2) * rim;
-
-    let fog = exp(-trace.t * 0.12);
-    color = mix(vec3<f32>(0.04, 0.06, 0.09), color, fog);
-
-    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
-}
 
 // ===== Infinite Mirror Room =====
-fn MirrorBox(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    let aspect = U.width / max(U.height, 1.0);
-    var uv = uv_in * 2.0 - 1.0;
-    uv.x = uv.x * aspect;
-
-    let time = U.time * 0.4;
-    let cam = vec3<f32>(0.0, 0.0, time * 3.2);
-
-    let forward = normalize(vec3<f32>(0.0, 0.0, -1.0));
-    let right = vec3<f32>(1.0, 0.0, 0.0);
-    let up = vec3<f32>(0.0, 1.0, 0.0);
-    let ray_dir = normalize(forward + uv.x * right * 1.2 + uv.y * up * 1.0);
-
-    let cell_size = vec3<f32>(2.4, 2.0, 3.0);
-    var accum = vec3<f32>(0.0, 0.0, 0.0);
-    var throughput = 1.0;
-
-    for (var step = 0; step < 48; step = step + 1) {
-        let dist = 0.6 + f32(step) * 0.58;
-        let pos = cam + ray_dir * dist;
-
-        let cell_index_f = floor((pos / cell_size) + vec3<f32>(0.5, 0.5, 0.5));
-        let cell_index = vec3<f32>(cell_index_f.x, cell_index_f.y, cell_index_f.z);
-
-        let folded = abs(fract3((pos / cell_size) + vec3<f32>(0.5, 0.5, 0.5)) * 2.0 - vec3<f32>(1.0, 1.0, 1.0));
-        let edge = clamp(1.0 - min(folded.x, min(folded.y, folded.z)), 0.0, 1.0);
-
-        let palette = vec3<f32>(
-            0.4 + 0.3 * sin(dot(cell_index, vec3<f32>(0.9, 1.1, 1.7)) + time * 1.7),
-            0.4 + 0.3 * sin(dot(cell_index, vec3<f32>(1.3, 0.8, 1.5)) + time * 1.1 + 1.2),
-            0.4 + 0.3 * sin(dot(cell_index, vec3<f32>(1.7, 1.4, 0.9)) + time * 0.9 + 2.4)
-        );
-
-        let line_a = abs(dot(folded.xy, vec2<f32>(1.0, -1.0)));
-        let line_b = abs(folded.z - 0.5);
-        let glow = pow(edge, 6.0) + 0.35 * exp(-line_a * 45.0) + 0.25 * exp(-line_b * 72.0);
-
-        accum = accum + throughput * palette * glow;
-        throughput = throughput * 0.84;
-    }
-
-    let vignette = smoothstep(1.35, 0.3, length(uv));
-    accum = accum * vignette;
-    return vec4<f32>(clamp(accum, vec3<f32>(0.0), vec3<f32>(1.3)), 1.0);
-}
-
 // ===== Rotozoomer Pro =====
 fn rz_tex(p: vec2<f32>) -> vec3<f32> {
     let r = length(p - vec2<f32>(0.5, 0.5));
@@ -936,79 +593,25 @@ fn RotozoomerPro(uv_in: vec2<f32>) -> vec4<f32> {
     let res = vec2<f32>(U.width, U.height);
     let t = U.time;
     let uv = aspect_uv(uv_in);
-    let ang = t * 0.7 + 0.12 * sin(t * 0.31);
-    let zoom = 0.8 + 0.6 * sin(t * 0.37);
-    let scale = 1.0 / (1.2 + 0.9 * cos(zoom));
-    let M = rot2(ang) * scale;
-    var p = M * uv + vec2<f32>(0.5 + 0.15 * sin(t * 0.17), 0.5 + 0.15 * cos(t * 0.11));
 
-    let i = floor(p);
-    let f = fract(p);
-    let c00 = rz_tex(fract(i + vec2<f32>(0.0, 0.0)));
-    let c10 = rz_tex(fract(i + vec2<f32>(1.0, 0.0)));
-    let c01 = rz_tex(fract(i + vec2<f32>(0.0, 1.0)));
-    let c11 = rz_tex(fract(i + vec2<f32>(1.0, 1.0)));
-    var col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
-    col = col * (0.9 + 0.1 * sin(uv_in.y * res.y));
-    col = col * smoothstep(1.25, 0.2, length(uv));
-    return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    let wobble = 1.15 + 0.45 * sin(t * 0.42);
+    let rot = rot2(t * 0.58 + 0.12 * sin(t * 0.21));
+    var tex = rot * uv * wobble;
+    tex = tex + vec2<f32>(0.35 * sin(t * 0.29), 0.35 * cos(t * 0.26));
+
+    let tile = fract(tex) - vec2<f32>(0.5, 0.5);
+    let ring = sin(length(tile) * 24.0 - t * 2.4);
+    let stripes = sin(tile.x * 28.0 + t * 1.4) * cos(tile.y * 24.0 - t * 1.6);
+    let pattern = stripes + 0.6 * ring;
+
+    var col = 0.5 + 0.5 * cos(vec3<f32>(0.0, 2.0, 4.0) + vec3<f32>(pattern * 2.2, pattern * 1.8, pattern * 1.6));
+    col = col + 0.15 * sin(vec3<f32>(tex.xyx * 2.0 + t * 1.1));
+    col = col * (0.85 + 0.15 * sin((uv_in.y * res.y) * 0.75 + t * 2.0));
+    col = col * smoothstep(1.4, 0.2, length(uv));
+    return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.2)), 1.0);
 }
 
 // ===== Log Polar Spiral Zoom =====
-fn lp_pattern(p: vec2<f32>) -> vec3<f32> {
-    let stripes = sin(p.x * 6.28318 * 0.8) * cos(p.y * 4.0);
-    return 0.5 + 0.5 * cos(vec3<f32>(0.0, 2.0, 4.0) + vec3<f32>(stripes * 2.0));
-}
-
-fn LogPolarSpiralZoom(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    let t = U.time;
-    let uv = aspect_uv(uv_in);
-    let r = length(uv) + 1e-5;
-    let a = atan2(uv.y, uv.x);
-    var u = log(r) - t * 0.6;
-    var v = a + t * 0.9;
-    u = fract(u * 0.25);
-    v = fract(v / (2.0 * PI));
-    var col = lp_pattern(vec2<f32>(u, v));
-    col = col + vec3<f32>(0.08 / (r * 10.0 + 0.2));
-    col = col * smoothstep(1.2, 0.2, r);
-    return vec4<f32>(pow(col, vec3<f32>(0.92, 0.92, 0.92)), 1.0);
-}
-
-// ===== Mandelbrot Zoom =====
-fn mb_palette(t: f32) -> vec3<f32> {
-    return 0.5 + 0.5 * cos(vec3<f32>(0.0, 0.6, 1.0) + vec3<f32>(t * 6.2, t * 6.2, t * 6.2));
-}
-
-fn MandelbrotZoom(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    let uv = aspect_uv(uv_in);
-    let t = U.time;
-    let center = vec2<f32>(-0.743643887037151, 0.131825904205330);
-    let zoom = exp(-t * 0.35);
-    let rot = rot2(0.2 * t);
-    var cp = center + (rot * uv) * (1.8 * zoom);
-    var z = vec2<f32>(0.0, 0.0);
-    let max_it: i32 = 160;
-    var i: i32 = 0;
-    loop {
-        if (!(i < max_it && dot(z, z) < 256.0)) { break; }
-        z = vec2<f32>(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + cp;
-        i = i + 1;
-    }
-    var it = f32(i);
-    if (i < max_it) {
-        let zn = length(z);
-        let nu = log2(log(zn));
-        it = it - nu + 4.0;
-    }
-    let k = it / f32(max_it);
-    var col = mb_palette(k) * (0.95 + 0.05 * cos(k * 20.0));
-    col = col * smoothstep(1.2, 0.2, length(uv));
-    return vec4<f32>(pow(clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(0.95, 0.95, 0.95)), 1.0);
-}
-
 // ===== Julia Tunnel =====
 fn julia_iter(z0: vec2<f32>, c: vec2<f32>, max_it: i32) -> f32 {
     var z = z0;
@@ -1031,64 +634,23 @@ fn JuliaTunnel(uv_in: vec2<f32>) -> vec4<f32> {
     let t = U.time;
     let uv = aspect_uv(uv_in);
     let r = max(1e-5, length(uv));
-    let a = atan2(uv.y, uv.x);
-    var u = log(r) - t * 0.8;
-    var v = a + t * 0.6;
-    let tile_u = fract(u * 0.5) * 2.0 - 1.0;
-    let tile_v = fract(v / (2.0 * PI)) * 2.0 - 1.0;
-    let z0 = vec2<f32>(tile_u * 1.6, tile_v * 1.2);
-    let c = vec2<f32>(0.285 + 0.15 * cos(t * 0.37), 0.01 + 0.18 * sin(t * 0.23));
+    let angle = atan2(uv.y, uv.x);
+    var u = log(r) * 0.6 - t * 0.76;
+    var v = angle + t * 0.58;
+    let tile_u = fract(u * 0.45) * 2.0 - 1.0;
+    let tile_v = fract((v + u * 0.3) / (2.0 * PI)) * 2.0 - 1.0;
+    let z0 = vec2<f32>(tile_u * 1.7, tile_v * 1.3);
+    let c = vec2<f32>(0.285 + 0.18 * cos(t * 0.37), 0.01 + 0.18 * sin(t * 0.29));
     let it = julia_iter(z0, c, 140);
     let k = it / 140.0;
-    var col = 0.5 + 0.5 * cos(vec3<f32>(0.0, 2.0, 4.0) + vec3<f32>(k * 7.0 + v * 0.7));
-    col = col * (0.85 + 0.15 * cos(k * 10.0));
-    col = col + vec3<f32>(0.06 / (r * 10.0 + 0.2));
+    var col = 0.5 + 0.5 * cos(vec3<f32>(0.0, 2.0, 4.0) + vec3<f32>(k * 7.5 + v * 0.8));
+    col = col * (0.82 + 0.18 * cos(k * 12.0));
+    col = col + vec3<f32>(0.07 / (r * 9.0 + 0.2));
     col = col * smoothstep(1.25, 0.25, length(uv));
-    return vec4<f32>(pow(col, vec3<f32>(0.95, 0.95, 0.95)), 1.0);
+    return vec4<f32>(pow(col, vec3<f32>(0.94, 0.94, 0.94)), 1.0);
 }
 
 // ===== Möbius Rotozoomer =====
-fn cmul(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
-    return vec2<f32>(x.x * y.x - x.y * y.y, x.x * y.y + x.y * y.x);
-}
-
-fn cdiv(x: vec2<f32>, y: vec2<f32>) -> vec2<f32> {
-    let den = dot(y, y);
-    let yc = vec2<f32>(y.x, -y.y);
-    return cmul(x, yc) / den;
-}
-
-fn mobius_tex(p: vec2<f32>) -> vec3<f32> {
-    let r = length(p - vec2<f32>(0.5, 0.5));
-    let a = atan2(p.y - 0.5, p.x - 0.5);
-    let v = 0.7 * sin(10.0 * a) + 0.3 * cos(30.0 * r);
-    return 0.5 + 0.5 * cos(vec3<f32>(0.0, 2.2, 4.2) + vec3<f32>(v * 2.4));
-}
-
-fn MobiusRotozoomer(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    let t = U.time;
-    var z = aspect_uv(uv_in) * (1.0 + 0.25 * sin(t * 0.37));
-    let a = vec2<f32>(0.7 * cos(t * 0.3), 0.7 * sin(t * 0.3));
-    let b = vec2<f32>(0.3 * cos(t * 0.5 + 1.7), 0.3 * sin(t * 0.5 + 1.7));
-    let c = vec2<f32>(0.25 * cos(t * 0.41 + 0.9), 0.25 * sin(t * 0.41 + 0.9));
-    let d = vec2<f32>(1.0, 0.0);
-    let num = cmul(a, z) + b;
-    let den = cmul(c, z) + d;
-    var zp = cdiv(num, den);
-    zp = cmul(zp, vec2<f32>(cos(t * 0.6), sin(t * 0.6)));
-    var p = fract(zp + vec2<f32>(0.5, 0.5));
-    let i = floor(p);
-    let f = fract(p);
-    let c00 = mobius_tex(fract(i + vec2<f32>(0.0, 0.0)));
-    let c10 = mobius_tex(fract(i + vec2<f32>(1.0, 0.0)));
-    let c01 = mobius_tex(fract(i + vec2<f32>(0.0, 1.0)));
-    let c11 = mobius_tex(fract(i + vec2<f32>(1.0, 1.0)));
-    var col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
-    col = col * (0.92 + 0.08 * sin(uv_in.y * U.height));
-    col = col * smoothstep(1.3, 0.25, length(aspect_uv(uv_in)));
-    return vec4<f32>(pow(col, vec3<f32>(0.95, 0.95, 0.95)), 1.0);
-}
 
 fn FaceComposite(p: vec3<f32>, n: vec3<f32>, f: i32) -> vec3<f32> {
     var nn = max(abs(n) - vec3<f32>(0.2,0.2,0.2), vec3<f32>(0.001,0.001,0.001));
@@ -1183,20 +745,15 @@ fn scene_color(scene_idx: u32, uv01: vec2<f32>, fragCoord: vec2<f32>, res: vec2<
     if (scene_idx == 2u)  { return Plasma(uv01); }
     if (scene_idx == 3u)  { return Twirl(uv01); }
     if (scene_idx == 4u)  { return Room(uv01); }
-    if (scene_idx == 5u)  { return RotatingGrid(uv01); }
-    if (scene_idx == 6u)  { return FractalFlame(uv01); }
-    if (scene_idx == 7u)  { return JuliaMorph(uv01); }
-    if (scene_idx == 8u)  { return GlenzVectors(uv01); }
+    if (scene_idx == 5u)  { return Flow(uv01); }
+    if (scene_idx == 6u)  { return RotatingGrid(uv01); }
+    if (scene_idx == 7u)  { return FractalFlame(uv01); }
+    if (scene_idx == 8u)  { return JuliaMorph(uv01); }
     if (scene_idx == 9u)  { return FractalClouds(uv01); }
-    if (scene_idx == 10u) { return SdfSoftScene(uv01, fragCoord, res); }
-    if (scene_idx == 11u) { return MirrorBox(uv01); }
-    if (scene_idx == 12u) { return RotozoomerPro(uv01); }
-    if (scene_idx == 13u) { return LogPolarSpiralZoom(uv01); }
-    if (scene_idx == 14u) { return MandelbrotZoom(uv01); }
-    if (scene_idx == 15u) { return JuliaTunnel(uv01); }
-    if (scene_idx == 16u) { return MobiusRotozoomer(uv01); }
-    // 17u -> JellyCube
-    return RenderJellyCube(uv01, fragCoord, res, U.time);
+    if (scene_idx == 10u) { return RotozoomerPro(uv01); }
+    if (scene_idx == 11u) { return JuliaTunnel(uv01); }
+    if (scene_idx == 12u) { return RenderJellyCube(uv01, fragCoord, res, U.time); }
+    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
 }
 
 // ===== CRT (Timothy Lottes single-pass adaptation) =====
@@ -1327,6 +884,7 @@ fn frag_main(v: VertexOutput) -> @location(0) vec4<f32> {
     // Pixelcoords in Bevy (Y-Flip)
     let fragCoord = vec2<f32>(v.uv.x * U.width, (1.0 - v.uv.y) * U.height);
     let res       = vec2<f32>(U.width, U.height);
+    let uv01      = v.uv;
 
     // Sequencer
     let t         = U.time;
@@ -1340,8 +898,14 @@ fn frag_main(v: VertexOutput) -> @location(0) vec4<f32> {
     let tr_phase  = clamp((local_t - tr_start) / max(TRANSITION_DURATION / SCENE_DURATION, 1e-5), 0.0, 1.0);
     let tr_alpha  = smoothstep(0.0, 1.0, tr_phase);
 
-    let ctx = CRTContext(res, scene_idx, next_idx, tr_alpha);
-    let color = crt_apply(ctx, fragCoord);
+    let col_a = scene_color(scene_idx, uv01, fragCoord, res);
+    let col_b = scene_color(next_idx,  uv01, fragCoord, res);
+    var color = mix(col_a.rgb, col_b.rgb, tr_alpha);
+
+    if (U.crt_enabled == 1u) {
+        let ctx = CRTContext(res, scene_idx, next_idx, tr_alpha);
+        color = crt_apply(ctx, fragCoord);
+    }
 
     return vec4<f32>(color, 1.0);
 }

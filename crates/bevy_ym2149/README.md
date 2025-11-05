@@ -93,7 +93,7 @@ The main component for controlling YM file playback. Spawn this component on an 
 
 ```rust
 // Create and spawn a playback entity
-let playback = Ym2149Playback::new("examples/song.ym");
+let playback = Ym2149Playback::new("path/to/your_song.ym");
 commands.spawn(playback);
 
 // Query and control playback

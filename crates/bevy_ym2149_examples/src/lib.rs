@@ -36,11 +36,9 @@ pub const ASSET_BASE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets");
 /// use bevy::prelude::*;
 /// use bevy_ym2149_examples::example_plugins;
 ///
-/// fn main() {
-///     App::new()
-///         .add_plugins(example_plugins())
-///         .run();
-/// }
+/// App::new()
+///     .add_plugins(example_plugins())
+///     .run();
 /// ```
 pub fn example_plugins() -> impl PluginGroup {
     DefaultPlugins.set(AssetPlugin {

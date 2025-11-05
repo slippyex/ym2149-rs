@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use bevy::asset::AssetPlugin;
 use bevy::asset::RenderAssetUsages;
-use bevy::log::{debug, info};
+use bevy::log::debug;
 use bevy::math::primitives::Rectangle;
 use bevy::{
     prelude::*,
@@ -134,6 +134,7 @@ struct CubeParams {
     height: f32,
     mouse: Vec4, // optional belegt, aktuell 0
     frame: u32,
+    crt_enabled: u32,
 }
 impl Default for CubeParams {
     fn default() -> Self {
@@ -143,6 +144,7 @@ impl Default for CubeParams {
             height: 720.0,
             mouse: Vec4::ZERO,
             frame: 0,
+            crt_enabled: 1,
         }
     }
 }
@@ -168,10 +170,16 @@ enum StartupFadePhase {
 #[derive(Component)]
 struct StartupFadeOverlay;
 
-#[derive(Resource, Default)]
-struct QueuedAudio {
-    handle: Option<Handle<Ym2149AudioSource>>,
+#[derive(Resource)]
+struct PendingSurface {
+    mesh: Handle<Mesh>,
+    scale: Vec3,
     spawned: bool,
+}
+
+#[derive(Resource)]
+struct CrtState {
+    enabled: bool,
 }
 
 // === Overlay + Text Writer ===================================================
@@ -401,18 +409,9 @@ enum Phase {
 
 // === Beat-Pulse (Glow) ======================================================
 
-#[derive(Message)]
-pub struct BeatPulseTrigger;
 #[derive(Resource, Default)]
 struct BeatPulse {
     energy: f32,
-    decay_per_sec: f32,
-    add_on_beat: f32,
-}
-#[derive(Resource)]
-struct BpmClock {
-    bpm: f32,
-    phase: f32,
 }
 
 // === App ====================================================================
@@ -441,7 +440,6 @@ fn main() {
             Ym2149Plugin::default(),
         ))
         .add_message::<PushOverlayText>()
-        .add_message::<BeatPulseTrigger>()
         .add_systems(
             Startup,
             (
@@ -454,7 +452,9 @@ fn main() {
         .add_systems(
             Update,
             (
+                spawn_surface_when_ready,
                 update_startup_fade,
+                toggle_crt,
                 handle_push_events,
                 feed_overlay_script,
                 apply_swing_animation, // Calculate swing offsets (updates state)
@@ -472,20 +472,18 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<CubeFacesMaterial>>,
     windows: Query<&Window>,
 ) {
     commands.spawn(Camera2d);
 
     if PLAY_MUSIC {
         let ym_handle: Handle<Ym2149AudioSource> = asset_server.load(YM_TRACK_PATH);
-        commands.insert_resource(QueuedAudio {
-            handle: Some(ym_handle),
-            spawned: false,
-        });
+        let mut playback = Ym2149Playback::from_asset(ym_handle);
+        playback.play();
+        commands.spawn(playback);
     }
 
-    // Fullscreen Quad
+    // Fullscreen Quad (deferred spawn)
     let mesh = meshes.add(Mesh::from(Rectangle::new(2.0, 2.0)));
 
     let window_size = windows
@@ -496,16 +494,11 @@ fn setup(
 
     let quad_scale = Vec3::new(window_size.x * 0.5, window_size.y * 0.5, 1.0);
 
-    let material_handle = materials.add(CubeFacesMaterial::default());
-    commands.spawn((
-        Mesh2d(mesh),
-        MeshMaterial2d(material_handle.clone()),
-        Transform::from_scale(quad_scale),
-        GlobalTransform::default(),
-        Visibility::default(),
-        Name::new("CubeFacesSurface"),
-    ));
-    commands.insert_resource(MaterialHandle(material_handle));
+    commands.insert_resource(PendingSurface {
+        mesh,
+        scale: quad_scale,
+        spawned: false,
+    });
 
     // Shader Hot Reload
     let shader_handle: Handle<Shader> = asset_server.load("shaders/cube_faces_singlepass.wgsl");
@@ -622,15 +615,46 @@ fn init_resources(mut commands: Commands) {
     commands.insert_resource(TextQueue::default());
     commands.insert_resource(OverlayScript::default());
     commands.insert_resource(TextWriterState::default());
-    commands.insert_resource(BeatPulse {
-        energy: 0.0,
-        decay_per_sec: 2.2,
-        add_on_beat: 1.0,
-    });
-    commands.insert_resource(BpmClock {
-        bpm: 120.0,
-        phase: 0.0,
-    });
+    commands.insert_resource(BeatPulse { energy: 0.0 });
+    commands.insert_resource(CrtState { enabled: true });
+}
+
+fn spawn_surface_when_ready(
+    asset_server: Res<AssetServer>,
+    pending: Option<ResMut<PendingSurface>>,
+    mut materials: ResMut<Assets<CubeFacesMaterial>>,
+    mut commands: Commands,
+    fade: Res<StartupFade>,
+) {
+    let Some(mut pending) = pending else {
+        return;
+    };
+
+    if pending.spawned {
+        return;
+    }
+
+    if !asset_server.is_loaded_with_dependencies(&fade.shader) {
+        return;
+    }
+
+    let material_handle = materials.add(CubeFacesMaterial::default());
+    commands.spawn((
+        Mesh2d(pending.mesh.clone()),
+        MeshMaterial2d(material_handle.clone()),
+        Transform::from_scale(pending.scale),
+        GlobalTransform::default(),
+        Visibility::default(),
+        Name::new("CubeFacesSurface"),
+    ));
+    commands.insert_resource(MaterialHandle(material_handle));
+    pending.spawned = true;
+}
+
+fn toggle_crt(keys: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
+    if keys.just_pressed(KeyCode::KeyC) {
+        crt.enabled = !crt.enabled;
+    }
 }
 
 // === Uniform Update =========================================================
@@ -639,8 +663,12 @@ fn update_uniforms(
     time: Res<Time>,
     windows: Query<&Window>,
     mut materials: ResMut<Assets<CubeFacesMaterial>>,
-    mat: Res<MaterialHandle>,
+    mat: Option<Res<MaterialHandle>>,
+    crt: Option<Res<CrtState>>,
 ) {
+    let Some(mat) = mat else {
+        return;
+    };
     let Some(window) = windows.iter().next() else {
         return;
     };
@@ -652,18 +680,8 @@ fn update_uniforms(
     material.params.width = window.resolution.width();
     material.params.height = window.resolution.height();
     material.params.frame = material.params.frame.wrapping_add(1);
-}
-
-/// Helper function to spawn music playback from queued audio
-fn spawn_music_if_queued(queued_audio: &mut QueuedAudio, commands: &mut Commands) {
-    if PLAY_MUSIC && !queued_audio.spawned {
-        if let Some(handle) = queued_audio.handle.take() {
-            info!("Starting YM2149 playback");
-            let mut playback = Ym2149Playback::from_asset(handle);
-            playback.play();
-            commands.spawn(playback);
-            queued_audio.spawned = true;
-        }
+    if let Some(crt_state) = crt {
+        material.params.crt_enabled = if crt_state.enabled { 1 } else { 0 };
     }
 }
 
@@ -672,8 +690,6 @@ fn update_startup_fade(
     asset_server: Res<AssetServer>,
     mut fade: ResMut<StartupFade>,
     mut overlay: Query<(&mut BackgroundColor, &mut Visibility), With<StartupFadeOverlay>>,
-    queued_audio: Option<ResMut<QueuedAudio>>,
-    mut commands: Commands,
 ) {
     let Ok((mut bg, mut visibility)) = overlay.single_mut() else {
         return;
@@ -684,15 +700,8 @@ fn update_startup_fade(
             bg.0 = bg.0.with_alpha(1.0);
             *visibility = Visibility::Visible;
             if asset_server.is_loaded_with_dependencies(&fade.shader) {
-                // Shaders are ready - start music and begin fade sequence
-                info!("Shaders loaded - starting music and beginning fade sequence");
                 fade.state = StartupFadePhase::Fading;
                 fade.timer = 0.0;
-
-                // Start music when shaders are ready
-                if let Some(mut qa) = queued_audio {
-                    spawn_music_if_queued(&mut qa, &mut commands);
-                }
             }
         }
         StartupFadePhase::Fading => {
