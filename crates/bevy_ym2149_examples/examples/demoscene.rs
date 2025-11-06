@@ -22,6 +22,7 @@ use bevy::{
         widget::{ImageNode, NodeImageMode},
         IsDefaultUiCamera,
     },
+    window::PrimaryWindow,
 };
 use bevy_mesh::Mesh2d;
 #[cfg(feature = "visualization")]
@@ -507,7 +508,7 @@ fn setup(
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
-    windows: Query<&Window>,
+    windows: Query<&Window, With<PrimaryWindow>>,
 ) {
     commands.insert_resource(Ym2149Settings {
         loop_enabled: true,
@@ -522,12 +523,11 @@ fn setup(
     }
 
     // Fullscreen Quad (deferred spawn)
-    let mesh = meshes.add(Mesh::from(Rectangle::new(2.0, 2.0)));
+    let mesh_handle = meshes.add(Mesh::from(Rectangle::new(2.0, 2.0)));
 
     let window_size = windows
-        .iter()
-        .next()
-        .map(|w| Vec2::new(w.resolution.width(), w.resolution.height()))
+        .single()
+        .map(|window| Vec2::new(window.resolution.width(), window.resolution.height()))
         .unwrap_or(Vec2::new(1280.0, 720.0));
 
     let extent = Extent3d {
@@ -581,7 +581,7 @@ fn setup(
     let quad_scale = Vec3::new(window_size.x * 0.5, window_size.y * 0.5, 1.0);
 
     commands.insert_resource(PendingSurface {
-        mesh,
+        mesh: mesh_handle,
         scale: quad_scale,
         spawned: false,
     });
@@ -789,14 +789,14 @@ fn init_resources(mut commands: Commands) {
 }
 
 fn sync_render_target_image(
-    windows: Query<&Window>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut images: ResMut<Assets<Image>>,
     render_target: Option<Res<SceneRenderTarget>>,
 ) {
     let Some(render_target) = render_target else {
         return;
     };
-    let Some(window) = windows.iter().next() else {
+    let Ok(window) = windows.single() else {
         return;
     };
     let Some(image) = images.get_mut(&render_target.0) else {
@@ -844,8 +844,9 @@ fn spawn_surface_when_ready(
         Mesh2d(pending.mesh.clone()),
         MeshMaterial2d(material_handle.clone()),
         Transform::from_scale(pending.scale),
-        GlobalTransform::default(),
         Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
         RenderLayers::layer(0),
         Name::new("CubeFacesSurface"),
     ));
@@ -859,8 +860,9 @@ fn spawn_surface_when_ready(
         Mesh2d(pending.mesh.clone()),
         MeshMaterial2d(crt_material_handle.clone()),
         Transform::from_scale(pending.scale),
-        GlobalTransform::default(),
         Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
         RenderLayers::layer(1),
         Name::new("CrtPostSurface"),
     ));
@@ -885,7 +887,7 @@ fn exit_on_escape(keys: Res<ButtonInput<KeyCode>>, mut exit: MessageWriter<AppEx
 
 fn update_uniforms(
     time: Res<Time>,
-    windows: Query<&Window>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut materials: ResMut<Assets<CubeFacesMaterial>>,
     mut crt_materials: ResMut<Assets<CrtPostMaterial>>,
     mat: Option<Res<MaterialHandle>>,
@@ -895,7 +897,7 @@ fn update_uniforms(
     let Some(mat) = mat else {
         return;
     };
-    let Some(window) = windows.iter().next() else {
+    let Ok(window) = windows.single() else {
         return;
     };
     let Some(material) = materials.get_mut(&mat.0) else {
@@ -1211,8 +1213,8 @@ fn typewriter_update(
             current.text.chars().take(state.visible_chars).collect()
         };
         if let Ok((mut image, mut layout)) = main_query.single_mut() {
-            let size = if use_cascade {
-                rebuild_bitmap_text_cascade(
+            let (glyph_size, texture_size) = if use_cascade {
+                let metrics = rebuild_bitmap_text_cascade(
                     &visible,
                     &font,
                     &image.image,
@@ -1220,9 +1222,21 @@ fn typewriter_update(
                     &state.cascade_scales,
                     CASCADE_TARGET_SCALE,
                     CASCADE_MAX_SCALE,
-                )
+                );
+                (metrics.rest, metrics.texture)
             } else {
-                rebuild_bitmap_text(&visible, &font, &image.image, &mut images)
+                let base = rebuild_bitmap_text(&visible, &font, &image.image, &mut images);
+                (base, base)
+            };
+            let width_correction = if glyph_size.x > 0 {
+                texture_size.x as f32 / glyph_size.x as f32
+            } else {
+                1.0
+            };
+            let height_correction = if glyph_size.y > 0 {
+                texture_size.y as f32 / glyph_size.y as f32
+            } else {
+                1.0
             };
             let zoom = if matches!(state.phase, Phase::FadeOut) {
                 state.alpha.clamp(0.0, 1.0)
@@ -1237,12 +1251,20 @@ fn typewriter_update(
             };
 
             // Final text dimensions: base * zoom * animation_scale * base_scale * viewport_scale
-            let width =
-                (size.x as f32 * zoom * scale_factor * BASE_TEXT_SCALE * state.viewport_scale)
-                    .max(0.0);
-            let height =
-                (size.y as f32 * zoom * scale_factor * BASE_TEXT_SCALE * state.viewport_scale)
-                    .max(0.0);
+            let width = (glyph_size.x as f32
+                * width_correction
+                * zoom
+                * scale_factor
+                * BASE_TEXT_SCALE
+                * state.viewport_scale)
+                .max(0.0);
+            let height = (glyph_size.y as f32
+                * height_correction
+                * zoom
+                * scale_factor
+                * BASE_TEXT_SCALE
+                * state.viewport_scale)
+                .max(0.0);
             layout.width = Val::Px(width);
             layout.height = Val::Px(height);
             layout.min_width = Val::Px(width);
@@ -1335,17 +1357,16 @@ fn start_next_message(state: &mut TextWriterState, queue: &mut TextQueue) {
 fn apply_swing_animation(
     time: Res<Time>,
     mut state: ResMut<TextWriterState>,
-    windows: Query<&Window>,
+    windows: Query<&Window, With<PrimaryWindow>>,
 ) {
     let elapsed = time.elapsed_secs();
 
     // Get actual window width and calculate responsive scales
     let viewport_scale = windows
-        .iter()
-        .next()
-        .map(|w| {
-            let logical_width = w.resolution.width();
-            let scale_factor = w.resolution.scale_factor() as f32;
+        .single()
+        .map(|window| {
+            let logical_width = window.resolution.width();
+            let scale_factor = window.resolution.scale_factor() as f32;
             let physical_width = logical_width * scale_factor;
             (physical_width / DESIGN_WIDTH).clamp(MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE)
         })
@@ -1514,6 +1535,11 @@ fn rebuild_bitmap_text(
     UVec2::new(width, height)
 }
 
+struct CascadeImageMetrics {
+    rest: UVec2,
+    texture: UVec2,
+}
+
 fn rebuild_bitmap_text_cascade(
     text: &str,
     font: &BitmapFont,
@@ -1522,7 +1548,7 @@ fn rebuild_bitmap_text_cascade(
     scales: &[f32],
     rest_scale: f32,
     max_scale: f32,
-) -> UVec2 {
+) -> CascadeImageMetrics {
     if let Some(font_image) = images.get_mut(&font.image) {
         if font_image.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb {
             if let Some(converted) = font_image.convert(TextureFormat::Rgba8UnormSrgb) {
@@ -1539,23 +1565,38 @@ fn rebuild_bitmap_text_cascade(
             });
             image.data = Some(vec![0, 0, 0, 0]);
         }
-        return UVec2::new(1, 1);
+        return CascadeImageMetrics {
+            rest: UVec2::new(1, 1),
+            texture: UVec2::new(1, 1),
+        };
     }
 
     let glyphs: Vec<char> = text.chars().collect();
     if glyphs.is_empty() {
-        return UVec2::ZERO;
+        return CascadeImageMetrics {
+            rest: UVec2::ZERO,
+            texture: UVec2::ZERO,
+        };
     }
 
     let (texture_width, texture_height, font_pixels) = {
         let Some(font_image) = images.get(&font.image) else {
-            return UVec2::ZERO;
+            return CascadeImageMetrics {
+                rest: UVec2::ZERO,
+                texture: UVec2::ZERO,
+            };
         };
         let Some(font_pixels) = font_image.data.clone() else {
-            return UVec2::ZERO;
+            return CascadeImageMetrics {
+                rest: UVec2::ZERO,
+                texture: UVec2::ZERO,
+            };
         };
         if font_pixels.is_empty() {
-            return UVec2::ZERO;
+            return CascadeImageMetrics {
+                rest: UVec2::ZERO,
+                texture: UVec2::ZERO,
+            };
         }
         (
             font_image.texture_descriptor.size.width,
@@ -1565,7 +1606,10 @@ fn rebuild_bitmap_text_cascade(
     };
 
     let Some(image) = images.get_mut(handle) else {
-        return UVec2::ZERO;
+        return CascadeImageMetrics {
+            rest: UVec2::ZERO,
+            texture: UVec2::ZERO,
+        };
     };
     let cell_w = font.cell_size.x;
     let cell_h = font.cell_size.y;
@@ -1679,5 +1723,8 @@ fn rebuild_bitmap_text_cascade(
     }
     image.data = Some(output);
     let rest_width = glyph_count * (rest_char_w + spacing) - spacing;
-    UVec2::new(rest_width.max(1), rest_char_h.max(1))
+    CascadeImageMetrics {
+        rest: UVec2::new(rest_width.max(1), rest_char_h.max(1)),
+        texture: UVec2::new(width.max(1), height.max(1)),
+    }
 }
