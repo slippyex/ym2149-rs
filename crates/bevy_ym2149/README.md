@@ -1,6 +1,6 @@
 # bevy_ym2149
 
-A [Bevy](https://bevyengine.org/) plugin for real-time YM2149 PSG audio playback and visualization. This crate integrates the high-fidelity [ym2149](https://github.com/markusvelten/ym2149-rs) emulator with Bevy's ECS architecture, providing seamless YM file playback with live channel visualization.
+A [Bevy](https://bevyengine.org/) plugin for real-time YM2149 PSG audio playback and visualization. This crate integrates the high-fidelity [ym2149](https://github.com/slippyex/ym2149-rs) emulator with Bevy's ECS architecture, providing seamless YM file playback with live channel visualization.
 
 [![Crates.io](https://img.shields.io/crates/v/bevy_ym2149.svg)](https://crates.io/crates/bevy_ym2149)
 [![Docs.rs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149)
@@ -33,7 +33,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-bevy = "0.15"
+bevy = "0.17"
 bevy_ym2149 = "0.5"
 ```
 
@@ -41,7 +41,7 @@ bevy_ym2149 = "0.5"
 
 ```rust
 use bevy::prelude::*;
-use ym2149_bevy::{Ym2149Plugin, Ym2149Playback};
+use bevy_ym2149::{Ym2149Plugin, Ym2149Playback};
 
 fn main() {
     App::new()
@@ -187,7 +187,7 @@ pub enum PlaybackState {
 
 ## Pluggable Audio Output
 
-The plugin uses a trait-based [`AudioSink`](https://docs.rs/bevy_ym2149/latest/ym2149_bevy/trait.AudioSink.html) abstraction for audio output, allowing you to bring your own implementation while rodio remains the default.
+The plugin uses a trait-based [`AudioSink`](https://docs.rs/bevy_ym2149/latest/bevy_ym2149/trait.AudioSink.html) abstraction for audio output, allowing you to bring your own implementation while rodio remains the default.
 
 ### Using the Default Rodio Implementation
 
@@ -198,7 +198,7 @@ By default, the plugin automatically uses `RodioAudioSink` for real-time audio p
 You can implement the `AudioSink` trait for custom outputs like WAV file writing, network streaming, or other mechanisms:
 
 ```rust
-use ym2149_bevy::AudioSink;
+use bevy_ym2149::AudioSink;
 use std::sync::Arc;
 
 struct MyWavSink {
@@ -290,9 +290,9 @@ The default `RodioAudioSink` uses a ring buffer (~250ms at 44.1kHz) to prevent u
 
 Song title and artist information is extracted from the YM file header during initialization using the emulator's `format_info()` method.
 
-## Controls and File Loading (Example)
+## Controls and File Loading (Examples)
 
-The included `basic_playback` example implements the following controls:
+The `bevy_ym2149_examples` crate provides runnable examples demonstrating the plugin. For instance, the `basic_example` implements the following controls:
 
 ### Keyboard Controls
 - **SPACE**: Play/Pause toggle
@@ -302,7 +302,7 @@ The included `basic_playback` example implements the following controls:
 - **DOWN**: Decrease volume
 
 ### Drag and Drop
-**The example supports drag-and-drop file loading!** Simply drag any `.ym` file into the window to load and play it immediately. This works with all YM format variants (YM2-YM6) and automatically decompresses LHA-compressed files.
+**The examples support drag-and-drop file loading!** Simply drag any `.ym` file into the window to load and play it immediately. This works with all YM format variants (YM2-YM6) and automatically decompresses LHA-compressed files.
 
 This makes it easy to test playback of any YM file in your collection without modifying the code.
 
@@ -460,15 +460,16 @@ fn tweak_chip(chip: &mut Ym2149) {
 }
 ```
 
-### Example Separation
+### Examples
 
-Two examples ship with the crate:
+Comprehensive examples are provided in the separate `bevy_ym2149_examples` crate:
 
-- `basic_playback` — visualization-heavy tracker layout with live mix controls.
-- `feature_showcase` — headless-friendly demo covering playlists, music states,
-  diagnostics, and bridge mixing.
+- `basic_example` — minimal example showing basic playback and controls
+- `advanced_example` — visualization-heavy tracker layout with oscilloscope and spectrum analysis
+- `feature_showcase` — headless-friendly demo covering playlists, music states, diagnostics, and bridge mixing
+- `demoscene` — demoscene-style example with custom shaders and visual effects
 
-The `basic_playback` example is built entirely on the public API surface:
+All examples are built entirely on the public API surface:
 
 ```rust
 use bevy::asset::AssetServer;
@@ -565,8 +566,13 @@ This shouldn't happen due to time-based frame advancement. If it does:
 # Build the crate
 cargo build -p bevy_ym2149
 
-# Run the example
-cargo run --example basic_playback -p bevy_ym2149
+# Run an example (from the bevy_ym2149_examples crate)
+cargo run --example basic_example -p bevy_ym2149_examples
+
+# Run all examples
+cargo run --example advanced_example -p bevy_ym2149_examples
+cargo run --example feature_showcase -p bevy_ym2149_examples
+cargo run --example demoscene -p bevy_ym2149_examples
 
 # Run tests
 cargo test -p bevy_ym2149

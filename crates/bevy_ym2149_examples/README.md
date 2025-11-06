@@ -36,7 +36,6 @@ Comprehensive demonstration of:
 
 ### demoscene
 Demoscene-style example featuring:
-- Cube faces shader (port of ShaderToy Buffer A)
 - YM2149 music playback synchronized with visuals
 - Bitmap font rendering with text overlay
 - Easing functions for animations
@@ -100,7 +99,7 @@ cargo run --example basic_example
 Asset paths in code are relative to `ASSET_BASE`:
 - Music files: `"music/ND-Toxygene.ym"`
 - Fonts: `"fonts/demoscene_font.png"`
-- Shaders: `"shaders/cube_faces_singlepass.wgsl"`
+- Shaders: `"shaders/oldschool.wgsl"`
 
 ### Asset Loading Pattern Explained
 
@@ -185,7 +184,7 @@ assets/                          # Base directory set at compile time
 ├── fonts/                       # Bitmap fonts for UI
 │   └── demoscene_font.png
 └── shaders/                     # Custom WGSL shaders
-    └── cube_faces_singlepass.wgsl
+    └── oldschool.wgsl
 ```
 
 ## Building and Running

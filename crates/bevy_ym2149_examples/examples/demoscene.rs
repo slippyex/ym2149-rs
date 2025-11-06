@@ -1,7 +1,7 @@
 //! Cube Faces Raymarch (ShaderToy Buffer A Port, single pass)
 //! Mit Text-Overlay + YM2149 Playback.
 //!
-//! Shader: `shaders/cube_faces_singlepass.wgsl` (relative to assets directory)
+//! Shader: `shaders/oldschool.wgsl` (relative to assets directory)
 
 use std::collections::HashMap;
 
@@ -112,7 +112,7 @@ pub struct CubeFacesMaterial {
 }
 impl Material2d for CubeFacesMaterial {
     fn fragment_shader() -> ShaderRef {
-        ShaderRef::Path("shaders/cube_faces_singlepass.wgsl".into())
+        ShaderRef::Path("shaders/oldschool.wgsl".into())
     }
 }
 
@@ -493,7 +493,7 @@ fn setup(
     });
 
     // Shader Hot Reload
-    let shader_handle: Handle<Shader> = asset_server.load("shaders/cube_faces_singlepass.wgsl");
+    let shader_handle: Handle<Shader> = asset_server.load("shaders/oldschool.wgsl");
     commands.insert_resource(StartupFade {
         shader: shader_handle,
         state: StartupFadePhase::Loading,
