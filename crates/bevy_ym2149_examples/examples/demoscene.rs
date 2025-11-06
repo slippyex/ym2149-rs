@@ -5,11 +5,11 @@
 
 use std::collections::HashMap;
 
-use bevy::asset::AssetPlugin;
-use bevy::asset::RenderAssetUsages;
-use bevy::log::debug;
-use bevy::math::primitives::Rectangle;
 use bevy::{
+    app::AppExit,
+    asset::{AssetPlugin, RenderAssetUsages},
+    log::debug,
+    math::primitives::Rectangle,
     prelude::*,
     render::render_resource::{AsBindGroup, Extent3d, ShaderType, TextureDimension, TextureFormat},
     shader::{Shader, ShaderRef},
@@ -17,23 +17,14 @@ use bevy::{
     ui::widget::{ImageNode, NodeImageMode},
 };
 use bevy_mesh::Mesh2d;
-use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin};
+#[cfg(feature = "visualization")]
+use bevy_ym2149::SpectrumBar;
+use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin, Ym2149Settings};
 use bevy_ym2149_examples::ASSET_BASE;
 
 // === Easing Functions (Demoscene Style) =====================================
-fn ease_out_quad(t: f32) -> f32 {
-    1.0 - (1.0 - t) * (1.0 - t)
-}
-
 fn ease_out_cubic(t: f32) -> f32 {
     1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t)
-}
-
-fn ease_out_back_soft(t: f32) -> f32 {
-    // Smooth ease-out-back with reduced overshoot for gentle bounce effect
-    let c1 = 0.8; // Gentle overshoot amplitude
-    let c3 = c1 + 1.0;
-    1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
 }
 
 fn ease_out_bounce(t: f32) -> f32 {
@@ -104,15 +95,13 @@ const BOUNCE_DURATION: f32 = 1.3; // BounceIn: dramatic bounce needs time for mu
 const STAGGERED_CHAR_DELAY: f32 = 0.05; // StaggeredSlide: 50ms delay between each character
 const STAGGERED_BASE_DURATION: f32 = 0.5; // StaggeredSlide: base duration after all chars revealed
 const SLIDE_DISTANCE_PX: f32 = 100.0; // StaggeredSlide: horizontal slide distance
-const GLOW_DURATION: f32 = 1.2; // GlowPulse: time for glow to fade
-const GLOW_SCALE_DELTA: f32 = 0.2; // GlowPulse: how much larger text starts (1.2 → 1.0)
-const GLOW_PULSE_FREQUENCY: f32 = 10.0; // GlowPulse: pulse frequency in Hz
-const GLOW_PULSE_AMPLITUDE: f32 = 0.1; // GlowPulse: pulse amplitude
-const BACKFLIP_DURATION: f32 = 1.0; // BackFlip: time for overshoot and settle
-const BACKFLIP_MAX_SCALE: f32 = 1.1; // BackFlip: maximum scale during overshoot
-const ZOOMIN_DURATION: f32 = 1.4; // ZoomIn: dramatic zoom with alpha fade
-const ZOOMIN_START_SCALE: f32 = 0.1; // ZoomIn: starting scale
-const ZOOMIN_SCALE_RANGE: f32 = 0.9; // ZoomIn: scale range (0.1 to 1.0)
+const CASCADE_IN_DURATION: f32 = 0.55; // CascadeZoom: per-character ease-in duration
+const CASCADE_OUT_DURATION: f32 = 0.45; // CascadeZoom: per-character ease-out duration
+const CASCADE_CHAR_DELAY: f32 = 0.05; // CascadeZoom: offset between successive characters
+const CASCADE_MIN_SCALE: f32 = 0.05; // CascadeZoom: starting scale factor per glyph
+const CASCADE_TARGET_SCALE: f32 = 1.0; // CascadeZoom: resting scale per glyph (before fade-out)
+const CASCADE_MAX_SCALE: f32 = 1.25; // CascadeZoom: maximum overshoot scale
+const CASCADE_OVERSHOOT: f32 = 0.22; // CascadeZoom: overshoot factor applied during bounce
 
 // === Material + Uniforms =====================================================
 
@@ -237,10 +226,7 @@ pub enum AnimationType {
     StaggeredSlide, // Characters slide in from left with staggered timing
     SimpleFade,     // Whole text fades in with alpha (easeOutCubic)
     ElasticReveal,  // Character-by-character reveal with elastic easing
-    GlowPulse,      // Pulsing glow effect with scale (easeOutElastic)
-    ScaleDown,      // Text scales down during fade-out (easeOutQuad)
-    BackFlip,       // Text flips in with overshoot (easeOutBack)
-    ZoomIn,         // Text zooms in from small to large (easeOutElastic)
+    CascadeZoom,    // Per-character staggered zoom in/out
 }
 impl Default for AnimationType {
     fn default() -> Self {
@@ -272,14 +258,14 @@ impl Default for OverlayScript {
                     cps: 35.0,
                     dwell: 1.2,
                     fade_out: 0.6,
-                    animation: AnimationType::Typewriter,
+                    animation: AnimationType::CascadeZoom,
                 },
                 PushOverlayText {
                     text: "VECTRONIX PRESENTS".into(),
                     cps: 38.0,
                     dwell: 1.2,
                     fade_out: 0.6,
-                    animation: AnimationType::SimpleFade,
+                    animation: AnimationType::CascadeZoom,
                 },
                 PushOverlayText {
                     text: "AN OLDSKOOL DEMOSCENE INTRO".into(),
@@ -349,7 +335,7 @@ impl Default for OverlayScript {
                     cps: 28.0,
                     dwell: 2.0,
                     fade_out: 1.0,
-                    animation: AnimationType::ElasticReveal,
+                    animation: AnimationType::CascadeZoom,
                 },
             ],
         }
@@ -368,15 +354,15 @@ struct TextWriterState {
     current: Option<PushOverlayText>,
     alpha: f32,
     animation_type: AnimationType,
-    scale: f32,          // For BounceIn, GlowPulse, BackFlip, ZoomIn, ScaleDown
-    x_offset: f32,       // For StaggeredSlide horizontal movement
-    y_offset: f32,       // For vertical animations
-    glow_intensity: f32, // For GlowPulse
-    swing_h: f32,        // Horizontal swing offset (calculated by apply_swing_animation)
-    swing_v: f32,        // Vertical swing offset (calculated by apply_swing_animation)
-    bg_swing_h: f32,     // Background horizontal swing offset
-    bg_swing_v: f32,     // Background vertical swing offset
+    scale: f32,               // For BounceIn
+    x_offset: f32,            // For StaggeredSlide horizontal movement
+    y_offset: f32,            // For vertical animations
+    swing_h: f32,             // Horizontal swing offset (calculated by apply_swing_animation)
+    swing_v: f32,             // Vertical swing offset (calculated by apply_swing_animation)
+    bg_swing_h: f32,          // Background horizontal swing offset
+    bg_swing_v: f32,          // Background vertical swing offset
     viewport_scale: f32, // Responsive scale based on window width (calculated by apply_swing_animation)
+    cascade_scales: Vec<f32>, // Per-character scale buffer for CascadeZoom
 }
 impl Default for TextWriterState {
     fn default() -> Self {
@@ -390,12 +376,12 @@ impl Default for TextWriterState {
             scale: 1.0,
             x_offset: 0.0,
             y_offset: 0.0,
-            glow_intensity: 0.0,
             swing_h: 0.0,
             swing_v: 0.0,
             bg_swing_h: 0.0,
             bg_swing_v: 0.0,
             viewport_scale: 1.0, // Default to 1.0x at design width (1280px)
+            cascade_scales: Vec::new(),
         }
     }
 }
@@ -455,6 +441,7 @@ fn main() {
                 spawn_surface_when_ready,
                 update_startup_fade,
                 toggle_crt,
+                exit_on_escape,
                 handle_push_events,
                 feed_overlay_script,
                 apply_swing_animation, // Calculate swing offsets (updates state)
@@ -475,6 +462,11 @@ fn setup(
     windows: Query<&Window>,
 ) {
     commands.spawn(Camera2d);
+
+    commands.insert_resource(Ym2149Settings {
+        loop_enabled: true,
+        ..Default::default()
+    });
 
     if PLAY_MUSIC {
         let ym_handle: Handle<Ym2149AudioSource> = asset_server.load(YM_TRACK_PATH);
@@ -508,6 +500,82 @@ fn setup(
         timer: 0.0,
         duration: STARTUP_FADE_DURATION,
     });
+
+    #[cfg(feature = "visualization")]
+    spawn_spectrum_bars(&mut commands);
+}
+
+#[cfg(feature = "visualization")]
+fn spawn_spectrum_bars(commands: &mut Commands) {
+    const CHANNEL_COUNT: usize = 3;
+    const BIN_COUNT: usize = 16;
+
+    let spawn_row = |commands: &mut Commands, is_top: bool| {
+        let mut container = Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Px(96.0),
+            justify_content: JustifyContent::Center,
+            align_items: if is_top {
+                AlignItems::FlexStart
+            } else {
+                AlignItems::FlexEnd
+            },
+            column_gap: Val::Px(36.0),
+            padding: UiRect::axes(Val::Px(18.0), Val::Px(12.0)),
+            ..default()
+        };
+        container.left = Val::Px(0.0);
+        container.right = Val::Px(0.0);
+        if is_top {
+            container.top = Val::Px(18.0);
+        } else {
+            container.bottom = Val::Px(18.0);
+        }
+
+        commands
+            .spawn((
+                container,
+                BackgroundColor(Color::srgba(0.02, 0.03, 0.07, 0.35)),
+            ))
+            .with_children(|row| {
+                for channel in 0..CHANNEL_COUNT {
+                    row.spawn((
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            column_gap: Val::Px(4.0),
+                            align_items: if is_top {
+                                AlignItems::FlexStart
+                            } else {
+                                AlignItems::FlexEnd
+                            },
+                            justify_content: JustifyContent::Center,
+                            width: Val::Px(240.0),
+                            height: Val::Percent(100.0),
+                            padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.06, 0.07, 0.12, 0.35)),
+                    ))
+                    .with_children(|bars| {
+                        for bin in 0..BIN_COUNT {
+                            bars.spawn((
+                                Node {
+                                    width: Val::Px(12.0),
+                                    height: Val::Px(6.0),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgba(0.08, 0.11, 0.18, 0.85)),
+                                SpectrumBar { channel, bin },
+                            ));
+                        }
+                    });
+                }
+            });
+    };
+
+    spawn_row(commands, true);
+    spawn_row(commands, false);
 }
 
 // === Text Overlay ===========================================================
@@ -654,6 +722,12 @@ fn spawn_surface_when_ready(
 fn toggle_crt(keys: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
     if keys.just_pressed(KeyCode::KeyC) {
         crt.enabled = !crt.enabled;
+    }
+}
+
+fn exit_on_escape(keys: Res<ButtonInput<KeyCode>>, mut exit: MessageWriter<AppExit>) {
+    if keys.just_pressed(KeyCode::Escape) {
+        exit.write(AppExit::default());
     }
 }
 
@@ -815,42 +889,39 @@ fn typewriter_update(
                         state.visible_chars = state.visible_chars.min(total);
                         state.alpha = 1.0;
                     }
-                    AnimationType::GlowPulse => {
-                        // Text pulses in with a glow-like effect
+                    AnimationType::CascadeZoom => {
+                        // Characters scale in sequentially from tiny to oversized
+                        if state.cascade_scales.len() != total {
+                            state.cascade_scales.resize(total, CASCADE_MIN_SCALE);
+                        }
                         state.visible_chars = total;
-                        let t = (state.timer / GLOW_DURATION).clamp(0.0, 1.0);
-
-                        // Create pulsing alpha effect
-                        let pulse = (state.timer * GLOW_PULSE_FREQUENCY).sin()
-                            * GLOW_PULSE_AMPLITUDE
-                            + (1.0 - GLOW_PULSE_AMPLITUDE);
-                        state.alpha = ease_out_cubic(t) * pulse;
-
-                        // Scale pulses slightly for glow effect
-                        state.scale = 1.0 + (1.0 - t) * GLOW_SCALE_DELTA; // Start at 1.2, shrink to 1.0
-                        state.glow_intensity = (1.0 - t) * 2.0;
-                    }
-                    AnimationType::ScaleDown => {
-                        // Text appears normally during typing
-                        state.visible_chars = total;
-                        state.scale = 1.0;
+                        let timer = state.timer;
+                        let cascade_total = ((total.saturating_sub(1) as f32) * CASCADE_CHAR_DELAY
+                            + CASCADE_IN_DURATION)
+                            .max(0.0001);
+                        let global_t = (timer / cascade_total).clamp(0.0, 1.0);
+                        let global_bounce = ease_out_bounce(global_t);
+                        let global_overshoot = CASCADE_OVERSHOOT * (1.0 - global_t) * global_bounce;
+                        state.scale = (CASCADE_MIN_SCALE
+                            + global_bounce * (CASCADE_TARGET_SCALE - CASCADE_MIN_SCALE)
+                            + global_overshoot)
+                            .clamp(CASCADE_MIN_SCALE, CASCADE_MAX_SCALE);
                         state.alpha = 1.0;
-                    }
-                    AnimationType::BackFlip => {
-                        // Text flips in with overshoot
-                        state.visible_chars = total;
-                        let t = (state.timer / BACKFLIP_DURATION).clamp(0.0, 1.0);
-                        let ease_t = ease_out_back_soft(t);
-                        state.scale = ease_t * BACKFLIP_MAX_SCALE; // 0 to 1.1 with overshoot
-                        state.alpha = 1.0;
-                    }
-                    AnimationType::ZoomIn => {
-                        // Text zooms in from small to large
-                        state.visible_chars = total;
-                        let t = (state.timer / ZOOMIN_DURATION).clamp(0.0, 1.0);
-                        let ease_t = ease_out_elastic(t);
-                        state.scale = ZOOMIN_START_SCALE + ease_t * ZOOMIN_SCALE_RANGE; // Scales from 0.1 to 1.0
-                        state.alpha = t;
+                        for (i, scale) in state.cascade_scales.iter_mut().enumerate() {
+                            let start_time = i as f32 * CASCADE_CHAR_DELAY;
+                            let local_t =
+                                ((timer - start_time) / CASCADE_IN_DURATION).clamp(0.0, 1.0);
+                            if local_t <= 0.0 {
+                                *scale = CASCADE_MIN_SCALE;
+                                continue;
+                            }
+                            let bounce = ease_out_bounce(local_t);
+                            let overshoot = CASCADE_OVERSHOOT * (1.0 - local_t) * bounce;
+                            let raw_scale = CASCADE_MIN_SCALE
+                                + bounce * (CASCADE_TARGET_SCALE - CASCADE_MIN_SCALE)
+                                + overshoot;
+                            *scale = raw_scale.clamp(CASCADE_MIN_SCALE, CASCADE_MAX_SCALE);
+                        }
                     }
                 }
 
@@ -864,10 +935,10 @@ fn typewriter_update(
                         }
                         AnimationType::SimpleFade => SIMPLE_FADE_DURATION,
                         AnimationType::ElasticReveal => total as f32 * ELASTIC_REVEAL_TIME_PER_CHAR,
-                        AnimationType::GlowPulse => GLOW_DURATION,
-                        AnimationType::ScaleDown => typing_duration,
-                        AnimationType::BackFlip => BACKFLIP_DURATION,
-                        AnimationType::ZoomIn => ZOOMIN_DURATION,
+                        AnimationType::CascadeZoom => {
+                            (total.saturating_sub(1) as f32) * CASCADE_CHAR_DELAY
+                                + CASCADE_IN_DURATION
+                        }
                     }
                 {
                     state.visible_chars = total;
@@ -876,7 +947,11 @@ fn typewriter_update(
                     state.scale = 1.0;
                     state.x_offset = 0.0;
                     state.y_offset = 0.0;
-                    state.glow_intensity = 0.0;
+                    if state.animation_type == AnimationType::CascadeZoom {
+                        for scale in state.cascade_scales.iter_mut() {
+                            *scale = CASCADE_TARGET_SCALE;
+                        }
+                    }
                 }
             }
             Phase::Dwell => {
@@ -889,15 +964,42 @@ fn typewriter_update(
             }
             Phase::FadeOut => {
                 state.timer += dt;
-                let t = (state.timer / current.fade_out).clamp(0.0, 1.0);
+                let total_chars = current.text.chars().count();
+                if state.animation_type == AnimationType::CascadeZoom
+                    && state.cascade_scales.len() != total_chars
+                {
+                    state
+                        .cascade_scales
+                        .resize(total_chars, CASCADE_TARGET_SCALE);
+                }
+                let fade_total = match state.animation_type {
+                    AnimationType::CascadeZoom => {
+                        let cascade_total = (state.cascade_scales.len().saturating_sub(1) as f32)
+                            * CASCADE_CHAR_DELAY
+                            + CASCADE_OUT_DURATION;
+                        current.fade_out.max(cascade_total)
+                    }
+                    _ => current.fade_out,
+                }
+                .max(0.0001);
+                let t = (state.timer / fade_total).clamp(0.0, 1.0);
 
                 // Apply fade-out animation based on type
                 match state.animation_type {
-                    AnimationType::ScaleDown => {
-                        // Scale down while fading out
-                        let ease_t = ease_out_quad(t);
-                        state.scale = 1.0 - ease_t * 0.7; // Scale from 1.0 to 0.3
-                        state.alpha = 1.0 - ease_t; // Fade from 1.0 to 0.0
+                    AnimationType::CascadeZoom => {
+                        let timer = state.timer;
+                        for (i, scale) in state.cascade_scales.iter_mut().enumerate() {
+                            let start_time = i as f32 * CASCADE_CHAR_DELAY;
+                            let local_t =
+                                ((timer - start_time) / CASCADE_OUT_DURATION).clamp(0.0, 1.0);
+                            if local_t <= 0.0 {
+                                continue;
+                            }
+                            let eased = ease_out_cubic(local_t);
+                            let raw = CASCADE_TARGET_SCALE * (1.0 - eased);
+                            *scale = raw.clamp(0.0, CASCADE_TARGET_SCALE);
+                        }
+                        state.alpha = 1.0 - t;
                     }
                     _ => {
                         // Default: just fade alpha
@@ -922,15 +1024,33 @@ fn typewriter_update(
                     state.phase = Phase::Idle;
                     state.current = None;
                     state.alpha = 0.0;
+                    state.cascade_scales.clear();
                     return;
                 }
             }
             Phase::Idle => {}
         }
 
-        let visible: String = current.text.chars().take(state.visible_chars).collect();
+        let use_cascade = state.animation_type == AnimationType::CascadeZoom;
+        let visible: String = if use_cascade {
+            current.text.clone()
+        } else {
+            current.text.chars().take(state.visible_chars).collect()
+        };
         if let Ok((mut image, mut layout)) = main_query.single_mut() {
-            let size = rebuild_bitmap_text(&visible, &font, &image.image, &mut images);
+            let size = if use_cascade {
+                rebuild_bitmap_text_cascade(
+                    &visible,
+                    &font,
+                    &image.image,
+                    &mut images,
+                    &state.cascade_scales,
+                    CASCADE_TARGET_SCALE,
+                    CASCADE_MAX_SCALE,
+                )
+            } else {
+                rebuild_bitmap_text(&visible, &font, &image.image, &mut images)
+            };
             let zoom = if matches!(state.phase, Phase::FadeOut) {
                 state.alpha.clamp(0.0, 1.0)
             } else {
@@ -939,11 +1059,7 @@ fn typewriter_update(
 
             // Apply scale for animation types that use it
             let scale_factor = match state.animation_type {
-                AnimationType::BounceIn
-                | AnimationType::GlowPulse
-                | AnimationType::ScaleDown
-                | AnimationType::BackFlip
-                | AnimationType::ZoomIn => state.scale,
+                AnimationType::BounceIn | AnimationType::CascadeZoom => state.scale,
                 _ => 1.0,
             };
 
@@ -985,21 +1101,11 @@ fn typewriter_update(
             let brightness = 0.9 + 0.1 * pulse_strength;
             let cool_shift = 0.02 * (breath - 0.9);
 
-            // Apply glow for GlowPulse animation
-            let (r, g, b) = if state.animation_type == AnimationType::GlowPulse {
-                let glow = state.glow_intensity;
-                (
-                    (brightness + cool_shift + glow * 2.0).clamp(0.0, 1.0),
-                    (brightness + cool_shift * 0.5 + glow).clamp(0.0, 1.0),
-                    (brightness + glow * 0.5).clamp(0.0, 1.0),
-                )
-            } else {
-                (
-                    (brightness + cool_shift).clamp(0.0, 1.0),
-                    (brightness + cool_shift * 0.5).clamp(0.0, 1.0),
-                    1.0,
-                )
-            };
+            let (r, g, b) = (
+                (brightness + cool_shift).clamp(0.0, 1.0),
+                (brightness + cool_shift * 0.5).clamp(0.0, 1.0),
+                1.0,
+            );
 
             image.color = Color::srgba(r, g, b, state.alpha);
         }
@@ -1014,6 +1120,7 @@ fn start_next_message(state: &mut TextWriterState, queue: &mut TextQueue) {
         state.visible_chars = 0;
         state.phase = Phase::Typing;
         state.alpha = 1.0;
+        state.cascade_scales.clear();
 
         // Initialize animation-specific values
         match state.animation_type {
@@ -1032,22 +1139,16 @@ fn start_next_message(state: &mut TextWriterState, queue: &mut TextQueue) {
             AnimationType::ElasticReveal => {
                 state.alpha = 1.0;
             }
-            AnimationType::GlowPulse => {
-                state.scale = 1.0 + GLOW_SCALE_DELTA; // Start slightly larger
-                state.glow_intensity = 2.0;
-                state.alpha = 0.0;
-            }
-            AnimationType::ScaleDown => {
-                state.scale = 1.0; // Normal size during typing
-                state.alpha = 1.0; // Fully visible
-            }
-            AnimationType::BackFlip => {
-                state.scale = 0.0;
+            AnimationType::CascadeZoom => {
+                let total = state
+                    .current
+                    .as_ref()
+                    .map(|m| m.text.chars().count())
+                    .unwrap_or(0);
+                state.cascade_scales.resize(total, CASCADE_MIN_SCALE);
                 state.alpha = 1.0;
-            }
-            AnimationType::ZoomIn => {
-                state.scale = ZOOMIN_START_SCALE; // Start small
-                state.alpha = 0.0; // Start transparent
+                state.scale = CASCADE_MIN_SCALE;
+                state.visible_chars = total;
             }
             _ => {}
         }
@@ -1115,34 +1216,44 @@ fn rebuild_bitmap_text(
             }
         }
     }
-    let Some(font_image) = images.get(&font.image) else {
-        return UVec2::ZERO;
-    };
-    let Some(font_pixels) = font_image.data.clone() else {
-        return UVec2::ZERO;
-    };
-    if font_pixels.is_empty() {
+    if text.is_empty() {
+        if let Some(image) = images.get_mut(handle) {
+            image.resize(Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            });
+            image.data = Some(vec![0, 0, 0, 0]);
+        }
+        return UVec2::new(1, 1);
+    }
+
+    let glyphs: Vec<char> = text.chars().collect();
+    if glyphs.is_empty() {
         return UVec2::ZERO;
     }
 
-    let texture_width = font_image.texture_descriptor.size.width;
-    let texture_height = font_image.texture_descriptor.size.height;
+    let (texture_width, texture_height, font_pixels) = {
+        let Some(font_image) = images.get(&font.image) else {
+            return UVec2::ZERO;
+        };
+        let Some(font_pixels) = font_image.data.clone() else {
+            return UVec2::ZERO;
+        };
+        if font_pixels.is_empty() {
+            return UVec2::ZERO;
+        }
+        (
+            font_image.texture_descriptor.size.width,
+            font_image.texture_descriptor.size.height,
+            font_pixels,
+        )
+    };
 
     let Some(image) = images.get_mut(handle) else {
         return UVec2::ZERO;
     };
 
-    if text.is_empty() {
-        image.resize(Extent3d {
-            width: 1,
-            height: 1,
-            depth_or_array_layers: 1,
-        });
-        image.data = Some(vec![0, 0, 0, 0]);
-        return UVec2::new(1, 1);
-    }
-
-    let glyphs: Vec<char> = text.chars().collect();
     let cell_w = font.cell_size.x;
     let cell_h = font.cell_size.y;
     let spacing = font.letter_spacing;
@@ -1224,4 +1335,172 @@ fn rebuild_bitmap_text(
         debug!(target: "overlay", "sample_pixels={:?}", sample);
     }
     UVec2::new(width, height)
+}
+
+fn rebuild_bitmap_text_cascade(
+    text: &str,
+    font: &BitmapFont,
+    handle: &Handle<Image>,
+    images: &mut Assets<Image>,
+    scales: &[f32],
+    rest_scale: f32,
+    max_scale: f32,
+) -> UVec2 {
+    if let Some(font_image) = images.get_mut(&font.image) {
+        if font_image.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb {
+            if let Some(converted) = font_image.convert(TextureFormat::Rgba8UnormSrgb) {
+                *font_image = converted;
+            }
+        }
+    }
+    if text.is_empty() {
+        if let Some(image) = images.get_mut(handle) {
+            image.resize(Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            });
+            image.data = Some(vec![0, 0, 0, 0]);
+        }
+        return UVec2::new(1, 1);
+    }
+
+    let glyphs: Vec<char> = text.chars().collect();
+    if glyphs.is_empty() {
+        return UVec2::ZERO;
+    }
+
+    let (texture_width, texture_height, font_pixels) = {
+        let Some(font_image) = images.get(&font.image) else {
+            return UVec2::ZERO;
+        };
+        let Some(font_pixels) = font_image.data.clone() else {
+            return UVec2::ZERO;
+        };
+        if font_pixels.is_empty() {
+            return UVec2::ZERO;
+        }
+        (
+            font_image.texture_descriptor.size.width,
+            font_image.texture_descriptor.size.height,
+            font_pixels,
+        )
+    };
+
+    let Some(image) = images.get_mut(handle) else {
+        return UVec2::ZERO;
+    };
+    let cell_w = font.cell_size.x;
+    let cell_h = font.cell_size.y;
+    let spacing = font.letter_spacing;
+    let rest_scale = rest_scale.max(CASCADE_MIN_SCALE);
+    let max_scale = max_scale.max(rest_scale);
+    let rest_char_w = (cell_w as f32 * rest_scale).ceil().max(1.0) as u32;
+    let rest_char_h = (cell_h as f32 * rest_scale).ceil().max(1.0) as u32;
+    let max_char_w = (cell_w as f32 * max_scale).ceil().max(rest_char_w as f32) as u32;
+    let max_char_h = (cell_h as f32 * max_scale).ceil().max(rest_char_h as f32) as u32;
+    let glyph_count = glyphs.len() as u32;
+
+    let width = glyph_count * (max_char_w + spacing) - spacing;
+    let height = max_char_h.max(1);
+    let mut output = vec![0u8; (width * height * 4) as usize];
+    let row_span = texture_width as usize;
+    let tiles_x = texture_width / cell_w;
+    let tiles_y = texture_height / cell_h;
+    let pixel_stride =
+        (font_pixels.len() / (texture_width as usize * texture_height as usize)).max(1);
+
+    for (index, ch) in glyphs.iter().enumerate() {
+        let mut coord = font.coord_for(*ch);
+        if coord.x >= tiles_x || coord.y >= tiles_y {
+            coord = font.default_coord;
+        }
+        let scale = scales
+            .get(index)
+            .copied()
+            .unwrap_or(CASCADE_MIN_SCALE)
+            .clamp(0.0, max_scale);
+        if scale <= 0.01 {
+            continue;
+        }
+        let char_w = (cell_w as f32 * scale).ceil().max(1.0) as u32;
+        let char_h = (cell_h as f32 * scale).ceil().max(1.0) as u32;
+        if char_w == 0 || char_h == 0 {
+            continue;
+        }
+
+        let dest_x_base = index as u32 * (max_char_w + spacing);
+        let dest_x_offset =
+            ((max_char_w as i32 - char_w as i32) / 2).clamp(0, max_char_w as i32) as u32;
+        let dest_y_offset =
+            ((max_char_h as i32 - char_h as i32) / 2).clamp(0, max_char_h as i32) as u32;
+        let dest_x = dest_x_base + dest_x_offset;
+        let dest_y = dest_y_offset;
+
+        let src_x = (coord.x * cell_w) as usize;
+        let src_y = (coord.y * cell_h) as usize;
+
+        for dy in 0..char_h {
+            if dest_y + dy >= height {
+                break;
+            }
+            let sample_y = ((dy as f32 / scale).floor() as usize).min(cell_h as usize - 1);
+            let src_row = (src_y + sample_y).min(texture_height as usize - 1);
+
+            for dx in 0..char_w {
+                if dest_x + dx >= width {
+                    break;
+                }
+                let sample_x = ((dx as f32 / scale).floor() as usize).min(cell_w as usize - 1);
+                let src_col = (src_x + sample_x).min(texture_width as usize - 1);
+                let src_index = (src_row * row_span + src_col) * pixel_stride;
+                let dst_index = (((dest_y + dy) * width + (dest_x + dx)) * 4) as usize;
+
+                let (r, g, b, _a) = match pixel_stride {
+                    4 => (
+                        font_pixels[src_index],
+                        font_pixels[src_index + 1],
+                        font_pixels[src_index + 2],
+                        font_pixels[src_index + 3],
+                    ),
+                    3 => {
+                        let r = font_pixels[src_index];
+                        let g = font_pixels[src_index + 1];
+                        let b = font_pixels[src_index + 2];
+                        let alpha = r.max(g).max(b);
+                        (r, g, b, alpha)
+                    }
+                    2 => {
+                        let l = font_pixels[src_index];
+                        let a = font_pixels[src_index + 1];
+                        (l, l, l, a)
+                    }
+                    _ => {
+                        let l = font_pixels[src_index];
+                        (l, l, l, l)
+                    }
+                };
+                let luminance = (r as u32 + g as u32 + b as u32) / 3;
+                let alpha = if luminance < 64 { 0 } else { 255 };
+
+                output[dst_index] = r;
+                output[dst_index + 1] = g;
+                output[dst_index + 2] = b;
+                output[dst_index + 3] = alpha;
+            }
+        }
+    }
+
+    if image.texture_descriptor.size.width != width
+        || image.texture_descriptor.size.height != height
+    {
+        image.resize(Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        });
+    }
+    image.data = Some(output);
+    let rest_width = glyph_count * (rest_char_w + spacing) - spacing;
+    UVec2::new(rest_width.max(1), rest_char_h.max(1))
 }

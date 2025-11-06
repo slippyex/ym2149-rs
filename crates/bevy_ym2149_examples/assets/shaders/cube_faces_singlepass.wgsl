@@ -13,9 +13,9 @@ struct Params {
 var<uniform> U : Params;
 
 // ===== Sequencing =====
-const SCENE_COUNT         : u32 = 13u;  // 12 Einzelszenen + 1 JellyCube
-const SCENE_DURATION      : f32 = 6.0;  // Sekunden pro Szene
-const TRANSITION_DURATION : f32 = 1.0;  // Crossfade-Dauer
+const SCENE_COUNT         : u32 = 17u;  // 16 Einzelszenen + 1 JellyCube
+const SCENE_DURATION      : f32 = 8.0;  // Sekunden pro Szene
+const TRANSITION_DURATION : f32 = 2.0;  // Crossfade-Dauer
 
 // ===== Consts =====
 const PI : f32 = 3.14159265359;
@@ -82,6 +82,62 @@ fn aspect_uv(uv0: vec2<f32>) -> vec2<f32> {
 // Check if UV is within border and return appropriate color
 fn check_border(uv: vec2<f32>) -> bool {
     return uv.x >= BORDER && uv.y >= BORDER && uv.x <= 1.0 - BORDER && uv.y <= 1.0 - BORDER;
+}
+
+fn circle(pos: vec2<f32>, pixel: vec2<f32>, radius: f32) -> f32 {
+    return smoothstep(radius, radius * 0.3, distance(pos, pixel));
+}
+
+// ===== HSV + komplexe Mathematik =====
+fn hsv2rgb(c: vec3<f32>) -> vec3<f32> {
+    let K = vec4<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    let p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    let q = clamp(p - K.xxx, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0));
+    return c.z * mix(K.xxx, q, vec3<f32>(c.y, c.y, c.y));
+}
+
+fn c_mul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+fn c_div(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
+    let denom = max(dot(b, b), 1e-6);
+    return vec2<f32>((a.x * b.x + a.y * b.y) / denom, (a.y * b.x - a.x * b.y) / denom);
+}
+
+fn c_exp(z: vec2<f32>) -> vec2<f32> {
+    let e = exp(z.x);
+    return vec2<f32>(cos(z.y), sin(z.y)) * e;
+}
+
+fn c_ln(z: vec2<f32>) -> vec2<f32> {
+    let mag = max(length(z), 1e-6);
+    return vec2<f32>(log(mag), atan2(z.y, z.x));
+}
+
+fn c_pow(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
+    return c_exp(c_mul(b, c_ln(a)));
+}
+
+fn c_sin(z: vec2<f32>) -> vec2<f32> {
+    return c_div(c_exp(z) - c_exp(-z), vec2<f32>(0.0, 2.0));
+}
+
+fn complex_iter(z_in: vec2<f32>, t: f32) -> vec2<f32> {
+    var z = z_in;
+    let cuv = vec2<f32>(cos(-t / 50.0), sin(-t / 50.0)) * 0.88;
+    let max_mag = 1.0e9;
+    let escape_mag = 1.2676506e30; // 2^100
+
+    for (var i: i32 = 0; i < 100; i = i + 1) {
+        let len_z = length(z);
+        if (len_z < max_mag) {
+            z = c_sin(c_mul(z, cuv));
+        } else if (len_z > escape_mag) {
+            break;
+        }
+    }
+    return z;
 }
 
 // ===== Glenz-Bars (leicht verändert) =====
@@ -184,54 +240,7 @@ fn Glenz(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(Color, 1.0);
 }
 
-// ===== Ring (leicht verändert) =====
-const IN_RADIUS : f32 = 0.25;
-const OUT_RADIUS : f32 = 0.70;
-const NUM_FACES : i32 = 4;
-const XSCROLL_SPEED : f32 = -0.9;
-var<private> g_aaSize : f32 = 0.0;
-
-fn slice_fn(x0: f32, x1: f32, uv: vec2<f32>) -> vec4<f32> {
-    let u = (uv.x - x0) / (x1 - x0);
-    let w = (x1 - x0);
-    var col = mix(vec3<f32>(0.50, 0.90, 0.95), vec3<f32>(0.95, 0.60, 0.10), u);
-    let denom = sqrt(2.0 * IN_RADIUS * IN_RADIUS * (1.0 - cos(PI * 2.0 / f32(NUM_FACES))));
-    col = col * (w / denom);
-    col = col * (smoothstep(0.05, 0.10, u) * smoothstep(0.95, 0.90, u) + 0.5);
-
-    var uv2 = uv; uv2.y = uv2.y + U.time * XSCROLL_SPEED;
-    // dezenter Wellenfaktor + leichte Glitzer-Spikes
-    let wave = (-1.0 + 2.0 * smoothstep(-0.03, 0.03, sin(u * PI * 4.0) * cos(uv2.y * 16.0))) * (1.0/16.0) + 0.7;
-    let sparkle = 1.0 + 0.06 * smoothstep(0.98, 1.0, sin(uv2.y * 8.0 + U.time * 3.0));
-    col = col * wave * sparkle;
-
-    let clip = (1.0 - smoothstep(0.5 - g_aaSize / w, 0.5 + g_aaSize / w, abs(u - 0.5))) * select(0.0, 1.0, x0 <= x1);
-    return vec4<f32>(col, clip);
-}
-fn Ring(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    g_aaSize = 2.0 / U.height;
-    var p = uv_in * 2.0 - 1.0;
-    var uvr = vec2<f32>(length(p), atan2(p.y, p.x) + PI);
-    uvr.x = uvr.x - OUT_RADIUS;
-    var col = vec3<f32>(0.05, 0.05, 0.05);
-    let angle = uvr.y + 2.0 * U.time + sin(uvr.y) * sin(U.time) * PI;
-
-    for (var i: i32 = 0; i < NUM_FACES; i = i + 1) {
-        // mini-Pulse pro Face
-        let pulse = 0.02 * sin(U.time * 1.6 + f32(i));
-        let x0 = (IN_RADIUS + pulse) * sin(angle + 2.0 * PI * (f32(i) / f32(NUM_FACES)));
-        let x1 = (IN_RADIUS + pulse) * sin(angle + 2.0 * PI * (f32(i + 1) / f32(NUM_FACES)));
-        let face = slice_fn(x0, x1, uvr);
-        col = mix(col, face.rgb, face.a);
-    }
-    // leichte radiale Abdunklung
-    let rad = smoothstep(0.0, 0.9, uvr.x + OUT_RADIUS);
-    col = col * (0.9 + 0.1 * rad);
-    return vec4<f32>(col, 1.0);
-}
-
-// ===== Plasma / Twirl (leicht verändert) =====
+// ===== Plasma =====
 fn Plasma(uv_in: vec2<f32>) -> vec4<f32> {
     if (!check_border(uv_in)) { return BORDERCOLOR; }
     let time = U.time * 4.0;
@@ -256,102 +265,6 @@ fn Plasma(uv_in: vec2<f32>) -> vec4<f32> {
     let b = sin(uv.y + time * 0.95) * 0.5 + 0.5;
     return vec4<f32>(r, g, b, 1.0);
 }
-fn tw(uv: vec2<f32>) -> vec4<f32> {
-    let j = sin(uv.y * PI + U.time * 5.0);
-    let i = sin(uv.x * 15.0 - uv.y * 2.0 * PI + U.time * 3.0);
-    let n = -clamp(i, -0.2, 0.0);
-    // dezente Chroma-Variation
-    let chroma = vec3<f32>(0.22, 0.5, 1.0) + 0.05 * vec3<f32>(sin(U.time*0.7), sin(U.time*0.9+1.0), sin(U.time*1.1+2.0));
-    return 3.5 * vec4<f32>(chroma, 1.0) * n;
-}
-fn Twirl(p_in: vec2<f32>) -> vec4<f32> {
-    if (p_in.x < BORDER || p_in.y < BORDER || p_in.x > 1.0 - BORDER || p_in.y > 1.0 - BORDER) { return BORDERCOLOR; }
-    var p = -1.0 + p_in * 2.0;
-    // sanfter Radius-Puls
-    let rp = 1.0 + 0.03 * sin(U.time * 1.2);
-    p = p * rp;
-    let r = sqrt(dot(p, p));
-    let a = atan2(
-        p.y * (0.3 + 0.1 * cos(U.time * 2.0 + p.y)),
-        p.x * (0.3 + 0.1 * sin(U.time + p.x))
-    ) + U.time;
-    let uv = vec2<f32>(U.time + 1.0 / (r + 0.01), 4.0 * a / PI);
-    return mix(vec4<f32>(0.0,0.0,0.0,0.0), tw(uv) * r * r * 2.0, 1.0);
-}
-
-// ===== Room (leicht verändert) =====
-fn sdBoxXY(p: vec3<f32>, b: vec3<f32>) -> f32 {
-  let d = abs(p.xy) - b.xy;
-  return min(max(d.x,d.y),0.0) + length(max(d,vec2<f32>(0.0,0.0)));
-}
-fn udRoundBox(p: vec3<f32>, b: vec3<f32>, r: f32) -> f32 {
-  return length(max(abs(p)-b,vec3<f32>(0.0,0.0,0.0)))-r;
-}
-fn map_room(p_in: vec3<f32>) -> f32 {
-    var p = p_in;
-    var k = 1.0 * 0.5 * 2.0;
-    var q = (fract3((p - vec3<f32>(0.25, 0.0, 0.25))/ k) - vec3<f32>(0.5,0.5,0.5)) * k;
-    var s = vec3<f32>(q.x, p.y, q.z);
-    var d = udRoundBox(s, vec3<f32>(0.1, 1.0, 0.1), 0.05);
-    k = 0.5;
-    q = (fract3(p / k) - vec3<f32>(0.5,0.5,0.5)) * k;
-    s = vec3<f32>(q.x, abs(p.y) - 1.5, q.z);
-    let g = udRoundBox(s, vec3<f32>(0.17, 0.5, 0.17), 0.2);
-    let sq = sqrt(0.5);
-    var u = p;
-    let r2 = mat2x2<f32>(vec2<f32>(sq, sq), vec2<f32>(-sq, sq));
-    let xz = r2 * u.xz;
-    u = vec3<f32>(xz.x, u.y, xz.y);
-    d = max(d, -sdBoxXY(u, vec3<f32>(0.8, 1.0, 0.8)));
-    return smin(d, g, 16.0);
-}
-fn normal_room(p: vec3<f32>) -> vec3<f32> {
-	let o = vec3<f32>(0.001, 0.0, 0.0);
-    return normalize(vec3<f32>(
-        map_room(p+o.xyy) - map_room(p-o.xyy),
-        map_room(p+o.yxy) - map_room(p-o.yxy),
-        map_room(p+o.yyx) - map_room(p-o.yyx)
-    ));
-}
-fn trace_room(o: vec3<f32>, r: vec3<f32>) -> f32 {
-    var t = 0.0;
-    for (var i: i32 = 0; i < 32; i = i + 1) {
-        t = t + map_room(o + r * t);
-    }
-    return t;
-}
-fn Room(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    var uv = uv_in * 2.0 - 1.0;
-    uv.x = uv.x * (U.width / U.height);
-    let gt = U.time / 5.0;
-    // leichte Kamera-Roll
-    var r = normalize(vec3<f32>(uv, 1.7 - dot(uv, uv) * 0.1));
-    let rx = rot2(sin(gt * PI * 2.0) * PI / 8.0 + 0.05 * sin(U.time*0.7));
-    let xyr = rx * r.xy; r = vec3<f32>(xyr.x, xyr.y, r.z);
-    var xzr = rot2(gt * PI * 2.0) * r.xz; r = vec3<f32>(xzr.x, r.y, xzr.y);
-    xzr = rot2(PI * -0.25) * r.xz; r = vec3<f32>(xzr.x, r.y, xzr.y);
-    var o = vec3<f32>(0.0, 0.0, gt * 5.0 * sqrt(2.0) * 2.0);
-    var oxz = rot2(PI * -0.25) * o.xz; o = vec3<f32>(oxz.x, o.y, oxz.y);
-
-    let t = trace_room(o, r);
-    let w = o + r * t;
-    let sn = normal_room(w);
-    let fd = map_room(w);
-    // etwas anderer Base-Ton
-    let col = vec3<f32>(0.50, 0.84, 0.95) * 0.52;
-    // anderes Licht
-    let ldir = normalize(vec3<f32>(-0.8, -0.4, 1.2));
-    let fog = 1.0 / (1.0 + t * t * 0.09 + fd * 120.0);
-    let refv = max(dot(r, reflect(-ldir, sn)), 0.0);
-    let grn = pow(abs(sn.y), 3.0);
-    var cl = vec3<f32>(grn, grn, grn);
-    cl = cl + mix(col * vec3<f32>(1.5,1.5,1.5), vec3<f32>(0.23,0.23,0.23), grn) * pow(refv, 16.0);
-    cl = mix(col, cl, fog);
-    return vec4<f32>(cl, 1.0);
-}
-
-// ===== Szene / Raymarch des großen Würfels =====
 fn SceneBound(p: vec3<f32>) -> f32 {
     return max(max(abs(p.x), abs(p.y)), abs(p.z)) - 5.0;
 }
@@ -436,8 +349,8 @@ fn FractalFlame(uv_in: vec2<f32>) -> vec4<f32> {
     var color = accum / max(weight, 0.0001);
     color = mix(vec3<f32>(0.2, 0.05, 0.02), color, 0.7);
     color = color * (1.15 - clamp(ripple * 0.8, 0.0, 0.9));
-    let vignette = smoothstep(1.6, 0.3, length(uv));
-    color = color * vignette;
+    let vig = 0.65 + 0.35 * smoothstep(1.75, 0.6, length(uv));
+    color = color * vig;
     return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 
@@ -573,8 +486,8 @@ fn FractalClouds(uv_in: vec2<f32>) -> vec4<f32> {
     cloud_color = cloud_color * (1.0 + animation);
 
     let combined = mix(sky, cloud_color, clamp(coverage, 0.0, 1.0));
-    let vignette = smoothstep(1.3, 0.35, length(uv));
-    return vec4<f32>(clamp(combined * vignette, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    let vig = 0.7 + 0.3 * smoothstep(1.45, 0.55, length(uv));
+    return vec4<f32>(clamp(combined * vig, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 
 // ===== SDF Scene with Soft Shadows =====
@@ -607,47 +520,9 @@ fn RotozoomerPro(uv_in: vec2<f32>) -> vec4<f32> {
     var col = 0.5 + 0.5 * cos(vec3<f32>(0.0, 2.0, 4.0) + vec3<f32>(pattern * 2.2, pattern * 1.8, pattern * 1.6));
     col = col + 0.15 * sin(vec3<f32>(tex.xyx * 2.0 + t * 1.1));
     col = col * (0.85 + 0.15 * sin((uv_in.y * res.y) * 0.75 + t * 2.0));
-    col = col * smoothstep(1.4, 0.2, length(uv));
+    let vig = 0.65 + 0.35 * smoothstep(1.6, 0.5, length(uv));
+    col = col * vig;
     return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.2)), 1.0);
-}
-
-// ===== Log Polar Spiral Zoom =====
-// ===== Julia Tunnel =====
-fn julia_iter(z0: vec2<f32>, c: vec2<f32>, max_it: i32) -> f32 {
-    var z = z0;
-    var i: i32 = 0;
-    loop {
-        if (!(i < max_it && dot(z, z) < 256.0)) { break; }
-        z = vec2<f32>(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-        i = i + 1;
-    }
-    if (i >= max_it) {
-        return f32(max_it);
-    }
-    let zn = length(z);
-    let nu = log2(log(zn));
-    return f32(i) - nu + 4.0;
-}
-
-fn JuliaTunnel(uv_in: vec2<f32>) -> vec4<f32> {
-    if (!check_border(uv_in)) { return BORDERCOLOR; }
-    let t = U.time;
-    let uv = aspect_uv(uv_in);
-    let r = max(1e-5, length(uv));
-    let angle = atan2(uv.y, uv.x);
-    var u = log(r) * 0.6 - t * 0.76;
-    var v = angle + t * 0.58;
-    let tile_u = fract(u * 0.45) * 2.0 - 1.0;
-    let tile_v = fract((v + u * 0.3) / (2.0 * PI)) * 2.0 - 1.0;
-    let z0 = vec2<f32>(tile_u * 1.7, tile_v * 1.3);
-    let c = vec2<f32>(0.285 + 0.18 * cos(t * 0.37), 0.01 + 0.18 * sin(t * 0.29));
-    let it = julia_iter(z0, c, 140);
-    let k = it / 140.0;
-    var col = 0.5 + 0.5 * cos(vec3<f32>(0.0, 2.0, 4.0) + vec3<f32>(k * 7.5 + v * 0.8));
-    col = col * (0.82 + 0.18 * cos(k * 12.0));
-    col = col + vec3<f32>(0.07 / (r * 9.0 + 0.2));
-    col = col * smoothstep(1.25, 0.25, length(uv));
-    return vec4<f32>(pow(col, vec3<f32>(0.94, 0.94, 0.94)), 1.0);
 }
 
 // ===== Möbius Rotozoomer =====
@@ -658,10 +533,10 @@ fn FaceComposite(p: vec3<f32>, n: vec3<f32>, f: i32) -> vec3<f32> {
     nn = nn / sum;
     let pp = p * 0.1 + vec3<f32>(0.5,0.5,0.5);
     if (f == 1) { return (Glenz(pp.yz).xyz  * nn.x + Glenz(pp.zx).xyz  * nn.y + Glenz(pp.xy).xyz  * nn.z); }
-    if (f == 2) { return (Ring(pp.yz).xyz   * nn.x + Ring(pp.zx).xyz   * nn.y + Ring(pp.xy).xyz   * nn.z); }
-    if (f == 3) { return (Plasma(pp.yz).xyz * nn.x + Plasma(pp.zx).xyz * nn.y + Plasma(pp.xy).xyz * nn.z); }
-    if (f == 4) { return (Twirl(pp.yz).xyz  * nn.x + Twirl(pp.zx).xyz  * nn.y + Twirl(pp.xy).xyz  * nn.z); }
-    if (f == 5) { return (Room(pp.yz).xyz   * nn.x + Room(pp.zx).xyz   * nn.y + Room(pp.xy).xyz   * nn.z); }
+    if (f == 2) { return (RotatingGrid(pp.yz).xyz   * nn.x + RotatingGrid(pp.zx).xyz   * nn.y + RotatingGrid(pp.xy).xyz   * nn.z); }
+    if (f == 3) { return (FractalFlame(pp.yz).xyz * nn.x + FractalFlame(pp.zx).xyz * nn.y + FractalFlame(pp.xy).xyz * nn.z); }
+    if (f == 4) { return (InterferenceWells(pp.yz).xyz * nn.x + InterferenceWells(pp.zx).xyz * nn.y + InterferenceWells(pp.xy).xyz * nn.z); }
+    if (f == 5) { return (FractalClouds(pp.yz).xyz   * nn.x + FractalClouds(pp.zx).xyz   * nn.y + FractalClouds(pp.xy).xyz   * nn.z); }
     if (f == 6) { return (Flow(pp.yz).xyz   * nn.x + Flow(pp.zx).xyz   * nn.y + Flow(pp.xy).xyz   * nn.z); }
     return vec3<f32>(1.0,1.0,1.0);
 }
@@ -738,21 +613,268 @@ fn RotatingGrid(uv_in: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 
+// ===== Komplexe Farbtentakel =====
+fn ComplexCascade(uv_in: vec2<f32>) -> vec4<f32> {
+    if (!check_border(uv_in)) { return BORDERCOLOR; }
+
+    let res = vec2<f32>(U.width, U.height);
+    let fragCoord = vec2<f32>(uv_in.x * res.x, (1.0 - uv_in.y) * res.y);
+
+    let aspect = res.x / max(res.y, 1.0);
+    var uv = fragCoord / res.y;
+    uv = uv - vec2<f32>(aspect * 0.5, 0.5);
+
+    let warped = complex_iter(uv, U.time);
+    var angle = atan2(warped.y, warped.x);
+    if (angle < 0.0) {
+        angle = angle + 2.0 * PI;
+    }
+
+    let mag = max(length(warped), 1e-6);
+    let log_len = log(mag);
+    let band_val = abs(log_len) * 100.0;
+    let band_idx = f32(i32(floor(band_val)) % 100);
+
+    var value = 1.0 - band_idx / 200.0;
+    if (log_len <= 0.0) {
+        value = 0.5 + band_idx / 200.0;
+    }
+    value = clamp(value, 0.0, 1.0);
+
+    let hue = angle / (2.0 * PI);
+    let col = hsv2rgb(vec3<f32>(fract1(hue), 1.0, value));
+    return vec4<f32>(col, 1.0);
+}
+
+// ===== Old School Rasterbars =====
+fn OldSchoolRasterbars(uv_in: vec2<f32>) -> vec4<f32> {
+    if (!check_border(uv_in)) { return BORDERCOLOR; }
+
+    let res = vec2<f32>(U.width, U.height);
+    let fragCoord = vec2<f32>(uv_in.x * res.x, (1.0 - uv_in.y) * res.y);
+    var uv = fragCoord / res;
+    uv = uv - vec2<f32>(0.5, 0.5);
+    uv.x = uv.x * (res.x / max(res.y, 1.0));
+
+    var rgb = vec3<f32>(0.0);
+    let frequency = 1.5;
+    let amplitude = 0.3;
+    let speed = 2.0;
+    let rh = 0.07;
+
+    var sr = sin(U.time * speed + uv.x * frequency) * amplitude;
+    var sg = sin((U.time + 0.2) * speed + uv.x * frequency) * amplitude;
+    var sb = sin((U.time + 0.4) * speed + uv.x * frequency) * amplitude;
+
+    sr = sr + cos((U.time + sin(uv.x)) * 0.4) * 0.2;
+    sg = sg + cos((U.time + sin(uv.x)) * 0.5) * 0.2;
+    sb = sb + cos((U.time + sin(uv.x)) * 0.6) * 0.2;
+
+    rgb.r = rgb.r + smoothstep(sr + rh, sr, uv.y) - smoothstep(sr, sr - rh, uv.y);
+    rgb.g = rgb.g + smoothstep(sg + rh, sg, uv.y) - smoothstep(sg, sg - rh, uv.y);
+    rgb.b = rgb.b + smoothstep(sb + rh, sb, uv.y) - smoothstep(sb, sb - rh, uv.y);
+
+    let t = U.time;
+    for (var i: i32 = 0; i < 64; i = i + 1) {
+        let fi = f32(i);
+        let cx = cos(t * cos(clamp(t * 1.139, 1.22, 1.8)) * 2.0 + fi * 0.08) * 0.8;
+        let cy = sin(t * sin(clamp(t * 0.01, 0.8, 0.9)) * 1.2 + fi * 0.06) * 0.4;
+        rgb = rgb + circle(vec2<f32>(cx, cy), uv, 0.03) * 0.97;
+    }
+
+    return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+
+// ===== Interference Wells =====
+fn InterferenceWells(uv_in: vec2<f32>) -> vec4<f32> {
+    if (!check_border(uv_in)) { return BORDERCOLOR; }
+
+    let res = vec2<f32>(U.width, U.height);
+    var uv = vec2<f32>(uv_in.x * res.x, uv_in.y * res.y);
+    let min_dim = min(res.x, res.y);
+    uv = uv / min_dim;
+    uv = uv - vec2<f32>(0.5 * (res.x / min_dim), 0.5 * (res.y / min_dim));
+    uv = uv * 2.0;
+
+    let t = U.time * 0.25;
+    let center1 = vec2<f32>(sin(t) / 2.5 + sin(2.0 * t) / 2.5, cos(t) / 2.5 + sin(2.0 * t) / 2.5);
+    let center2 = vec2<f32>(cos(t) / 2.5 + cos(2.0 * t) / 2.5, sin(t) / 2.5 + cos(2.0 * t) / 2.5);
+
+    let red_coeff = 0.995;
+    let green_coeff = 1.0;
+    let blue_coeff = 1.005;
+
+    let r1 = length(uv - center1);
+    let r2 = length(uv - center2);
+
+    var r = -sin(sqrt(r1) * 100.0 * red_coeff) + 0.5 - r1 * 0.5 * red_coeff;
+    r = r + (-sin(sqrt(r2) * 100.0 * red_coeff) + 0.5 - r2 * 0.5 * red_coeff);
+    r = r * 0.25;
+
+    var g = -sin(sqrt(r1) * 100.0 * green_coeff) + 0.5 - r1 * 0.5 * green_coeff;
+    g = g + (-sin(sqrt(r2) * 100.0 * green_coeff) + 0.5 - r2 * 0.5 * green_coeff);
+    g = g * 0.25;
+
+    var b = -sin(sqrt(r1) * 100.0 * blue_coeff) + 0.5 - r1 * 0.5 * blue_coeff;
+    b = b + (-sin(sqrt(r2) * 100.0 * blue_coeff) + 0.5 - r2 * 0.5 * blue_coeff);
+    b = b * 0.25;
+
+    let final_color = vec3<f32>(r + g, 0.5 * r + g + 0.5 * b, g + b);
+    return vec4<f32>(clamp(final_color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+
+// ===== Raymarched Sine Sphere =====
+const RM_MAX_STEPS : u32 = 128u;
+const RM_MAX_DIST : f32 = 1000.0;
+const RM_MIN_HIT_DIST : f32 = 0.001;
+
+fn rm_min_dist(point: vec3<f32>) -> f32 {
+    let sphere_disp = sin(1.5 * point.x + U.time) * sin(1.5 * point.y + U.time) * sin(2.5 * point.z + U.time) * 0.5;
+    let plane_disp = sin(length(point.xy) - U.time) * 0.5;
+
+    let sphere_center = vec3<f32>(0.0, 0.0, 0.0);
+    let sphere_radius = 6.0;
+    let sphere_dist = length(point - sphere_center) - sphere_radius + sphere_disp;
+    let plane_dist = point.z + 4.0 + plane_disp;
+    return min(sphere_dist, plane_dist);
+}
+
+fn rm_raymarch(ray_origin: vec3<f32>, ray_dir: vec3<f32>) -> vec3<f32> {
+    let dir = normalize(ray_dir);
+    var total_dist = 0.0;
+    var current_pos = ray_origin;
+
+    for (var i: u32 = 0u; i < RM_MAX_STEPS; i = i + 1u) {
+        current_pos = ray_origin + dir * total_dist;
+        let dist = rm_min_dist(current_pos);
+
+        if (dist < RM_MIN_HIT_DIST) {
+            return normalize(current_pos) * 0.6 + vec3<f32>(0.6, 0.6, 0.6);
+        }
+
+        if (total_dist > RM_MAX_DIST) {
+            break;
+        }
+
+        total_dist = total_dist + dist;
+    }
+
+    return normalize(current_pos) * 0.5 + vec3<f32>(0.5, 0.5, 0.5);
+}
+
+fn RaymarchedSineSphere(uv_in: vec2<f32>, fragCoord: vec2<f32>, res: vec2<f32>) -> vec4<f32> {
+    if (!check_border(uv_in)) { return BORDERCOLOR; }
+
+    let R = res;
+    var uv = (2.0 * fragCoord - R) / min(R.x, R.y);
+
+    let a = U.time;
+    let b = PI / 2.0;
+    let c = a + PI;
+    let d = 10.0;
+
+    let camera = vec3<f32>(d * sin(a), d * cos(a), 0.0);
+    let camera_look = vec3<f32>(
+        uv.x * sin(a + b) + sin(c),
+        uv.x * cos(a + b) + cos(c),
+        uv.y
+    );
+
+    let col = rm_raymarch(camera, camera_look);
+    return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+
+// ===== Rotating Cosine Grid =====
+fn RotatingCosineGrid(uv_in: vec2<f32>) -> vec4<f32> {
+    if (!check_border(uv_in)) { return BORDERCOLOR; }
+
+    let res = vec2<f32>(U.width, U.height);
+    let fragCoord = vec2<f32>(uv_in.x * res.x, (1.0 - uv_in.y) * res.y);
+    let angle = radians(U.time * 90.0);
+    let rot = mat2x2<f32>(
+        vec2<f32>(cos(angle), -sin(angle)),
+        vec2<f32>(sin(angle),  cos(angle))
+    );
+
+    let rotated = rot * fragCoord;
+    let scale = 20.0;
+    let col = vec3<f32>(
+        0.5 + 0.5 * sin(rotated.x / scale),
+        0.5 + 0.5 * sin(rotated.y / scale),
+        0.5 + 0.5 * sin((rotated.x + rotated.y) / scale)
+    );
+    return vec4<f32>(clamp(col, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+
+// ===== Neon Scanlines =====
+fn NeonScanlines(uv_in: vec2<f32>) -> vec4<f32> {
+    if (!check_border(uv_in)) { return BORDERCOLOR; }
+
+    let res = vec2<f32>(U.width, U.height);
+    let fragCoord = vec2<f32>(uv_in.x * res.x, (1.0 - uv_in.y) * res.y);
+    let y = fragCoord.y / max(res.x, 1.0) + 1.0;
+    let t = U.time * 3.0;
+
+    var color = vec3<f32>(0.0, 0.0, cos(y * 6.0 - 5.0));
+    var hit = false;
+
+    for (var i: i32 = 0; i < 18; i = i + 1) {
+        let k = f32(i);
+        let s = sin(t + k / 3.4) / 6.0 + 1.25;
+        if (y > s && y < s + 0.05) {
+            let beam = vec3<f32>(s, sin(y + t * 0.3), k / 16.0);
+            let envelope = (y - s) * sin((y - s) * 20.0 * PI) * 38.0;
+            color = beam * envelope;
+            hit = true;
+        }
+    }
+
+    if (!hit) {
+        color = vec3<f32>(0.0, 0.0, max(color.z, 0.0));
+    }
+
+    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+
+// ===== Perspective Checkerboard =====
+fn PerspectiveCheckerboard(uv_in: vec2<f32>) -> vec4<f32> {
+    if (!check_border(uv_in)) { return BORDERCOLOR; }
+
+    let res = vec2<f32>(U.width, U.height);
+    let fragCoord = vec2<f32>(uv_in.x * res.x, (1.0 - uv_in.y) * res.y);
+    var uv = (fragCoord / res) - vec2<f32>(0.5, 0.5);
+    uv = uv * 1.5;
+    let z = 2.0 / max(abs(uv.y), 1e-4);
+    let x = uv.x * z;
+
+    if (z >= 8.0) {
+        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    }
+
+    let pos = vec2<f32>(3.0 * sin(U.time) + x, 3.0 * U.time + z);
+    let tex = step(vec2<f32>(0.5, 0.5), fract(pos));
+    let c = f32(tex.x != tex.y) * smoothstep(9.0, 0.0, z);
+    return vec4<f32>(vec3<f32>(c, c, c), 1.0);
+}
+
 // ===== Szene-Dispatcher =====
 fn scene_color(scene_idx: u32, uv01: vec2<f32>, fragCoord: vec2<f32>, res: vec2<f32>) -> vec4<f32> {
-    if (scene_idx == 0u)  { return Glenz(uv01); }
-    if (scene_idx == 1u)  { return Ring(uv01); }
+    if (scene_idx == 0u)  { return RotatingGrid(uv01); }
+    if (scene_idx == 1u)  { return FractalClouds(uv01); }
     if (scene_idx == 2u)  { return Plasma(uv01); }
-    if (scene_idx == 3u)  { return Twirl(uv01); }
-    if (scene_idx == 4u)  { return Room(uv01); }
-    if (scene_idx == 5u)  { return Flow(uv01); }
-    if (scene_idx == 6u)  { return RotatingGrid(uv01); }
-    if (scene_idx == 7u)  { return FractalFlame(uv01); }
-    if (scene_idx == 8u)  { return JuliaMorph(uv01); }
-    if (scene_idx == 9u)  { return FractalClouds(uv01); }
-    if (scene_idx == 10u) { return RotozoomerPro(uv01); }
-    if (scene_idx == 11u) { return JuliaTunnel(uv01); }
-    if (scene_idx == 12u) { return RenderJellyCube(uv01, fragCoord, res, U.time); }
+    if (scene_idx == 3u)  { return Flow(uv01); }
+    if (scene_idx == 4u)  { return FractalFlame(uv01); }
+    if (scene_idx == 5u)  { return JuliaMorph(uv01); }
+    if (scene_idx == 6u)  { return RotozoomerPro(uv01); }
+    if (scene_idx == 7u)  { return Glenz(uv01); }
+    if (scene_idx == 8u)  { return ComplexCascade(uv01); }
+    if (scene_idx == 9u)  { return OldSchoolRasterbars(uv01); }
+    if (scene_idx == 10u) { return InterferenceWells(uv01); }
+    if (scene_idx == 11u) { return RaymarchedSineSphere(uv01, fragCoord, res); }
+    if (scene_idx == 12u) { return RotatingCosineGrid(uv01); }
+    if (scene_idx == 13u) { return NeonScanlines(uv01); }
+    if (scene_idx == 14u) { return PerspectiveCheckerboard(uv01); }
+    if (scene_idx == 15u) { return RenderJellyCube(uv01, fragCoord, res, U.time); }
     return vec4<f32>(0.0, 0.0, 0.0, 1.0);
 }
 

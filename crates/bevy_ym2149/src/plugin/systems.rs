@@ -272,22 +272,33 @@ pub(super) fn update_playback(
         }
 
         playback.seek(player.get_current_frame() as u32);
-        let total_frames = player.frame_count();
+        let player_state = player.state();
 
-        if playback.frame_position() as usize >= total_frames {
+        if player_state != ym2149::replayer::PlaybackState::Playing
+            && playback.state == PlaybackState::Playing
+        {
             entry.time_since_last_frame = 0.0;
+
             if settings.loop_enabled {
-                if let Err(err) = player.play() {
-                    error!("Failed to loop YM playback: {}", err);
-                    playback.state = PlaybackState::Finished;
-                } else {
-                    entry.frames_rendered = 0;
-                    playback.seek(0);
-                    if config.channel_events {
-                        started_events.write(TrackStarted { entity });
+                match player.stop().and_then(|_| player.play()) {
+                    Ok(()) => {
+                        entry.frames_rendered = 0;
+                        playback.seek(0);
+                        entry.emitted_finished = false;
+                        if config.channel_events {
+                            started_events.write(TrackStarted { entity });
+                        }
+                    }
+                    Err(err) => {
+                        error!("Failed to loop YM playback: {}", err);
+                        playback.state = PlaybackState::Finished;
                     }
                 }
             } else {
+                if let Err(err) = player.stop() {
+                    error!("Failed to stop YM playback: {}", err);
+                }
+                playback.seek(0);
                 playback.state = PlaybackState::Finished;
                 if config.channel_events && !entry.emitted_finished {
                     finished_events.write(TrackFinished { entity });

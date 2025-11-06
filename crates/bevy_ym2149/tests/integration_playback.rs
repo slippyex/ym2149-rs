@@ -4,7 +4,9 @@
 //! frame advancement, state transitions, and event emission.
 
 use bevy::prelude::*;
-use bevy_ym2149::{PlaybackState, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig};
+use bevy_ym2149::{
+    PlaybackState, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig, Ym2149Settings,
+};
 
 /// Helper to create a minimal test app with YM2149 plugin
 fn create_test_app() -> App {
@@ -17,50 +19,11 @@ fn create_test_app() -> App {
     app
 }
 
-/// Create minimal valid YM2 file (14 registers, 1 frame)
+/// Create minimal valid YM3 file (14 registers, 1 frame)
 fn create_minimal_ym_file() -> Vec<u8> {
-    // YM2 file format header
-    let mut data = vec![];
-
-    // Signature "YM2!"
-    data.extend_from_slice(b"YM2!");
-
-    // Check code (0x00)
-    data.push(0x00);
-
-    // Number of frames (1)
-    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x01]);
-
-    // Attributes: 0 = no loop, 0 = no digidrum
-    data.push(0x00);
-
-    // Digidrums number (0)
-    data.push(0x00);
-
-    // Clock frequency (2MHz)
-    data.extend_from_slice(&[0x00, 0x1F, 0x40, 0x00]);
-
-    // Frame frequency (50Hz)
-    data.extend_from_slice(&[0x00, 0x32]);
-
-    // Loop frame (0)
-    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
-
-    // Future offset (skip 52 bytes)
-    data.extend_from_slice(&[0x00, 0x00, 0x00, 0x34]);
-
-    // Song name (empty, null-terminated)
-    data.push(0x00);
-
-    // Author name (empty, null-terminated)
-    data.push(0x00);
-
-    // Separator
-    data.push(0x00);
-
-    // Frame data: 14 registers all zeros
-    data.extend([0x00].repeat(14));
-
+    let mut data = Vec::with_capacity(18);
+    data.extend_from_slice(b"YM3!");
+    data.extend_from_slice(&[0u8; 14]);
     data
 }
 
@@ -379,6 +342,91 @@ fn test_playback_query() {
     assert!(
         entity2_exists,
         "Entity2 should have Ym2149Playback component"
+    );
+}
+
+#[test]
+fn test_looping_restarts_when_loop_enabled() {
+    let mut app = create_test_app();
+    app.insert_resource(Ym2149Settings {
+        loop_enabled: true,
+        ..Default::default()
+    });
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+
+    for _ in 0..50 {
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_millis(20));
+        app.update();
+    }
+
+    let playback = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .expect("Playback component present");
+
+    assert_eq!(
+        playback.state,
+        PlaybackState::Playing,
+        "Playback should continue playing when looping is enabled"
+    );
+    assert_eq!(
+        playback.frame_position(),
+        0,
+        "Looping should rewind to the beginning"
+    );
+}
+
+#[test]
+fn test_playback_finishes_without_looping() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+
+    for _ in 0..50 {
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_millis(20));
+        app.update();
+    }
+
+    let playback = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .expect("Playback component present");
+
+    assert_eq!(
+        playback.state,
+        PlaybackState::Finished,
+        "Playback should transition to Finished when looping is disabled"
     );
 }
 
