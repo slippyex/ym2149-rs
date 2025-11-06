@@ -22,7 +22,7 @@ use bevy::{
         widget::{ImageNode, NodeImageMode},
         IsDefaultUiCamera,
     },
-    window::{MonitorSelection, PrimaryWindow, WindowMode},
+    window::{MonitorSelection, PrimaryWindow, WindowMode, WindowResized},
 };
 use bevy_mesh::Mesh2d;
 #[cfg(feature = "visualization")]
@@ -211,6 +211,9 @@ struct PendingSurface {
     scale: Vec3,
     spawned: bool,
 }
+
+#[derive(Component)]
+struct SurfaceQuad;
 
 #[derive(Resource)]
 struct CrtState {
@@ -487,6 +490,7 @@ fn main() {
             (
                 sync_render_target_image,
                 spawn_surface_when_ready,
+                update_surface_scale_on_resize,
                 update_startup_fade,
                 toggle_fullscreen,
                 toggle_crt,
@@ -845,6 +849,7 @@ fn spawn_surface_when_ready(
         Mesh2d(pending.mesh.clone()),
         MeshMaterial2d(material_handle.clone()),
         Transform::from_scale(pending.scale),
+        SurfaceQuad,
         Visibility::default(),
         InheritedVisibility::default(),
         ViewVisibility::default(),
@@ -861,6 +866,7 @@ fn spawn_surface_when_ready(
         Mesh2d(pending.mesh.clone()),
         MeshMaterial2d(crt_material_handle.clone()),
         Transform::from_scale(pending.scale),
+        SurfaceQuad,
         Visibility::default(),
         InheritedVisibility::default(),
         ViewVisibility::default(),
@@ -896,6 +902,31 @@ fn toggle_fullscreen(
 fn toggle_crt(keys: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
     if keys.just_pressed(KeyCode::KeyC) {
         crt.enabled = !crt.enabled;
+    }
+}
+
+fn update_surface_scale_on_resize(
+    mut resize_events: EventReader<WindowResized>,
+    mut surfaces: Query<&mut Transform, With<SurfaceQuad>>,
+    mut pending: Option<ResMut<PendingSurface>>,
+) {
+    let mut has_resize = false;
+    let mut latest_scale = Vec3::ONE;
+    for event in resize_events.read() {
+        latest_scale = Vec3::new(event.width * 0.5, event.height * 0.5, 1.0);
+        has_resize = true;
+    }
+
+    if !has_resize {
+        return;
+    }
+
+    for mut transform in surfaces.iter_mut() {
+        transform.scale = latest_scale;
+    }
+
+    if let Some(mut pending) = pending {
+        pending.scale = latest_scale;
     }
 }
 

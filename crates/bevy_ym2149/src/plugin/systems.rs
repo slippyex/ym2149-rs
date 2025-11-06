@@ -7,8 +7,9 @@ use crate::plugin::Ym2149PluginConfig;
 #[cfg(feature = "visualization")]
 use crate::viz_components::OscilloscopeBuffer;
 use bevy::prelude::*;
+use bevy::tasks::{block_on, poll_once, IoTaskPool, Task};
 use parking_lot::Mutex;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use ym2149::replayer::PlaybackController;
 
@@ -35,22 +36,69 @@ impl Default for PlaybackRuntimeState {
     }
 }
 
+pub(super) struct PendingFileRead {
+    path: String,
+    task: Task<Result<Vec<u8>, String>>,
+}
+
+impl PendingFileRead {
+    fn new(path: String) -> Self {
+        let task_path = path.clone();
+        let task = IoTaskPool::get().spawn(async move {
+            std::fs::read(&task_path)
+                .map_err(|err| format!("Failed to read YM file '{task_path}': {err}"))
+        });
+        Self { path, task }
+    }
+}
+
+#[derive(Default)]
+pub(super) struct PlaybackScratch {
+    stereo: Vec<f32>,
+}
+
 pub(super) fn initialize_playback(
-    mut playbacks: Query<&mut Ym2149Playback>,
+    mut playbacks: Query<(Entity, &mut Ym2149Playback)>,
     assets: Res<Assets<Ym2149AudioSource>>,
+    mut pending_reads: Local<HashMap<Entity, PendingFileRead>>,
 ) {
-    for mut playback in playbacks.iter_mut() {
+    let mut alive = Vec::new();
+
+    for (entity, mut playback) in playbacks.iter_mut() {
+        alive.push(entity);
+
         if playback.player.is_some() && !playback.needs_reload {
             continue;
+        }
+
+        if playback.source_path().is_none() {
+            pending_reads.remove(&entity);
         }
 
         let load_result = if let Some(bytes) = playback.source_bytes() {
             load_player_from_bytes(bytes.as_ref().clone(), None)
         } else if let Some(path) = playback.source_path() {
-            match std::fs::read(path) {
-                Ok(bytes) => load_player_from_bytes(bytes, None),
-                Err(e) => {
-                    error!("Failed to read YM file '{}': {}", path, e);
+            match pending_reads.entry(entity) {
+                Entry::Occupied(mut entry) => {
+                    if entry.get().path != path {
+                        entry.insert(PendingFileRead::new(path.to_owned()));
+                        continue;
+                    }
+                    match block_on(poll_once(&mut entry.get_mut().task)) {
+                        Some(Ok(bytes)) => {
+                            pending_reads.remove(&entity);
+                            load_player_from_bytes(bytes, None)
+                        }
+                        Some(Err(err)) => {
+                            error!("{err}");
+                            pending_reads.remove(&entity);
+                            continue;
+                        }
+                        None => continue,
+                    }
+                }
+                Entry::Vacant(vacant) => {
+                    vacant.insert(PendingFileRead::new(path.to_owned()));
                     continue;
                 }
             }
@@ -104,6 +152,8 @@ pub(super) fn initialize_playback(
             load.summary.frame_count, load.summary.samples_per_frame
         );
     }
+
+    pending_reads.retain(|entity, _| alive.contains(entity));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -119,6 +169,7 @@ pub(super) fn update_playback(
     bridge_targets: Option<Res<AudioBridgeTargets>>,
     mut bridge_buffers: Option<ResMut<AudioBridgeBuffers>>,
     mut runtime_state: Local<HashMap<Entity, PlaybackRuntimeState>>,
+    mut scratch_buffers: Local<HashMap<Entity, PlaybackScratch>>,
 ) {
     let delta = time.delta_secs();
     let master_volume = settings.master_volume.clamp(0.0, 1.0);
@@ -205,8 +256,15 @@ pub(super) fn update_playback(
             entry.time_since_last_frame -= frame_duration;
             entry.frames_rendered += 1;
 
-            let mut mono_samples = Vec::with_capacity(samples_per_frame);
+            let scratch_entry = scratch_buffers.entry(entity).or_default();
+            let mut stereo_samples = std::mem::take(&mut scratch_entry.stereo);
+            stereo_samples.clear();
+            stereo_samples.reserve(samples_per_frame * 2);
+
             let mut channel_energy = [0.0f32; 3];
+            let gain = (playback.volume * master_volume).clamp(0.0, 1.0);
+            let left_gain = playback.left_gain.clamp(0.0, 1.0);
+            let right_gain = playback.right_gain.clamp(0.0, 1.0);
 
             for _ in 0..samples_per_frame {
                 let sample = player.generate_sample();
@@ -232,10 +290,10 @@ pub(super) fn update_playback(
                     buffer.push_sample([ch_a, ch_b, ch_c]);
                 }
 
-                mono_samples.push(sample);
+                let scaled = sample * gain;
+                stereo_samples.push(scaled * left_gain);
+                stereo_samples.push(scaled * right_gain);
             }
-
-            let stereo_samples = to_stereo_samples(&mono_samples, &playback, master_volume);
 
             if bridging_active {
                 if let Some(buffers) = bridge_buffers.as_mut() {
@@ -244,7 +302,7 @@ pub(super) fn update_playback(
             }
 
             if let Some(device) = &playback.audio_device {
-                if let Err(err) = device.push_samples(stereo_samples) {
+                if let Err(err) = device.push_samples(stereo_samples.clone()) {
                     warn!("Failed to push samples to audio device: {}", err);
                 } else if entry.frames_rendered.is_multiple_of(60) {
                     let fill = device.buffer_fill_level();
@@ -269,6 +327,8 @@ pub(super) fn update_playback(
                     });
                 }
             }
+
+            scratch_entry.stereo = stereo_samples;
         }
 
         playback.seek(player.get_current_frame() as u32);
@@ -309,6 +369,7 @@ pub(super) fn update_playback(
     }
 
     runtime_state.retain(|entity, _| alive.contains(entity));
+    scratch_buffers.retain(|entity, _| alive.contains(entity));
 }
 
 fn channel_period(lo: u8, hi: u8) -> Option<u16> {
@@ -360,22 +421,4 @@ fn load_player_from_bytes(
         title,
         author,
     })
-}
-
-fn to_stereo_samples(
-    mono_samples: &[f32],
-    playback: &Ym2149Playback,
-    master_volume: f32,
-) -> Vec<f32> {
-    let gain = (playback.volume * master_volume).clamp(0.0, 1.0);
-    let left = playback.left_gain.clamp(0.0, 1.0);
-    let right = playback.right_gain.clamp(0.0, 1.0);
-
-    let mut stereo = Vec::with_capacity(mono_samples.len() * 2);
-    for &sample in mono_samples {
-        let scaled = sample * gain;
-        stereo.push(scaled * left);
-        stereo.push(scaled * right);
-    }
-    stereo
 }
