@@ -8,13 +8,20 @@ use std::collections::HashMap;
 use bevy::{
     app::AppExit,
     asset::{AssetPlugin, RenderAssetUsages},
+    camera::{visibility::RenderLayers, ClearColorConfig, RenderTarget},
     log::debug,
     math::primitives::Rectangle,
     prelude::*,
-    render::render_resource::{AsBindGroup, Extent3d, ShaderType, TextureDimension, TextureFormat},
+    render::render_resource::{
+        AsBindGroup, Extent3d, ShaderType, TextureDescriptor, TextureDimension, TextureFormat,
+        TextureUsages,
+    },
     shader::{Shader, ShaderRef},
     sprite_render::{Material2d, Material2dPlugin, MeshMaterial2d},
-    ui::widget::{ImageNode, NodeImageMode},
+    ui::{
+        widget::{ImageNode, NodeImageMode},
+        IsDefaultUiCamera,
+    },
 };
 use bevy_mesh::Mesh2d;
 #[cfg(feature = "visualization")]
@@ -116,6 +123,20 @@ impl Material2d for CubeFacesMaterial {
     }
 }
 
+#[derive(AsBindGroup, TypePath, Debug, Clone, Asset)]
+pub struct CrtPostMaterial {
+    #[texture(0)]
+    #[sampler(1)]
+    scene_texture: Handle<Image>,
+    #[uniform(2)]
+    params: CrtParams,
+}
+impl Material2d for CrtPostMaterial {
+    fn fragment_shader() -> ShaderRef {
+        ShaderRef::Path("shaders/crt_post.wgsl".into())
+    }
+}
+
 #[derive(ShaderType, Clone, Copy, Debug)]
 struct CubeParams {
     time: f32,
@@ -138,8 +159,32 @@ impl Default for CubeParams {
     }
 }
 
+#[derive(ShaderType, Clone, Copy, Debug)]
+struct CrtParams {
+    time: f32,
+    width: f32,
+    height: f32,
+    crt_enabled: u32,
+}
+impl Default for CrtParams {
+    fn default() -> Self {
+        Self {
+            time: 0.0,
+            width: 1280.0,
+            height: 720.0,
+            crt_enabled: 1,
+        }
+    }
+}
+
 #[derive(Resource)]
 struct MaterialHandle(Handle<CubeFacesMaterial>);
+
+#[derive(Resource)]
+struct CrtMaterialHandle(Handle<CrtPostMaterial>);
+
+#[derive(Resource, Clone)]
+struct SceneRenderTarget(pub Handle<Image>);
 
 #[derive(Resource)]
 struct StartupFade {
@@ -423,6 +468,7 @@ fn main() {
         )
         .add_plugins((
             Material2dPlugin::<CubeFacesMaterial>::default(),
+            Material2dPlugin::<CrtPostMaterial>::default(),
             Ym2149Plugin::default(),
         ))
         .add_message::<PushOverlayText>()
@@ -438,6 +484,7 @@ fn main() {
         .add_systems(
             Update,
             (
+                sync_render_target_image,
                 spawn_surface_when_ready,
                 update_startup_fade,
                 toggle_crt,
@@ -459,10 +506,9 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut images: ResMut<Assets<Image>>,
     windows: Query<&Window>,
 ) {
-    commands.spawn(Camera2d);
-
     commands.insert_resource(Ym2149Settings {
         loop_enabled: true,
         ..Default::default()
@@ -483,6 +529,54 @@ fn setup(
         .next()
         .map(|w| Vec2::new(w.resolution.width(), w.resolution.height()))
         .unwrap_or(Vec2::new(1280.0, 720.0));
+
+    let extent = Extent3d {
+        width: window_size.x.max(1.0).round() as u32,
+        height: window_size.y.max(1.0).round() as u32,
+        depth_or_array_layers: 1,
+    };
+    let mut render_target_image = Image {
+        texture_descriptor: TextureDescriptor {
+            label: Some("demoscene.offscreen".into()),
+            size: extent,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba16Float,
+            mip_level_count: 1,
+            sample_count: 1,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::COPY_SRC,
+            view_formats: &[],
+        },
+        ..default()
+    };
+    render_target_image.resize(extent);
+    let render_target_handle = images.add(render_target_image);
+    commands.insert_resource(SceneRenderTarget(render_target_handle.clone()));
+
+    commands.spawn((
+        Camera2d,
+        Camera {
+            target: RenderTarget::from(render_target_handle.clone()),
+            order: -1,
+            clear_color: ClearColorConfig::Custom(Color::BLACK),
+            ..default()
+        },
+        RenderLayers::layer(0),
+        Name::new("OffscreenSceneCamera"),
+    ));
+
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 0,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        RenderLayers::layer(1),
+        IsDefaultUiCamera,
+        Name::new("DisplayCamera"),
+    ));
 
     let quad_scale = Vec3::new(window_size.x * 0.5, window_size.y * 0.5, 1.0);
 
@@ -537,6 +631,7 @@ fn spawn_spectrum_bars(commands: &mut Commands) {
             .spawn((
                 container,
                 BackgroundColor(Color::srgba(0.02, 0.03, 0.07, 0.35)),
+                RenderLayers::layer(1),
             ))
             .with_children(|row| {
                 for channel in 0..CHANNEL_COUNT {
@@ -556,6 +651,7 @@ fn spawn_spectrum_bars(commands: &mut Commands) {
                             ..default()
                         },
                         BackgroundColor(Color::srgba(0.06, 0.07, 0.12, 0.35)),
+                        RenderLayers::layer(1),
                     ))
                     .with_children(|bars| {
                         for bin in 0..BIN_COUNT {
@@ -567,6 +663,7 @@ fn spawn_spectrum_bars(commands: &mut Commands) {
                                 },
                                 BackgroundColor(Color::srgba(0.08, 0.11, 0.18, 0.85)),
                                 SpectrumBar { channel, bin },
+                                RenderLayers::layer(1),
                             ));
                         }
                     });
@@ -617,6 +714,7 @@ fn setup_text_overlay(
             Visibility::Visible,
             InheritedVisibility::VISIBLE,
             GlobalZIndex(100),
+            RenderLayers::layer(1),
             Name::new("OverlayTextRoot"),
         ))
         .with_children(|root| {
@@ -634,6 +732,7 @@ fn setup_text_overlay(
                 InheritedVisibility::VISIBLE,
                 GlobalZIndex(99),
                 OverlayBackground,
+                RenderLayers::layer(1),
                 Name::new("TextBackground"),
             ));
 
@@ -653,6 +752,7 @@ fn setup_text_overlay(
                 InheritedVisibility::VISIBLE,
                 GlobalZIndex(100),
                 OverlayText,
+                RenderLayers::layer(1),
                 Name::new("MainBitmapText"),
             ));
         });
@@ -675,6 +775,7 @@ fn setup_startup_fade(mut commands: Commands) {
         InheritedVisibility::VISIBLE,
         GlobalZIndex(20_000),
         StartupFadeOverlay,
+        RenderLayers::layer(1),
         Name::new("StartupFadeOverlay"),
     ));
 }
@@ -687,12 +788,44 @@ fn init_resources(mut commands: Commands) {
     commands.insert_resource(CrtState { enabled: true });
 }
 
+fn sync_render_target_image(
+    windows: Query<&Window>,
+    mut images: ResMut<Assets<Image>>,
+    render_target: Option<Res<SceneRenderTarget>>,
+) {
+    let Some(render_target) = render_target else {
+        return;
+    };
+    let Some(window) = windows.iter().next() else {
+        return;
+    };
+    let Some(image) = images.get_mut(&render_target.0) else {
+        return;
+    };
+
+    let scale_factor = window.resolution.scale_factor() as f32;
+    let desired_width = (window.resolution.width() * scale_factor).round().max(1.0) as u32;
+    let desired_height = (window.resolution.height() * scale_factor).round().max(1.0) as u32;
+
+    let current_size = image.texture_descriptor.size;
+    if current_size.width != desired_width || current_size.height != desired_height {
+        let extent = Extent3d {
+            width: desired_width,
+            height: desired_height,
+            depth_or_array_layers: 1,
+        };
+        image.resize(extent);
+    }
+}
+
 fn spawn_surface_when_ready(
     asset_server: Res<AssetServer>,
     pending: Option<ResMut<PendingSurface>>,
     mut materials: ResMut<Assets<CubeFacesMaterial>>,
+    mut crt_materials: ResMut<Assets<CrtPostMaterial>>,
     mut commands: Commands,
     fade: Res<StartupFade>,
+    render_target: Res<SceneRenderTarget>,
 ) {
     let Some(mut pending) = pending else {
         return;
@@ -713,9 +846,26 @@ fn spawn_surface_when_ready(
         Transform::from_scale(pending.scale),
         GlobalTransform::default(),
         Visibility::default(),
+        RenderLayers::layer(0),
         Name::new("CubeFacesSurface"),
     ));
     commands.insert_resource(MaterialHandle(material_handle));
+
+    let crt_material_handle = crt_materials.add(CrtPostMaterial {
+        scene_texture: render_target.0.clone(),
+        params: CrtParams::default(),
+    });
+    commands.spawn((
+        Mesh2d(pending.mesh.clone()),
+        MeshMaterial2d(crt_material_handle.clone()),
+        Transform::from_scale(pending.scale),
+        GlobalTransform::default(),
+        Visibility::default(),
+        RenderLayers::layer(1),
+        Name::new("CrtPostSurface"),
+    ));
+    commands.insert_resource(CrtMaterialHandle(crt_material_handle));
+
     pending.spawned = true;
 }
 
@@ -737,7 +887,9 @@ fn update_uniforms(
     time: Res<Time>,
     windows: Query<&Window>,
     mut materials: ResMut<Assets<CubeFacesMaterial>>,
+    mut crt_materials: ResMut<Assets<CrtPostMaterial>>,
     mat: Option<Res<MaterialHandle>>,
+    crt_mat: Option<Res<CrtMaterialHandle>>,
     crt: Option<Res<CrtState>>,
 ) {
     let Some(mat) = mat else {
@@ -750,12 +902,33 @@ fn update_uniforms(
         return;
     };
 
+    let crt_enabled_flag = if let Some(crt_state) = crt.as_ref() {
+        if crt_state.enabled {
+            1
+        } else {
+            0
+        }
+    } else {
+        1
+    };
+
+    let scale_factor = window.resolution.scale_factor() as f32;
+    let physical_width = (window.resolution.width() * scale_factor).round().max(1.0);
+    let physical_height = (window.resolution.height() * scale_factor).round().max(1.0);
+
     material.params.time = time.elapsed_secs();
-    material.params.width = window.resolution.width();
-    material.params.height = window.resolution.height();
+    material.params.width = physical_width;
+    material.params.height = physical_height;
     material.params.frame = material.params.frame.wrapping_add(1);
-    if let Some(crt_state) = crt {
-        material.params.crt_enabled = if crt_state.enabled { 1 } else { 0 };
+    material.params.crt_enabled = crt_enabled_flag;
+
+    if let Some(crt_mat) = crt_mat {
+        if let Some(crt_material) = crt_materials.get_mut(&crt_mat.0) {
+            crt_material.params.time = time.elapsed_secs();
+            crt_material.params.width = physical_width;
+            crt_material.params.height = physical_height;
+            crt_material.params.crt_enabled = crt_enabled_flag;
+        }
     }
 }
 
@@ -1167,20 +1340,24 @@ fn apply_swing_animation(
     let elapsed = time.elapsed_secs();
 
     // Get actual window width and calculate responsive scales
-    let window_width = windows
+    let viewport_scale = windows
         .iter()
         .next()
-        .map(|w| w.resolution.width())
-        .unwrap_or(DESIGN_WIDTH);
+        .map(|w| {
+            let logical_width = w.resolution.width();
+            let scale_factor = w.resolution.scale_factor() as f32;
+            let physical_width = logical_width * scale_factor;
+            (physical_width / DESIGN_WIDTH).clamp(MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE)
+        })
+        .unwrap_or(1.0);
 
     // Calculate swing amplitudes responsive to window width
-    let swing_h_amplitude = window_width * (SWING_AMPLITUDE_PX / DESIGN_WIDTH);
-    let swing_v_amplitude = window_width * (SWING_VERTICAL_AMPLITUDE_PX / DESIGN_WIDTH);
+    let swing_h_amplitude = SWING_AMPLITUDE_PX * viewport_scale;
+    let swing_v_amplitude = SWING_VERTICAL_AMPLITUDE_PX * viewport_scale;
 
     // Calculate viewport scale for responsive text sizing
     // Scales between 0.8x and 1.5x based on window width relative to design width
-    state.viewport_scale =
-        (window_width / DESIGN_WIDTH).clamp(MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE);
+    state.viewport_scale = viewport_scale;
 
     // Text: base phase - creates elliptical motion using sin/cos 90° apart
     let text_phase = elapsed * SWING_FREQUENCY;
