@@ -37,11 +37,16 @@ Comprehensive demonstration of:
 ### demoscene
 Demoscene-style example featuring:
 - YM2149 music playback synchronized with visuals
-- Bitmap font rendering with text overlay
-- Easing functions for animations
-- Custom WGSL shaders
+- Bitmap font rendering with multiple animated overlay modes (Typewriter, BounceIn, CascadeZoom, etc.)
+- Responsive layout with swing/breathing motion and DPI-aware scaling
+- Dual-pass WGSL pipeline: raymarched scene + CRT post-process shader (toggle with `C`)
+- Easing functions for text animation timing and shader sequencing
 
 **Run:** `cargo run --example demoscene -p bevy_ym2149_examples`
+
+**Controls**
+- `C` – Toggle CRT post-processing (single-pass scene vs. CRT overlay)
+- `Esc` – Exit the application
 
 ## Crate Structure
 
@@ -184,6 +189,7 @@ assets/                          # Base directory set at compile time
 ├── fonts/                       # Bitmap fonts for UI
 │   └── demoscene_font.png
 └── shaders/                     # Custom WGSL shaders
+    ├── crt_post.wgsl
     └── oldschool.wgsl
 ```
 

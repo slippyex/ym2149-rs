@@ -22,7 +22,7 @@ use bevy::{
         widget::{ImageNode, NodeImageMode},
         IsDefaultUiCamera,
     },
-    window::PrimaryWindow,
+    window::{MonitorSelection, PrimaryWindow, WindowMode},
 };
 use bevy_mesh::Mesh2d;
 #[cfg(feature = "visualization")]
@@ -488,6 +488,7 @@ fn main() {
                 sync_render_target_image,
                 spawn_surface_when_ready,
                 update_startup_fade,
+                toggle_fullscreen,
                 toggle_crt,
                 exit_on_escape,
                 handle_push_events,
@@ -869,6 +870,27 @@ fn spawn_surface_when_ready(
     commands.insert_resource(CrtMaterialHandle(crt_material_handle));
 
     pending.spawned = true;
+}
+
+fn toggle_fullscreen(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    if !keys.just_pressed(KeyCode::KeyF) {
+        return;
+    }
+
+    if let Ok(mut window) = windows.single_mut() {
+        let is_fullscreen = matches!(
+            window.mode,
+            WindowMode::BorderlessFullscreen(_) | WindowMode::Fullscreen(_, _)
+        );
+        window.mode = if is_fullscreen {
+            WindowMode::Windowed
+        } else {
+            WindowMode::BorderlessFullscreen(MonitorSelection::Current)
+        };
+    }
 }
 
 fn toggle_crt(keys: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
