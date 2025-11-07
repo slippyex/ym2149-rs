@@ -8,8 +8,8 @@
 //! Uses mutex-based synchronization with atomic position tracking for visibility.
 
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Ring buffer for streaming audio samples
 ///

@@ -4,7 +4,7 @@
 //! format detection and transparent LHA decompression support.
 
 use crate::ym_parser::FormatParser;
-use crate::{compression, ym_parser, Result};
+use crate::{Result, compression, ym_parser};
 use std::fs;
 
 /// Loads YM files from disk

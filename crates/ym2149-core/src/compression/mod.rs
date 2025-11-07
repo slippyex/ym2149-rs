@@ -148,15 +148,14 @@ fn find_lha_signature(data: &[u8]) -> Option<usize> {
 
     for i in 1..=search_limit {
         // Use slice pattern matching for clarity and safety
-        if let Some(window) = data.get(i..i + LHA_SIGNATURE_LENGTH) {
-            if window[0] == b'-'
-                && window[1] == b'l'
-                && window[2] == b'h'
-                && is_valid_compression_level(window[3])
-                && window[4] == b'-'
-            {
-                return Some(i);
-            }
+        if let Some(window) = data.get(i..i + LHA_SIGNATURE_LENGTH)
+            && window[0] == b'-'
+            && window[1] == b'l'
+            && window[2] == b'h'
+            && is_valid_compression_level(window[3])
+            && window[4] == b'-'
+        {
+            return Some(i);
         }
     }
     None

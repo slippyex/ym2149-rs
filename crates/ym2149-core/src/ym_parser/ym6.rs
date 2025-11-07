@@ -434,10 +434,12 @@ mod tests {
         let parser = Ym6Parser;
         let result = parser.parse(&data);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("missing end marker"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("missing end marker")
+        );
     }
 
     #[test]
@@ -456,10 +458,12 @@ mod tests {
         data[12..16].copy_from_slice(&200_000u32.to_be_bytes());
         let result = Ym6Parser::parse_header(&data);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("exceeds reasonable limit"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("exceeds reasonable limit")
+        );
     }
 
     fn create_ym6_with_distinct_values(frame_count: u32, is_interleaved: bool) -> Vec<u8> {

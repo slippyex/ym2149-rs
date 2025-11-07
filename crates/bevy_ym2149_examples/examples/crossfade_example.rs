@@ -79,8 +79,7 @@ fn setup_scene(
 
     info!(
         "Crossfade demo ready – every {:.0} seconds a new deck fades in across a {:.0}-second window",
-        CROSSFADE_SECONDS,
-        CROSSFADE_SECONDS
+        CROSSFADE_SECONDS, CROSSFADE_SECONDS
     );
 }
 

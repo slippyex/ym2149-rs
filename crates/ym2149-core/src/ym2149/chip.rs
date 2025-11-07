@@ -160,18 +160,18 @@ impl Ym2149 {
         };
         chip.recompute_all_steps();
         chip.update_mixer_masks();
-        if let Ok(path) = env::var("YM2149_TRACE") {
-            if let Ok(file) = File::create(path) {
-                let mut writer = BufWriter::new(file);
-                let _ = writeln!(
-                    writer,
-                    "sample,volA,volB,volC,volE,env_idx,env_phase,env_pos,noise,vol,in,out"
-                );
-                chip.trace = Some(TraceState {
-                    writer,
-                    sample_index: 0,
-                });
-            }
+        if let Ok(path) = env::var("YM2149_TRACE")
+            && let Ok(file) = File::create(path)
+        {
+            let mut writer = BufWriter::new(file);
+            let _ = writeln!(
+                writer,
+                "sample,volA,volB,volC,volE,env_idx,env_phase,env_pos,noise,vol,in,out"
+            );
+            chip.trace = Some(TraceState {
+                writer,
+                sample_index: 0,
+            });
         }
         chip
     }
@@ -503,11 +503,7 @@ impl Ym2149 {
     fn rnd_compute(&mut self) -> u32 {
         let r_bit = (self.rnd_rack & 1) ^ ((self.rnd_rack >> 2) & 1);
         self.rnd_rack = (self.rnd_rack >> 1) | (r_bit << 16);
-        if r_bit != 0 {
-            0
-        } else {
-            0xffff
-        }
+        if r_bit != 0 { 0 } else { 0xffff }
     }
 }
 

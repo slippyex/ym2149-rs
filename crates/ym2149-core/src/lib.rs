@@ -179,7 +179,7 @@ pub use ym2149::Ym2149;
 pub use compression::decompress_if_needed;
 pub use mfp::Mfp;
 #[cfg(feature = "replayer")]
-pub use replayer::{load_song, LoadSummary, Player, Ym6Info, Ym6Player, YmFileFormat};
+pub use replayer::{LoadSummary, Player, Ym6Info, Ym6Player, YmFileFormat, load_song};
 #[cfg(feature = "softsynth")]
 pub use softsynth::SoftPlayer;
 #[cfg(feature = "streaming")]
@@ -187,4 +187,4 @@ pub use streaming::{AudioDevice, RealtimePlayer, RingBuffer, StreamConfig};
 #[cfg(feature = "visualization")]
 pub use visualization::create_volume_bar;
 #[cfg(feature = "ym-format")]
-pub use ym_parser::effects::{decode_effects_ym5, EffectCommand, Ym6EffectDecoder};
+pub use ym_parser::effects::{EffectCommand, Ym6EffectDecoder, decode_effects_ym5};

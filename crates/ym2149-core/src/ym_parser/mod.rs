@@ -11,7 +11,7 @@ pub mod raw;
 pub mod ym;
 pub mod ym6;
 
-pub use effects::{decode_effects_ym5, EffectCommand, Ym6EffectDecoder, MFP_CLOCK};
+pub use effects::{EffectCommand, MFP_CLOCK, Ym6EffectDecoder, decode_effects_ym5};
 pub use raw::RawParser;
 pub use ym::{YmMetadata, YmParser};
 pub use ym6::Ym6Parser;

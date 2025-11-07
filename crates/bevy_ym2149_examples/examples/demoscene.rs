@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use bevy::{
     app::AppExit,
     asset::{AssetPlugin, RenderAssetUsages},
-    camera::{visibility::RenderLayers, ClearColorConfig, RenderTarget},
+    camera::{ClearColorConfig, RenderTarget, visibility::RenderLayers},
     log::debug,
     math::primitives::Rectangle,
     prelude::*,
@@ -19,8 +19,8 @@ use bevy::{
     shader::{Shader, ShaderRef},
     sprite_render::{Material2d, Material2dPlugin, MeshMaterial2d},
     ui::{
-        widget::{ImageNode, NodeImageMode},
         IsDefaultUiCamera,
+        widget::{ImageNode, NodeImageMode},
     },
     window::{MonitorSelection, PrimaryWindow, WindowMode, WindowResized},
 };
@@ -230,7 +230,7 @@ const BITMAP_FONT_LAYOUT: [&str; 3] = [
 ];
 
 const PLAY_MUSIC: bool = true;
-const YM_TRACK_PATH: &str = "music/ND-Toxygene.ym";
+const YM_TRACK_PATH: &str = "music/Prelude.ym";
 
 #[derive(Resource)]
 struct BitmapFont {
@@ -955,11 +955,7 @@ fn update_uniforms(
     };
 
     let crt_enabled_flag = if let Some(crt_state) = crt.as_ref() {
-        if crt_state.enabled {
-            1
-        } else {
-            0
-        }
+        if crt_state.enabled { 1 } else { 0 }
     } else {
         1
     };

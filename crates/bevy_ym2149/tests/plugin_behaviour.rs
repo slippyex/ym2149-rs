@@ -3,10 +3,9 @@ use bevy::diagnostic::{DiagnosticsPlugin, DiagnosticsStore};
 use bevy::prelude::Messages;
 use bevy::prelude::*;
 use bevy_ym2149::{
-    advance_playlist_players, process_music_state_requests, update_diagnostics,
-    MusicStateDefinition, MusicStateGraph, MusicStateRequest, PlaylistMode, PlaylistSource,
-    TrackFinished, Ym2149Playback, Ym2149Playlist, Ym2149PlaylistPlayer, Ym2149PluginConfig,
-    FRAME_POSITION_PATH,
+    FRAME_POSITION_PATH, MusicStateDefinition, MusicStateGraph, MusicStateRequest, PlaylistMode,
+    PlaylistSource, TrackFinished, Ym2149Playback, Ym2149Playlist, Ym2149PlaylistPlayer,
+    Ym2149PluginConfig, advance_playlist_players, process_music_state_requests, update_diagnostics,
 };
 
 #[test]

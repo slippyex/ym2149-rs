@@ -1,7 +1,7 @@
 use crate::audio_source::Ym2149AudioSource;
 use crate::events::{PlaylistAdvanceRequest, TrackFinished};
-use crate::playback::{CrossfadeRequest, TrackSource, Ym2149Playback, YM2149_SAMPLE_RATE_F32};
-use bevy::asset::{io::Reader, AssetLoader, LoadContext};
+use crate::playback::{CrossfadeRequest, TrackSource, YM2149_SAMPLE_RATE_F32, Ym2149Playback};
+use bevy::asset::{AssetLoader, LoadContext, io::Reader};
 use bevy::prelude::*;
 use bevy::reflect::TypePath;
 use serde::Deserialize;
@@ -181,35 +181,34 @@ pub fn advance_playlist_players(
     asset_server: Res<AssetServer>,
 ) {
     for event in finished.read() {
-        if let Ok((mut playback, mut controller)) = players.get_mut(event.entity) {
-            if let Some(playlist_asset) = playlists.get(&controller.playlist) {
-                if playlist_asset.is_empty() {
-                    continue;
-                }
+        if let Ok((mut playback, mut controller)) = players.get_mut(event.entity)
+            && let Some(playlist_asset) = playlists.get(&controller.playlist)
+        {
+            if playlist_asset.is_empty() {
+                continue;
+            }
 
-                if controller.crossfade.is_some()
-                    && (controller.crossfade_stage.is_active()
-                        || playback.is_crossfade_pending()
-                        || playback.has_pending_playlist_index())
-                {
-                    continue;
-                }
+            if controller.crossfade.is_some()
+                && (controller.crossfade_stage.is_active()
+                    || playback.is_crossfade_pending()
+                    || playback.has_pending_playlist_index())
+            {
+                continue;
+            }
 
-                let Some(next_index) =
-                    next_playlist_index(controller.current_index, playlist_asset)
-                else {
-                    continue;
-                };
+            let Some(next_index) = next_playlist_index(controller.current_index, playlist_asset)
+            else {
+                continue;
+            };
 
-                controller.current_index = next_index;
-                controller.crossfade_stage = CrossfadeStage::Idle;
-                playback.clear_crossfade_request();
+            controller.current_index = next_index;
+            controller.crossfade_stage = CrossfadeStage::Idle;
+            playback.clear_crossfade_request();
 
-                if let Some(entry) = playlist_asset.tracks.get(controller.current_index) {
-                    apply_playlist_entry(entry, &mut playback, &asset_server);
-                    playback.restart();
-                    playback.play();
-                }
+            if let Some(entry) = playlist_asset.tracks.get(controller.current_index) {
+                apply_playlist_entry(entry, &mut playback, &asset_server);
+                playback.restart();
+                playback.play();
             }
         }
     }
@@ -301,10 +300,10 @@ pub fn drive_crossfade_playlists(
             controller.crossfade_stage = CrossfadeStage::Idle;
         }
 
-        if let CrossfadeStage::Loading { target_index } = controller.crossfade_stage {
-            if playback.is_crossfade_active() {
-                controller.crossfade_stage = CrossfadeStage::Active { target_index };
-            }
+        if let CrossfadeStage::Loading { target_index } = controller.crossfade_stage
+            && playback.is_crossfade_active()
+        {
+            controller.crossfade_stage = CrossfadeStage::Active { target_index };
         }
 
         let Some(playlist_asset) = playlists.get(&controller.playlist) else {

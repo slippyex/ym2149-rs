@@ -19,7 +19,7 @@ use bevy_ym2149::events::{AudioBridgeRequest, MusicStateRequest, PlaylistAdvance
 use bevy_ym2149::music_state::{MusicStateDefinition, MusicStateGraph};
 use bevy_ym2149::playlist::{PlaylistMode, PlaylistSource, Ym2149Playlist, Ym2149PlaylistPlayer};
 use bevy_ym2149::{
-    AudioBridgeTargets, Ym2149Playback, Ym2149Plugin, Ym2149Settings, FRAME_POSITION_PATH,
+    AudioBridgeTargets, FRAME_POSITION_PATH, Ym2149Playback, Ym2149Plugin, Ym2149Settings,
 };
 use bevy_ym2149_examples::ASSET_BASE;
 

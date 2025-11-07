@@ -6,8 +6,8 @@ use crate::helpers::{
 use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
 use bevy::prelude::*;
 use bevy::ui::ComputedNode;
-use bevy_ym2149::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 use bevy_ym2149::OscilloscopeBuffer;
+use bevy_ym2149::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 use std::array::from_fn;
 use std::f32::consts::PI;
 
@@ -77,64 +77,64 @@ pub fn update_detailed_channel_display(
         Query<(&ChannelFreqLabel, &mut Text)>,
     )>,
 ) {
-    if let Some(playback) = playbacks.iter().next() {
-        if let Some(player) = playback.player_handle() {
-            let player_locked = player.lock();
-            let chip = player_locked.get_chip();
-            let regs = chip.dump_registers();
+    if let Some(playback) = playbacks.iter().next()
+        && let Some(player) = playback.player_handle()
+    {
+        let player_locked = player.lock();
+        let chip = player_locked.get_chip();
+        let regs = chip.dump_registers();
 
-            let period_a = get_channel_period(regs[0], regs[1]);
-            let period_b = get_channel_period(regs[2], regs[3]);
-            let period_c = get_channel_period(regs[4], regs[5]);
+        let period_a = get_channel_period(regs[0], regs[1]);
+        let period_b = get_channel_period(regs[2], regs[3]);
+        let period_c = get_channel_period(regs[4], regs[5]);
 
-            let (freq_a, note_a) = if let Some(period) = period_a {
-                let freq = period_to_frequency(period);
-                let note = frequency_to_note(freq);
-                (Some(freq), note)
-            } else {
-                (None, None)
-            };
+        let (freq_a, note_a) = if let Some(period) = period_a {
+            let freq = period_to_frequency(period);
+            let note = frequency_to_note(freq);
+            (Some(freq), note)
+        } else {
+            (None, None)
+        };
 
-            let (freq_b, note_b) = if let Some(period) = period_b {
-                let freq = period_to_frequency(period);
-                let note = frequency_to_note(freq);
-                (Some(freq), note)
-            } else {
-                (None, None)
-            };
+        let (freq_b, note_b) = if let Some(period) = period_b {
+            let freq = period_to_frequency(period);
+            let note = frequency_to_note(freq);
+            (Some(freq), note)
+        } else {
+            (None, None)
+        };
 
-            let (freq_c, note_c) = if let Some(period) = period_c {
-                let freq = period_to_frequency(period);
-                let note = frequency_to_note(freq);
-                (Some(freq), note)
-            } else {
-                (None, None)
-            };
+        let (freq_c, note_c) = if let Some(period) = period_c {
+            let freq = period_to_frequency(period);
+            let note = frequency_to_note(freq);
+            (Some(freq), note)
+        } else {
+            (None, None)
+        };
 
-            for mut text in label_sets.p0().iter_mut() {
-                text.0.clear();
-            }
+        for mut text in label_sets.p0().iter_mut() {
+            text.0.clear();
+        }
 
-            let note_strings = [
-                format_note_label(note_a.as_deref()),
-                format_note_label(note_b.as_deref()),
-                format_note_label(note_c.as_deref()),
-            ];
-            let freq_strings = [
-                format_freq_label(freq_a),
-                format_freq_label(freq_b),
-                format_freq_label(freq_c),
-            ];
+        let note_strings = [
+            format_note_label(note_a.as_deref()),
+            format_note_label(note_b.as_deref()),
+            format_note_label(note_c.as_deref()),
+        ];
+        let freq_strings = [
+            format_freq_label(freq_a),
+            format_freq_label(freq_b),
+            format_freq_label(freq_c),
+        ];
 
-            for (label, mut text) in label_sets.p1().iter_mut() {
-                let idx = label.channel.min(2);
-                text.0 = note_strings[idx].clone();
-            }
+        for (label, mut text) in label_sets.p1().iter_mut() {
+            let idx = label.channel.min(2);
+            text.0 = note_strings[idx].clone();
+        }
 
-            for (label, mut text) in label_sets.p2().iter_mut() {
-                let idx = label.channel.min(2);
-                text.0 = freq_strings[idx].clone();
-            }
+        for (label, mut text) in label_sets.p2().iter_mut() {
+            let idx = label.channel.min(2);
+            text.0 = freq_strings[idx].clone();
         }
     }
 }
@@ -151,13 +151,13 @@ pub fn update_song_progress(
 ) {
     let mut ratio = 0.0f32;
     let looping = settings.loop_enabled;
-    if let Some(playback) = playbacks.iter().next() {
-        if let Some(player) = playback.player_handle() {
-            let player_locked = player.lock();
-            let total_frames = player_locked.frame_count().max(1);
-            let current = playback.frame_position().min(total_frames as u32) as f32;
-            ratio = (current / total_frames as f32).clamp(0.0, 1.0);
-        }
+    if let Some(playback) = playbacks.iter().next()
+        && let Some(player) = playback.player_handle()
+    {
+        let player_locked = player.lock();
+        let total_frames = player_locked.frame_count().max(1);
+        let current = playback.frame_position().min(total_frames as u32) as f32;
+        ratio = (current / total_frames as f32).clamp(0.0, 1.0);
     }
 
     let percent = (ratio * 100.0).round().clamp(0.0, 100.0);
@@ -278,8 +278,8 @@ pub fn update_oscilloscope(
     let width_limit = (canvas_width - 2.0).max(0.0);
 
     let mut spectrum = [[0.0f32; 16]; 3];
-    for ch in 0..3 {
-        for bin in 0..16 {
+    for (ch, channel_spectrum) in spectrum.iter_mut().enumerate() {
+        for (bin, magnitude_slot) in channel_spectrum.iter_mut().enumerate() {
             let freq = (bin + 1) as f32;
             let mut sum_sin = 0.0;
             let mut sum_cos = 0.0;
@@ -290,7 +290,7 @@ pub fn update_oscilloscope(
             }
             let magnitude =
                 (sum_cos * sum_cos + sum_sin * sum_sin).sqrt() / sample_count_f32.max(1.0);
-            spectrum[ch][bin] = magnitude;
+            *magnitude_slot = magnitude;
         }
     }
 

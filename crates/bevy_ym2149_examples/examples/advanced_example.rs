@@ -10,13 +10,13 @@ use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{
-    audio_bridge::{AudioBridgeMix, AudioBridgeMixes},
     AudioBridgeRequest, AudioBridgeTargets, Ym2149Playback, Ym2149Plugin, Ym2149Settings,
+    audio_bridge::{AudioBridgeMix, AudioBridgeMixes},
 };
 use bevy_ym2149_examples::ASSET_BASE;
 use bevy_ym2149_viz::{
-    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
-    create_status_display, Ym2149VizPlugin,
+    Ym2149VizPlugin, create_channel_visualization, create_detailed_channel_display,
+    create_oscilloscope, create_status_display,
 };
 
 #[derive(Resource)]

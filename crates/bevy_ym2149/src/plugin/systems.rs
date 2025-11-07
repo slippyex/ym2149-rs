@@ -4,14 +4,14 @@ use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
 use crate::events::{ChannelSnapshot, TrackFinished, TrackStarted};
 use crate::oscilloscope::OscilloscopeBuffer;
 use crate::playback::{
-    ActiveCrossfade, PlaybackMetrics, PlaybackState, TrackSource, Ym2149Playback, Ym2149Settings,
-    YM2149_SAMPLE_RATE, YM2149_SAMPLE_RATE_F32,
+    ActiveCrossfade, PlaybackMetrics, PlaybackState, TrackSource, YM2149_SAMPLE_RATE,
+    YM2149_SAMPLE_RATE_F32, Ym2149Playback, Ym2149Settings,
 };
 use crate::plugin::Ym2149PluginConfig;
 use bevy::prelude::*;
-use bevy::tasks::{block_on, poll_once, IoTaskPool, Task};
+use bevy::tasks::{IoTaskPool, Task, block_on, poll_once};
 use parking_lot::Mutex;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::sync::Arc;
 use ym2149::replayer::PlaybackController;
 
@@ -208,8 +208,9 @@ fn finalize_crossfade(
     };
 
     if let Some(old_player) = playback.player.take() {
-        if let Err(err) = old_player.lock().stop() {
-            error!("Failed to stop outgoing deck: {}", err);
+        match old_player.lock().stop() {
+            Ok(()) => {}
+            Err(err) => error!("Failed to stop outgoing deck: {}", err),
         }
     }
 
@@ -277,10 +278,10 @@ pub(super) fn initialize_playback(
             playback.song_author = load.author;
             playback.metrics = Some(load.metrics);
 
-            if playback.state == PlaybackState::Playing {
-                if let Err(e) = load.player.play() {
-                    error!("Failed to start player: {}", e);
-                }
+            if playback.state == PlaybackState::Playing
+                && let Err(e) = load.player.play()
+            {
+                error!("Failed to start player: {}", e);
             }
 
             playback.player = Some(Arc::new(Mutex::new(load.player)));
@@ -363,10 +364,10 @@ pub(super) fn update_playback(
                     if let Err(err) = player.play() {
                         error!("Failed to resume YM playback: {}", err);
                     }
-                    if let Some(cf) = crossfade_player.as_mut() {
-                        if let Err(err) = cf.play() {
-                            error!("Failed to resume crossfade deck: {}", err);
-                        }
+                    if let Some(cf) = crossfade_player.as_mut()
+                        && let Err(err) = cf.play()
+                    {
+                        error!("Failed to resume crossfade deck: {}", err);
                     }
                     if let Some(device) = &playback.audio_device {
                         device.resume();
@@ -379,10 +380,10 @@ pub(super) fn update_playback(
                     if let Err(err) = player.pause() {
                         error!("Failed to pause YM playback: {}", err);
                     }
-                    if let Some(cf) = crossfade_player.as_mut() {
-                        if let Err(err) = cf.pause() {
-                            error!("Failed to pause crossfade deck: {}", err);
-                        }
+                    if let Some(cf) = crossfade_player.as_mut()
+                        && let Err(err) = cf.pause()
+                    {
+                        error!("Failed to pause crossfade deck: {}", err);
                     }
                     if let Some(device) = &playback.audio_device {
                         device.pause();
@@ -392,10 +393,10 @@ pub(super) fn update_playback(
                     if let Err(err) = player.pause() {
                         error!("Failed to stop YM playback: {}", err);
                     }
-                    if let Some(cf) = crossfade_player.as_mut() {
-                        if let Err(err) = cf.pause() {
-                            error!("Failed to stop crossfade deck: {}", err);
-                        }
+                    if let Some(cf) = crossfade_player.as_mut()
+                        && let Err(err) = cf.pause()
+                    {
+                        error!("Failed to stop crossfade deck: {}", err);
                     }
                     if let Some(device) = &playback.audio_device {
                         device.pause();
@@ -407,10 +408,10 @@ pub(super) fn update_playback(
                     if let Some(device) = &playback.audio_device {
                         device.pause();
                     }
-                    if let Some(cf) = crossfade_player.as_mut() {
-                        if let Err(err) = cf.pause() {
-                            error!("Failed to pause crossfade deck: {}", err);
-                        }
+                    if let Some(cf) = crossfade_player.as_mut()
+                        && let Err(err) = cf.pause()
+                    {
+                        error!("Failed to pause crossfade deck: {}", err);
                     }
                     if config.channel_events && !entry.emitted_finished {
                         finished_events.write(TrackFinished { entity });
@@ -485,10 +486,10 @@ pub(super) fn update_playback(
                 }
 
                 let mut mixed = sample * primary_mix;
-                if secondary_mix > 0.0 {
-                    if let Some(secondary) = crossfade_player.as_mut() {
-                        mixed += secondary.generate_sample() * secondary_mix;
-                    }
+                if secondary_mix > 0.0
+                    && let Some(secondary) = crossfade_player.as_mut()
+                {
+                    mixed += secondary.generate_sample() * secondary_mix;
                 }
 
                 let scaled = mixed * gain;
@@ -496,10 +497,8 @@ pub(super) fn update_playback(
                 stereo_samples.push(scaled * right_gain);
             }
 
-            if bridging_active {
-                if let Some(buffers) = bridge_buffers.as_mut() {
-                    buffers.0.insert(entity, stereo_samples.clone());
-                }
+            if bridging_active && let Some(buffers) = bridge_buffers.as_mut() {
+                buffers.0.insert(entity, stereo_samples.clone());
             }
 
             if let Some(device) = &playback.audio_device {
@@ -599,11 +598,7 @@ pub(super) fn update_playback(
 
 fn channel_period(lo: u8, hi: u8) -> Option<u16> {
     let period = (((hi as u16) & 0x0F) << 8) | lo as u16;
-    if period == 0 {
-        None
-    } else {
-        Some(period)
-    }
+    if period == 0 { None } else { Some(period) }
 }
 
 fn period_to_frequency(period: u16) -> f32 {

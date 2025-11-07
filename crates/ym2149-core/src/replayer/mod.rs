@@ -12,7 +12,7 @@ pub mod ym_player;
 pub use cycle_counter::CycleCounter;
 pub use effects_manager::EffectsManager;
 pub use vbl_sync::VblSync;
-pub use ym_player::{load_song, LoadSummary, Player, Ym6Info, Ym6Player, YmFileFormat};
+pub use ym_player::{LoadSummary, Player, Ym6Info, Ym6Player, YmFileFormat, load_song};
 
 use crate::Result;
 

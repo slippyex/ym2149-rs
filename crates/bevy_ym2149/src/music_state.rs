@@ -1,6 +1,6 @@
 use crate::events::MusicStateRequest;
 use crate::playback::Ym2149Playback;
-use crate::playlist::{apply_playlist_entry, Ym2149Playlist, Ym2149PlaylistPlayer};
+use crate::playlist::{Ym2149Playlist, Ym2149PlaylistPlayer, apply_playlist_entry};
 use bevy::prelude::*;
 use std::collections::HashMap;
 

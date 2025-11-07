@@ -5,11 +5,7 @@ pub(crate) const NOTE_NAMES: [&str; 12] = [
 
 pub(crate) fn get_channel_period(lo: u8, hi: u8) -> Option<u16> {
     let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
-    if period == 0 {
-        None
-    } else {
-        Some(period)
-    }
+    if period == 0 { None } else { Some(period) }
 }
 
 pub(crate) fn period_to_frequency(period: u16) -> f32 {

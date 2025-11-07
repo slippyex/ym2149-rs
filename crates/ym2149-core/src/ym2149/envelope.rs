@@ -228,11 +228,12 @@ impl EnvelopeLookup {
 
                 // Interpolate 32 values using top 5 bits of position accumulator
                 // Step 0 = start_val, Step 31 = end_val
-                for step in 0..32 {
+                let phase_slice = &mut data[pattern_idx][phase];
+                for (step, slot) in phase_slice.iter_mut().enumerate() {
                     // Linear interpolation from start to end across 32 steps
                     let progress = (step as f32) / 31.0;
                     let amplitude = start_val + (end_val - start_val) * progress;
-                    data[pattern_idx][phase][step] = amplitude.clamp(0.0, 1.0);
+                    *slot = amplitude.clamp(0.0, 1.0);
                 }
             }
         }

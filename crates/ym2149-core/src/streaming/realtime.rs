@@ -3,7 +3,7 @@
 //! Provides a simple streaming interface for real-time sample playback.
 //! In a full implementation, this would use CPAL for audio device output.
 
-use super::{RingBuffer, StreamConfig, BUFFER_BACKOFF_MICROS};
+use super::{BUFFER_BACKOFF_MICROS, RingBuffer, StreamConfig};
 use crate::replayer::PlaybackState;
 use parking_lot::Mutex;
 use std::sync::Arc;

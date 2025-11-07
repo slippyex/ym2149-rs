@@ -3,14 +3,14 @@
 //! Plays back YM2-YM6 format chiptune files with proper VBL synchronization.
 
 use super::effects_manager::EffectsManager;
-use super::madmax_digidrums::{MADMAX_SAMPLES, MADMAX_SAMPLE_RATE_BASE};
+use super::madmax_digidrums::{MADMAX_SAMPLE_RATE_BASE, MADMAX_SAMPLES};
 use super::{PlaybackController, PlaybackState, VblSync};
 use crate::ym_parser::FormatParser;
 use crate::ym_parser::{
-    effects::{decode_effects_ym5, EffectCommand, Ym6EffectDecoder},
     Ym6Parser, YmParser,
+    effects::{EffectCommand, Ym6EffectDecoder, decode_effects_ym5},
 };
-use crate::{compression, Result, Ym2149};
+use crate::{Result, Ym2149, compression};
 use std::fmt;
 
 /// Supported YM file formats handled by the loader.
@@ -1156,18 +1156,10 @@ impl Ym6Player {
         }
 
         if loop_frame == 0 {
-            if treat_zero_as_loop {
-                Some(0)
-            } else {
-                None
-            }
+            if treat_zero_as_loop { Some(0) } else { None }
         } else {
             let idx = loop_frame as usize;
-            if idx < frame_len {
-                Some(idx)
-            } else {
-                None
-            }
+            if idx < frame_len { Some(idx) } else { None }
         }
     }
 
@@ -1982,10 +1974,12 @@ mod tests {
         // Should fail with zero frequency
         let result = player.enable_sync_buzzer(0);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("frequency must be > 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("frequency must be > 0")
+        );
     }
 
     #[test]

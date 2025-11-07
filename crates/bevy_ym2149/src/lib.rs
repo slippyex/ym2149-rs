@@ -112,19 +112,19 @@ pub use audio_bridge::{
 };
 pub use audio_sink::{AudioSink, BoxedAudioSink};
 pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
-pub use diagnostics::{update_diagnostics, BUFFER_FILL_PATH, FRAME_POSITION_PATH};
+pub use diagnostics::{BUFFER_FILL_PATH, FRAME_POSITION_PATH, update_diagnostics};
 pub use error::{BevyYm2149Error, Result};
 pub use events::{
     AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, TrackFinished,
     TrackStarted,
 };
-pub use music_state::{process_music_state_requests, MusicStateDefinition, MusicStateGraph};
+pub use music_state::{MusicStateDefinition, MusicStateGraph, process_music_state_requests};
 pub use oscilloscope::OscilloscopeBuffer;
 pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 pub use playlist::{
-    advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
-    register_playlist_assets, CrossfadeConfig, CrossfadeTrigger, CrossfadeWindow, PlaylistMode,
-    PlaylistSource, Ym2149Playlist, Ym2149PlaylistLoader, Ym2149PlaylistPlayer,
+    CrossfadeConfig, CrossfadeTrigger, CrossfadeWindow, PlaylistMode, PlaylistSource,
+    Ym2149Playlist, Ym2149PlaylistLoader, Ym2149PlaylistPlayer, advance_playlist_players,
+    drive_crossfade_playlists, handle_playlist_requests, register_playlist_assets,
 };
 pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
 pub use spatial::{Ym2149Listener, Ym2149SpatialAudio};

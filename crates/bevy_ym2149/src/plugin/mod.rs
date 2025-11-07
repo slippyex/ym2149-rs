@@ -10,8 +10,8 @@ pub use config::Ym2149PluginConfig;
 
 use self::systems::{initialize_playback, update_playback};
 use crate::audio_bridge::{
-    drive_bridge_audio_buffers, handle_bridge_requests, AudioBridgeBuffers, AudioBridgeMixes,
-    AudioBridgeTargets, BridgeAudioDevice, BridgeAudioSinks,
+    AudioBridgeBuffers, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice, BridgeAudioSinks,
+    drive_bridge_audio_buffers, handle_bridge_requests,
 };
 use crate::audio_source::{Ym2149AudioSource, Ym2149Loader};
 use crate::diagnostics::{register as register_diagnostics, update_diagnostics};
@@ -19,11 +19,11 @@ use crate::events::{
     AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, TrackFinished,
     TrackStarted,
 };
-use crate::music_state::{process_music_state_requests, MusicStateGraph};
+use crate::music_state::{MusicStateGraph, process_music_state_requests};
 use crate::playback::Ym2149Settings;
 use crate::playlist::{
-    advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
-    register_playlist_assets, Ym2149Playlist,
+    Ym2149Playlist, advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
+    register_playlist_assets,
 };
 use crate::spatial::update_spatial_audio;
 use bevy::prelude::*;

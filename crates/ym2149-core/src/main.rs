@@ -11,15 +11,15 @@ mod cli {
     use std::fmt;
     use std::fs;
     use std::io::{self, Read, Write};
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Instant;
 
-    use ym2149::replayer::{load_song, PlaybackController, Player, Ym6Player};
+    use ym2149::replayer::{PlaybackController, Player, Ym6Player, load_song};
     #[cfg(feature = "softsynth")]
     use ym2149::softsynth::SoftPlayer;
     use ym2149::streaming::{
-        StreamConfig, BUFFER_BACKOFF_MICROS, DEFAULT_SAMPLE_RATE, VISUALIZATION_UPDATE_MS,
+        BUFFER_BACKOFF_MICROS, DEFAULT_SAMPLE_RATE, StreamConfig, VISUALIZATION_UPDATE_MS,
     };
     use ym2149::visualization::{create_channel_status, create_volume_bar};
     use ym2149::{AudioDevice, RealtimePlayer};
@@ -51,11 +51,7 @@ mod cli {
 
     fn channel_period(lo: u8, hi: u8) -> Option<u16> {
         let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
-        if period == 0 {
-            None
-        } else {
-            Some(period)
-        }
+        if period == 0 { None } else { Some(period) }
     }
 
     fn period_to_frequency(period: u16) -> f32 {

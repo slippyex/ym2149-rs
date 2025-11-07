@@ -1,7 +1,7 @@
 use crate::events::AudioBridgeRequest;
 use bevy::prelude::*;
-use rodio::{buffer::SamplesBuffer, OutputStream, OutputStreamHandle, Sink};
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use rodio::{OutputStream, OutputStreamHandle, Sink, buffer::SamplesBuffer};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::f32::consts::FRAC_PI_2;
 
 const BRIDGE_SAMPLE_RATE: u32 = 44_100;
@@ -254,25 +254,24 @@ pub fn drive_bridge_audio_buffers(
             },
         };
 
-        if let Some(mut samples) = buffers.0.remove(&entity) {
-            if !samples.is_empty() {
-                let mix = mixes.get(entity);
-                let (left_gain, right_gain) = mix.gains();
-                if (left_gain - 1.0).abs() > f32::EPSILON || (right_gain - 1.0).abs() > f32::EPSILON
-                {
-                    for chunk in samples.chunks_mut(2) {
-                        if let Some(left) = chunk.get_mut(0) {
-                            *left *= left_gain;
-                        }
-                        if let Some(right) = chunk.get_mut(1) {
-                            *right *= right_gain;
-                        }
+        if let Some(mut samples) = buffers.0.remove(&entity)
+            && !samples.is_empty()
+        {
+            let mix = mixes.get(entity);
+            let (left_gain, right_gain) = mix.gains();
+            if (left_gain - 1.0).abs() > f32::EPSILON || (right_gain - 1.0).abs() > f32::EPSILON {
+                for chunk in samples.chunks_mut(2) {
+                    if let Some(left) = chunk.get_mut(0) {
+                        *left *= left_gain;
+                    }
+                    if let Some(right) = chunk.get_mut(1) {
+                        *right *= right_gain;
                     }
                 }
-
-                let source = SamplesBuffer::new(2u16, BRIDGE_SAMPLE_RATE, samples);
-                sink.append(source);
             }
+
+            let source = SamplesBuffer::new(2u16, BRIDGE_SAMPLE_RATE, samples);
+            sink.append(source);
         }
     }
 }

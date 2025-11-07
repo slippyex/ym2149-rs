@@ -5,8 +5,8 @@
 
 use crate::Result;
 use rodio::{OutputStream, Sink, Source};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 /// Audio source that reads from the ring buffer

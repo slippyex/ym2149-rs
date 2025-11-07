@@ -1,7 +1,7 @@
-use crate::replayer::{PlaybackController, PlaybackState, Ym6Info};
-use crate::ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
-use crate::ym_parser::effects::{EffectCommand, Ym6EffectDecoder};
 use crate::Result;
+use crate::replayer::{PlaybackController, PlaybackState, Ym6Info};
+use crate::ym_parser::effects::{EffectCommand, Ym6EffectDecoder};
+use crate::ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
 use std::f32::consts::PI;
 
 const SAMPLE_RATE: f32 = 44_100.0;
@@ -164,7 +164,7 @@ impl SoftVoice {
         // Oscillator: saw + pulse mixture
         // Saw
         let mut saw = (self.phase / PI) - 1.0; // -1..1 over 0..2PI
-                                               // Tanh soft edge for less aliasing
+        // Tanh soft edge for less aliasing
         saw = (saw * 1.5).tanh();
         // Pulse
         let pulse = if (self.phase / (2.0 * PI)) % 1.0 < self.pwm_width {
@@ -482,11 +482,7 @@ impl Default for SoftSynth {
 
 fn channel_period(lo: u8, hi: u8) -> Option<u16> {
     let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
-    if period == 0 {
-        None
-    } else {
-        Some(period)
-    }
+    if period == 0 { None } else { Some(period) }
 }
 
 fn period_to_frequency(period: u16) -> f32 {
@@ -768,12 +764,7 @@ impl SoftPlayer {
         let info = &self.info;
         format!(
             "  Song: {}\n  Author: {}\n  Comment: {}\n  Duration: {:.2}s ({} frames @ {}Hz)\n  Mode: SoftSynth",
-            info.song_name,
-            info.author,
-            info.comment,
-            duration,
-            frame_count,
-            info.frame_rate
+            info.song_name, info.author, info.comment, duration, frame_count, info.frame_rate
         )
     }
 }

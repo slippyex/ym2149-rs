@@ -9,4 +9,4 @@ homepage.workspace = true
 
 [dependencies]
 bevy = { version = "0.17", features = ["bevy_ui"] }
-bevy_ym2149 = { path = "../bevy_ym2149", version = "0.5" }
+bevy_ym2149 = { path = "../bevy_ym2149", version = "0.6" }
