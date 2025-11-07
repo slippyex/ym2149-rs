@@ -144,7 +144,8 @@ pub use events::{
 pub use music_state::{process_music_state_requests, MusicStateDefinition, MusicStateGraph};
 pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 pub use playlist::{
-    advance_playlist_players, handle_playlist_requests, register_playlist_assets, PlaylistMode,
+    advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
+    register_playlist_assets, CrossfadeConfig, CrossfadeTrigger, CrossfadeWindow, PlaylistMode,
     PlaylistSource, Ym2149Playlist, Ym2149PlaylistLoader, Ym2149PlaylistPlayer,
 };
 pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};

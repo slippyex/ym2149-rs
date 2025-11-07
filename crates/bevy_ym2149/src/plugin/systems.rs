@@ -2,7 +2,10 @@ use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
 use crate::audio_sink;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
 use crate::events::{ChannelSnapshot, TrackFinished, TrackStarted};
-use crate::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+use crate::playback::{
+    ActiveCrossfade, PlaybackMetrics, PlaybackState, TrackSource, Ym2149Playback, Ym2149Settings,
+    YM2149_SAMPLE_RATE, YM2149_SAMPLE_RATE_F32,
+};
 use crate::plugin::Ym2149PluginConfig;
 #[cfg(feature = "visualization")]
 use crate::viz_components::OscilloscopeBuffer;
@@ -13,8 +16,6 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use ym2149::replayer::PlaybackController;
 
-pub(crate) const OUTPUT_SAMPLE_RATE: u32 = 44_100;
-const OUTPUT_SAMPLE_RATE_F32: f32 = OUTPUT_SAMPLE_RATE as f32;
 const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
 
 #[derive(Clone, Copy)]
@@ -52,108 +53,266 @@ impl PendingFileRead {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) enum PendingSlot {
+    Primary,
+    Crossfade,
+}
+
+struct LoadedBytes {
+    data: Vec<u8>,
+    metadata: Option<Ym2149Metadata>,
+}
+
+enum SourceLoadResult {
+    Pending,
+    Ready(LoadedBytes),
+    Failed(String),
+}
+
 #[derive(Default)]
 pub(super) struct PlaybackScratch {
     stereo: Vec<f32>,
 }
 
+fn load_track_source(
+    entity: Entity,
+    slot: PendingSlot,
+    source: &TrackSource,
+    pending_reads: &mut HashMap<(Entity, PendingSlot), PendingFileRead>,
+    assets: &Assets<Ym2149AudioSource>,
+) -> SourceLoadResult {
+    match source {
+        TrackSource::Bytes(bytes) => SourceLoadResult::Ready(LoadedBytes {
+            data: bytes.as_ref().clone(),
+            metadata: None,
+        }),
+        TrackSource::File(path) => match pending_reads.entry((entity, slot)) {
+            Entry::Occupied(mut entry) => {
+                if entry.get().path != *path {
+                    entry.insert(PendingFileRead::new(path.clone()));
+                    return SourceLoadResult::Pending;
+                }
+
+                match block_on(poll_once(&mut entry.get_mut().task)) {
+                    Some(Ok(bytes)) => {
+                        pending_reads.remove(&(entity, slot));
+                        SourceLoadResult::Ready(LoadedBytes {
+                            data: bytes,
+                            metadata: None,
+                        })
+                    }
+                    Some(Err(err)) => {
+                        pending_reads.remove(&(entity, slot));
+                        SourceLoadResult::Failed(err)
+                    }
+                    None => SourceLoadResult::Pending,
+                }
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(PendingFileRead::new(path.clone()));
+                SourceLoadResult::Pending
+            }
+        },
+        TrackSource::Asset(handle) => match assets.get(handle) {
+            Some(asset) => SourceLoadResult::Ready(LoadedBytes {
+                data: asset.data.clone(),
+                metadata: Some(asset.metadata.clone()),
+            }),
+            None => SourceLoadResult::Pending,
+        },
+    }
+}
+
+fn current_track_source(playback: &Ym2149Playback) -> Option<TrackSource> {
+    playback
+        .source_bytes()
+        .map(TrackSource::Bytes)
+        .or_else(|| {
+            playback
+                .source_path()
+                .map(|path| TrackSource::File(path.to_owned()))
+        })
+        .or_else(|| playback.source_asset().cloned().map(TrackSource::Asset))
+}
+
+fn process_pending_crossfade(
+    entity: Entity,
+    playback: &mut Ym2149Playback,
+    assets: &Assets<Ym2149AudioSource>,
+    pending_reads: &mut HashMap<(Entity, PendingSlot), PendingFileRead>,
+) {
+    if playback.crossfade.is_some() {
+        return;
+    }
+
+    let Some(request) = playback.pending_crossfade.clone() else {
+        pending_reads.remove(&(entity, PendingSlot::Crossfade));
+        return;
+    };
+
+    let loaded = match load_track_source(
+        entity,
+        PendingSlot::Crossfade,
+        &request.source,
+        pending_reads,
+        assets,
+    ) {
+        SourceLoadResult::Pending => return,
+        SourceLoadResult::Failed(err) => {
+            error!("Failed to load crossfade track: {}", err);
+            playback.clear_crossfade_request();
+            return;
+        }
+        SourceLoadResult::Ready(bytes) => bytes,
+    };
+
+    let mut load = match load_player_from_bytes(loaded.data, loaded.metadata.as_ref()) {
+        Ok(load) => load,
+        Err(err) => {
+            error!("Failed to prepare crossfade deck: {}", err);
+            playback.clear_crossfade_request();
+            return;
+        }
+    };
+
+    if let Err(err) = load.player.play() {
+        error!("Failed to start crossfade playback: {}", err);
+        playback.clear_crossfade_request();
+        return;
+    }
+
+    let duration = request.duration.max(0.001);
+    playback.crossfade = Some(ActiveCrossfade {
+        player: Arc::new(Mutex::new(load.player)),
+        metrics: load.metrics,
+        song_title: load.title,
+        song_author: load.author,
+        elapsed: 0.0,
+        duration,
+        target_index: request.target_index,
+    });
+    playback.clear_crossfade_request();
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finalize_crossfade(
+    entity: Entity,
+    playback: &mut Ym2149Playback,
+    runtime: &mut PlaybackRuntimeState,
+    config: &Ym2149PluginConfig,
+    started_events: &mut MessageWriter<TrackStarted>,
+    finished_events: &mut MessageWriter<TrackFinished>,
+) {
+    let Some(crossfade) = playback.crossfade.take() else {
+        return;
+    };
+
+    if let Some(old_player) = playback.player.take() {
+        if let Err(err) = old_player.lock().stop() {
+            error!("Failed to stop outgoing deck: {}", err);
+        }
+    }
+
+    let new_player = crossfade.player.clone();
+    playback.player = Some(new_player.clone());
+    playback.song_title = crossfade.song_title;
+    playback.song_author = crossfade.song_author;
+    playback.metrics = Some(crossfade.metrics);
+    playback.pending_playlist_index = Some(crossfade.target_index);
+    playback.frame_position = new_player.lock().get_current_frame() as u32;
+
+    runtime.time_since_last_frame = 0.0;
+    runtime.frames_rendered = 0;
+    runtime.emitted_finished = false;
+
+    if config.channel_events {
+        finished_events.write(TrackFinished { entity });
+        started_events.write(TrackStarted { entity });
+    }
+}
+
 pub(super) fn initialize_playback(
     mut playbacks: Query<(Entity, &mut Ym2149Playback)>,
     assets: Res<Assets<Ym2149AudioSource>>,
-    mut pending_reads: Local<HashMap<Entity, PendingFileRead>>,
+    mut pending_reads: Local<HashMap<(Entity, PendingSlot), PendingFileRead>>,
 ) {
     let mut alive = Vec::new();
 
     for (entity, mut playback) in playbacks.iter_mut() {
         alive.push(entity);
 
-        if playback.player.is_some() && !playback.needs_reload {
-            continue;
-        }
+        if playback.player.is_none() || playback.needs_reload {
+            if playback.source_path().is_none() {
+                pending_reads.remove(&(entity, PendingSlot::Primary));
+            }
 
-        if playback.source_path().is_none() {
-            pending_reads.remove(&entity);
-        }
+            let Some(source) = current_track_source(&playback) else {
+                continue;
+            };
 
-        let load_result = if let Some(bytes) = playback.source_bytes() {
-            load_player_from_bytes(bytes.as_ref().clone(), None)
-        } else if let Some(path) = playback.source_path() {
-            match pending_reads.entry(entity) {
-                Entry::Occupied(mut entry) => {
-                    if entry.get().path != path {
-                        entry.insert(PendingFileRead::new(path.to_owned()));
-                        continue;
-                    }
-                    match block_on(poll_once(&mut entry.get_mut().task)) {
-                        Some(Ok(bytes)) => {
-                            pending_reads.remove(&entity);
-                            load_player_from_bytes(bytes, None)
-                        }
-                        Some(Err(err)) => {
-                            error!("{err}");
-                            pending_reads.remove(&entity);
-                            continue;
-                        }
-                        None => continue,
-                    }
-                }
-                Entry::Vacant(vacant) => {
-                    vacant.insert(PendingFileRead::new(path.to_owned()));
+            let loaded = match load_track_source(
+                entity,
+                PendingSlot::Primary,
+                &source,
+                &mut pending_reads,
+                &assets,
+            ) {
+                SourceLoadResult::Pending => continue,
+                SourceLoadResult::Failed(err) => {
+                    error!("{err}");
                     continue;
                 }
+                SourceLoadResult::Ready(bytes) => bytes,
+            };
+
+            let mut load = match load_player_from_bytes(loaded.data, loaded.metadata.as_ref()) {
+                Ok(load) => load,
+                Err(err) => {
+                    error!("Failed to initialize YM2149 player: {}", err);
+                    continue;
+                }
+            };
+
+            playback.song_title = load.title;
+            playback.song_author = load.author;
+            playback.metrics = Some(load.metrics);
+
+            if playback.state == PlaybackState::Playing {
+                if let Err(e) = load.player.play() {
+                    error!("Failed to start player: {}", e);
+                }
             }
-        } else if let Some(handle) = playback.source_asset().cloned() {
-            match assets.get(&handle) {
-                Some(asset) => load_player_from_bytes(asset.data.clone(), Some(&asset.metadata)),
-                None => continue,
-            }
-        } else {
-            continue;
-        };
 
-        let mut load = match load_result {
-            Ok(load) => load,
-            Err(err) => {
-                error!("Failed to initialize YM2149 player: {}", err);
-                continue;
-            }
-        };
+            playback.player = Some(Arc::new(Mutex::new(load.player)));
+            playback.needs_reload = false;
 
-        playback.song_title = load.title;
-        playback.song_author = load.author;
-
-        if playback.state == PlaybackState::Playing {
-            if let Err(e) = load.player.play() {
-                error!("Failed to start player: {}", e);
-            }
-        }
-
-        playback.player = Some(Arc::new(Mutex::new(load.player)));
-        playback.needs_reload = false;
-
-        if playback.audio_device.is_none() {
-            match audio_sink::rodio::RodioAudioSink::new(OUTPUT_SAMPLE_RATE, 2) {
-                Ok(sink) => {
-                    if let Err(e) = sink.start() {
-                        error!("Failed to start audio device: {}", e);
-                    } else {
-                        info!("Audio device started successfully!");
+            if playback.audio_device.is_none() {
+                match audio_sink::rodio::RodioAudioSink::new(YM2149_SAMPLE_RATE, 2) {
+                    Ok(sink) => {
+                        if let Err(e) = sink.start() {
+                            error!("Failed to start audio device: {}", e);
+                        } else {
+                            info!("Audio device started successfully!");
+                        }
+                        playback.audio_device = Some(Arc::new(sink));
                     }
-                    playback.audio_device = Some(Arc::new(sink));
-                }
-                Err(e) => {
-                    error!("Failed to create audio device: {}", e);
+                    Err(e) => {
+                        error!("Failed to create audio device: {}", e);
+                    }
                 }
             }
+
+            info!(
+                "Loaded YM song: {} frames, {} samples/frame",
+                load.metrics.frame_count, load.metrics.samples_per_frame
+            );
         }
 
-        info!(
-            "Loaded YM song: {} frames, {} samples/frame",
-            load.summary.frame_count, load.summary.samples_per_frame
-        );
+        process_pending_crossfade(entity, &mut playback, &assets, &mut pending_reads);
     }
 
-    pending_reads.retain(|entity, _| alive.contains(entity));
+    pending_reads.retain(|(entity, _), _| alive.contains(entity));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -184,6 +343,11 @@ pub(super) fn update_playback(
 
         let entry = runtime_state.entry(entity).or_default();
         let mut player = player_arc.lock();
+        let crossfade_arc = playback
+            .crossfade
+            .as_ref()
+            .map(|state| state.player.clone());
+        let mut crossfade_player = crossfade_arc.as_ref().map(|arc| arc.lock());
 
         let bridging_active = config.bevy_audio_bridge
             && bridge_targets
@@ -200,6 +364,11 @@ pub(super) fn update_playback(
                     if let Err(err) = player.play() {
                         error!("Failed to resume YM playback: {}", err);
                     }
+                    if let Some(cf) = crossfade_player.as_mut() {
+                        if let Err(err) = cf.play() {
+                            error!("Failed to resume crossfade deck: {}", err);
+                        }
+                    }
                     if let Some(device) = &playback.audio_device {
                         device.resume();
                     }
@@ -211,6 +380,11 @@ pub(super) fn update_playback(
                     if let Err(err) = player.pause() {
                         error!("Failed to pause YM playback: {}", err);
                     }
+                    if let Some(cf) = crossfade_player.as_mut() {
+                        if let Err(err) = cf.pause() {
+                            error!("Failed to pause crossfade deck: {}", err);
+                        }
+                    }
                     if let Some(device) = &playback.audio_device {
                         device.pause();
                     }
@@ -218,6 +392,11 @@ pub(super) fn update_playback(
                 PlaybackState::Idle => {
                     if let Err(err) = player.pause() {
                         error!("Failed to stop YM playback: {}", err);
+                    }
+                    if let Some(cf) = crossfade_player.as_mut() {
+                        if let Err(err) = cf.pause() {
+                            error!("Failed to stop crossfade deck: {}", err);
+                        }
                     }
                     if let Some(device) = &playback.audio_device {
                         device.pause();
@@ -228,6 +407,11 @@ pub(super) fn update_playback(
                 PlaybackState::Finished => {
                     if let Some(device) = &playback.audio_device {
                         device.pause();
+                    }
+                    if let Some(cf) = crossfade_player.as_mut() {
+                        if let Err(err) = cf.pause() {
+                            error!("Failed to pause crossfade deck: {}", err);
+                        }
                     }
                     if config.channel_events && !entry.emitted_finished {
                         finished_events.write(TrackFinished { entity });
@@ -250,7 +434,7 @@ pub(super) fn update_playback(
             continue;
         }
 
-        let frame_duration = samples_per_frame as f32 / OUTPUT_SAMPLE_RATE_F32;
+        let frame_duration = samples_per_frame as f32 / YM2149_SAMPLE_RATE_F32;
 
         while entry.time_since_last_frame >= frame_duration {
             entry.time_since_last_frame -= frame_duration;
@@ -265,6 +449,18 @@ pub(super) fn update_playback(
             let gain = (playback.volume * master_volume).clamp(0.0, 1.0);
             let left_gain = playback.left_gain.clamp(0.0, 1.0);
             let right_gain = playback.right_gain.clamp(0.0, 1.0);
+            let (primary_mix, secondary_mix) = playback
+                .crossfade
+                .as_ref()
+                .map(|cf| {
+                    if cf.duration <= f32::EPSILON {
+                        (0.0, 1.0)
+                    } else {
+                        let ratio = (cf.elapsed / cf.duration).clamp(0.0, 1.0);
+                        (1.0 - ratio, ratio)
+                    }
+                })
+                .unwrap_or((1.0, 0.0));
 
             for _ in 0..samples_per_frame {
                 let sample = player.generate_sample();
@@ -290,7 +486,14 @@ pub(super) fn update_playback(
                     buffer.push_sample([ch_a, ch_b, ch_c]);
                 }
 
-                let scaled = sample * gain;
+                let mut mixed = sample * primary_mix;
+                if secondary_mix > 0.0 {
+                    if let Some(secondary) = crossfade_player.as_mut() {
+                        mixed += secondary.generate_sample() * secondary_mix;
+                    }
+                }
+
+                let scaled = mixed * gain;
                 stereo_samples.push(scaled * left_gain);
                 stereo_samples.push(scaled * right_gain);
             }
@@ -329,9 +532,33 @@ pub(super) fn update_playback(
             }
 
             scratch_entry.stereo = stereo_samples;
+
+            if let Some(state) = playback.crossfade.as_mut() {
+                state.elapsed = (state.elapsed + frame_duration).min(state.duration);
+            }
         }
 
         playback.seek(player.get_current_frame() as u32);
+        let crossfade_complete = playback
+            .crossfade
+            .as_ref()
+            .map(|cf| cf.elapsed >= cf.duration)
+            .unwrap_or(false);
+
+        if crossfade_complete {
+            drop(player);
+            drop(crossfade_player);
+            finalize_crossfade(
+                entity,
+                &mut playback,
+                entry,
+                &config,
+                &mut started_events,
+                &mut finished_events,
+            );
+            continue;
+        }
+
         let player_state = player.state();
 
         if player_state != ym2149::replayer::PlaybackState::Playing
@@ -395,7 +622,7 @@ fn channel_frequencies(registers: &[u8; 16]) -> [Option<f32>; 3] {
 
 struct LoadResult {
     player: ym2149::replayer::Ym6Player,
-    summary: ym2149::LoadSummary,
+    metrics: PlaybackMetrics,
     title: String,
     author: String,
 }
@@ -406,6 +633,7 @@ fn load_player_from_bytes(
 ) -> Result<LoadResult, String> {
     let (player, summary) =
         ym2149::load_song(&data).map_err(|e| format!("Failed to load song: {}", e))?;
+    let metrics = PlaybackMetrics::from(&summary);
 
     let (title, author) = if let Some(meta) = metadata {
         (meta.title.clone(), meta.author.clone())
@@ -417,7 +645,7 @@ fn load_player_from_bytes(
 
     Ok(LoadResult {
         player,
-        summary,
+        metrics,
         title,
         author,
     })

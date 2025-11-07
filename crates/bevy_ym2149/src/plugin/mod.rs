@@ -22,7 +22,8 @@ use crate::events::{
 use crate::music_state::{process_music_state_requests, MusicStateGraph};
 use crate::playback::Ym2149Settings;
 use crate::playlist::{
-    advance_playlist_players, handle_playlist_requests, register_playlist_assets, Ym2149Playlist,
+    advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
+    register_playlist_assets, Ym2149Playlist,
 };
 use crate::spatial::update_spatial_audio;
 #[cfg(feature = "visualization")]
@@ -95,8 +96,14 @@ impl Plugin for Ym2149Plugin {
         if self.config.playlists {
             app.init_asset::<Ym2149Playlist>();
             register_playlist_assets(app);
-            app.add_systems(Update, advance_playlist_players);
-            app.add_systems(Update, handle_playlist_requests);
+            app.add_systems(
+                Update,
+                (
+                    drive_crossfade_playlists,
+                    advance_playlist_players,
+                    handle_playlist_requests,
+                ),
+            );
         }
 
         // Optional music state graph.

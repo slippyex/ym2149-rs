@@ -32,10 +32,70 @@
 //! ```
 
 use crate::audio_sink::AudioSink;
+use crate::audio_source::Ym2149AudioSource;
 use bevy::prelude::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use ym2149::replayer::Ym6Player;
+
+/// Fixed output sample rate used by the YM2149 mixer.
+pub const YM2149_SAMPLE_RATE: u32 = 44_100;
+/// Convenience f32 representation of [`YM2149_SAMPLE_RATE`].
+pub const YM2149_SAMPLE_RATE_F32: f32 = YM2149_SAMPLE_RATE as f32;
+
+/// Summary of a loaded track used for progress/duration calculations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PlaybackMetrics {
+    pub frame_count: usize,
+    pub samples_per_frame: u32,
+}
+
+impl PlaybackMetrics {
+    pub fn total_samples(&self) -> usize {
+        self.frame_count
+            .saturating_mul(self.samples_per_frame as usize)
+    }
+
+    pub fn duration_seconds(&self) -> f32 {
+        self.total_samples() as f32 / YM2149_SAMPLE_RATE_F32
+    }
+}
+
+impl From<&ym2149::LoadSummary> for PlaybackMetrics {
+    fn from(summary: &ym2149::LoadSummary) -> Self {
+        Self {
+            frame_count: summary.frame_count,
+            samples_per_frame: summary.samples_per_frame,
+        }
+    }
+}
+
+/// Source descriptor used when queueing a crossfade request.
+#[derive(Clone)]
+pub(crate) enum TrackSource {
+    File(String),
+    Asset(Handle<Ym2149AudioSource>),
+    Bytes(Arc<Vec<u8>>),
+}
+
+/// Pending crossfade to be loaded by the playback systems.
+#[derive(Clone)]
+pub(crate) struct CrossfadeRequest {
+    pub source: TrackSource,
+    pub duration: f32,
+    pub target_index: usize,
+}
+
+/// Active crossfade layer being mixed alongside the primary player.
+pub(crate) struct ActiveCrossfade {
+    pub player: Arc<Mutex<Ym6Player>>,
+    pub metrics: PlaybackMetrics,
+    pub song_title: String,
+    pub song_author: String,
+    pub elapsed: f32,
+    pub duration: f32,
+    pub target_index: usize,
+}
 
 /// Component for managing YM2149 playback on an entity
 ///
@@ -100,6 +160,14 @@ pub struct Ym2149Playback {
     pub song_title: String,
     /// Song author extracted from YM file metadata
     pub song_author: String,
+    /// Summary of the currently loaded song (if available).
+    pub(crate) metrics: Option<PlaybackMetrics>,
+    /// Pending playlist index update once a crossfade completed.
+    pub(crate) pending_playlist_index: Option<usize>,
+    /// Requested crossfade that is waiting for the secondary deck to load.
+    pub(crate) pending_crossfade: Option<CrossfadeRequest>,
+    /// Active crossfade state that mixes the next deck.
+    pub(crate) crossfade: Option<ActiveCrossfade>,
 }
 
 /// The current state of YM2149 playback
@@ -142,6 +210,10 @@ impl Ym2149Playback {
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
         }
     }
 
@@ -161,6 +233,10 @@ impl Ym2149Playback {
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
         }
     }
 
@@ -180,6 +256,10 @@ impl Ym2149Playback {
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
         }
     }
 
@@ -222,6 +302,8 @@ impl Ym2149Playback {
     pub fn stop(&mut self) {
         self.state = PlaybackState::Idle;
         self.frame_position = 0;
+        self.crossfade = None;
+        self.pending_crossfade = None;
     }
 
     /// Restart playback from the beginning
@@ -233,6 +315,8 @@ impl Ym2149Playback {
         self.state = PlaybackState::Idle;
         self.frame_position = 0;
         self.needs_reload = true;
+        self.crossfade = None;
+        self.pending_crossfade = None;
     }
 
     /// Seek to a specific frame
@@ -273,6 +357,10 @@ impl Ym2149Playback {
         self.source_bytes = None;
         self.source_asset = None;
         self.needs_reload = true;
+        self.metrics = None;
+        self.pending_playlist_index = None;
+        self.pending_crossfade = None;
+        self.crossfade = None;
     }
 
     /// Replace the playback source with a Bevy asset handle.
@@ -281,6 +369,10 @@ impl Ym2149Playback {
         self.source_path = None;
         self.source_bytes = None;
         self.needs_reload = true;
+        self.metrics = None;
+        self.pending_playlist_index = None;
+        self.pending_crossfade = None;
+        self.crossfade = None;
     }
 
     /// Replace the playback source with in-memory bytes.
@@ -289,6 +381,10 @@ impl Ym2149Playback {
         self.source_path = None;
         self.source_asset = None;
         self.needs_reload = true;
+        self.metrics = None;
+        self.pending_playlist_index = None;
+        self.pending_crossfade = None;
+        self.crossfade = None;
     }
 
     /// Access the configured filesystem path, if any.
@@ -319,6 +415,39 @@ impl Ym2149Playback {
     pub fn frame_position(&self) -> u32 {
         self.frame_position
     }
+
+    /// Access the metrics of the currently loaded track, if known.
+    pub(crate) fn metrics(&self) -> Option<PlaybackMetrics> {
+        self.metrics
+    }
+
+    /// Returns whether a crossfade (pending or active) is already configured.
+    pub(crate) fn is_crossfade_pending(&self) -> bool {
+        self.pending_crossfade.is_some() || self.crossfade.is_some()
+    }
+
+    pub(crate) fn is_crossfade_active(&self) -> bool {
+        self.crossfade.is_some()
+    }
+
+    /// Replace the existing crossfade request (if any).
+    pub(crate) fn set_crossfade_request(&mut self, request: CrossfadeRequest) {
+        self.pending_crossfade = Some(request);
+    }
+
+    /// Clear the crossfade request if one exists.
+    pub(crate) fn clear_crossfade_request(&mut self) {
+        self.pending_crossfade = None;
+    }
+
+    /// Access and clear the pending playlist index update produced by a crossfade.
+    pub(crate) fn take_pending_playlist_index(&mut self) -> Option<usize> {
+        self.pending_playlist_index.take()
+    }
+
+    pub(crate) fn has_pending_playlist_index(&self) -> bool {
+        self.pending_playlist_index.is_some()
+    }
 }
 
 impl Default for Ym2149Playback {
@@ -337,6 +466,10 @@ impl Default for Ym2149Playback {
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
         }
     }
 }

@@ -14,6 +14,14 @@ Minimal example showing:
 
 **Run:** `cargo run --example basic_example -p bevy_ym2149_examples`
 
+### crossfade_example
+Focused demonstration of the playlist crossfade feature:
+- Builds a two-track playlist from bundled assets
+- Uses `CrossfadeConfig::start_at_seconds(15.0).with_window_seconds(15.0)` so a new deck fades in every 15s while the overlap window lasts 15s
+- Loops indefinitely so you can hear the recurring blend cadence
+
+**Run:** `cargo run --example crossfade_example -p bevy_ym2149_examples`
+
 ### advanced_example
 Advanced features including:
 - Real-time visualization (oscilloscope, channel display, spectrum analysis)
@@ -58,6 +66,7 @@ bevy_ym2149_examples/
 │   └── lib.rs                    # Shared utilities (ASSET_BASE, example_plugins helper)
 ├── examples/                     # Runnable example applications
 │   ├── basic_example.rs
+│   ├── crossfade_example.rs
 │   ├── advanced_example.rs
 │   ├── feature_showcase.rs
 │   └── demoscene.rs
