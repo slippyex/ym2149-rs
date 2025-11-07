@@ -9,7 +9,7 @@
 //!
 //! Most YM files are LHA-compressed, but these parsers handle uncompressed data.
 
-use super::FormatParser;
+use super::{ATTR_DRUM_4BIT, FormatParser, decode_4bit_digidrum};
 use crate::Result;
 
 /// Type alias for full YM parse result: frames, header, metadata, digidrums
@@ -67,7 +67,7 @@ impl YmParser {
 
     /// Parse YM5 format with digidrum samples and return frames, header, metadata, digidrums
     pub fn parse_ym5_full_with_digidrums(&self, data: &[u8]) -> Result<YmParseResult> {
-        let header = Self::parse_ym5_header(data)?;
+        let mut header = Self::parse_ym5_header(data)?;
         let mut offset = header.body_start_offset;
 
         // Skip extra data section first (for format compatibility)
@@ -96,9 +96,16 @@ impl YmParser {
             if offset.checked_add(sample_size).is_none() || offset + sample_size > data.len() {
                 return Err("Incomplete YM5 digidrum data".into());
             }
-            let sample = data[offset..offset + sample_size].to_vec();
+            let mut sample = data[offset..offset + sample_size].to_vec();
+            if (header.attributes & ATTR_DRUM_4BIT) != 0 {
+                sample = decode_4bit_digidrum(&sample);
+            }
             digidrums.push(sample);
             offset += sample_size;
+        }
+
+        if (header.attributes & ATTR_DRUM_4BIT) != 0 {
+            header.attributes &= !ATTR_DRUM_4BIT;
         }
 
         // Parse metadata strings

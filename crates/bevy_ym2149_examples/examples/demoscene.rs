@@ -351,7 +351,14 @@ impl Default for OverlayScript {
                     animation: AnimationType::BounceIn,
                 },
                 PushOverlayText {
-                    text: "ENJOY THE SOUND OF THE 90S ERA".into(),
+                    text: "PRESS C TO TOGGLE CRT MODE".into(),
+                    cps: 40.0,
+                    dwell: 1.2,
+                    fade_out: 0.5,
+                    animation: AnimationType::ElasticReveal,
+                },
+                PushOverlayText {
+                    text: "PRESS F TO TOGGLE FULLSCREEN MODE".into(),
                     cps: 40.0,
                     dwell: 1.2,
                     fade_out: 0.5,

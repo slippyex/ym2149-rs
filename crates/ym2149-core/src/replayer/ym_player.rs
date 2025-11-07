@@ -7,7 +7,7 @@ use super::madmax_digidrums::{MADMAX_SAMPLE_RATE_BASE, MADMAX_SAMPLES};
 use super::{PlaybackController, PlaybackState, VblSync};
 use crate::ym_parser::FormatParser;
 use crate::ym_parser::{
-    Ym6Parser, YmParser,
+    ATTR_LOOP_MODE, ATTR_STREAM_INTERLEAVED, Ym6Parser, YmParser,
     effects::{EffectCommand, Ym6EffectDecoder, decode_effects_ym5},
 };
 use crate::{Result, Ym2149, compression};
@@ -69,8 +69,6 @@ impl LoadSummary {
     }
 }
 
-const A_STREAM_INTERLEAVED: u32 = 1;
-const A_LOOP_MODE: u32 = 16;
 const YM_TRACKER_PRECISION: u32 = 16;
 
 #[derive(Clone, Copy)]
@@ -478,6 +476,8 @@ pub struct Ym6Player {
     sid_active: [bool; 3],
     /// Per-voice DigiDrum active flags
     drum_active: [bool; 3],
+    active_drum_index: [Option<u8>; 3],
+    active_drum_freq: [u32; 3],
     /// Effects manager for YM6 special effects
     effects: EffectsManager,
     /// Tracker playback state (for YMT1/YMT2 formats)
@@ -511,6 +511,8 @@ impl Ym6Player {
             is_ym6_mode: false,
             sid_active: [false; 3],
             drum_active: [false; 3],
+            active_drum_index: [None; 3],
+            active_drum_freq: [0; 3],
             effects: EffectsManager::new(44_100),
             tracker: None,
             is_tracker_mode: false,
@@ -642,9 +644,9 @@ impl Ym6Player {
 
         let mut tracker_bytes = data[offset..offset + frame_bytes].to_vec();
 
-        if (attributes & A_STREAM_INTERLEAVED) != 0 {
+        if (attributes & ATTR_STREAM_INTERLEAVED) != 0 {
             tracker_bytes = deinterleave_tracker_bytes(&tracker_bytes, nb_voice, total_frames);
-            attributes &= !A_STREAM_INTERLEAVED;
+            attributes &= !ATTR_STREAM_INTERLEAVED;
         }
 
         let freq_shift = match format {
@@ -656,7 +658,7 @@ impl Ym6Player {
             TrackerFormat::Ymt1 => 0,
         };
 
-        let loop_enabled = (attributes & A_LOOP_MODE) != 0;
+        let loop_enabled = (attributes & ATTR_LOOP_MODE) != 0;
 
         let mut lines = Vec::with_capacity(line_count);
         for chunk in tracker_bytes.chunks_exact(bytes_per_line) {
@@ -704,6 +706,8 @@ impl Ym6Player {
         self.is_ym5_mode = false;
         self.sid_active = [false; 3];
         self.drum_active = [false; 3];
+        self.active_drum_index = [None; 3];
+        self.active_drum_freq = [0; 3];
         self.fx_decoder = Ym6EffectDecoder::new();
         self.effects = EffectsManager::new(44_100);
 
@@ -1296,12 +1300,16 @@ impl Ym6Player {
                             if freq > 0 {
                                 self.effects.digidrum_start(2, sample, freq);
                                 self.drum_active[2] = true;
+                                self.active_drum_index[2] = Some(sample_idx as u8);
+                                self.active_drum_freq[2] = freq;
                             }
                         }
                     }
                 } else if self.drum_active[2] {
                     self.effects.digidrum_stop(2);
                     self.drum_active[2] = false;
+                    self.active_drum_index[2] = None;
+                    self.active_drum_freq[2] = 0;
                 }
             } else {
                 // Write all registers; only gate R13 by sentinel 0xFF (YM3+/YM5/YM6 semantics)
@@ -1389,12 +1397,21 @@ impl Ym6Player {
                 for voice in 0..3 {
                     if let Some((drum_idx, freq)) = drum_intent[voice] {
                         if let Some(sample) = self.digidrums.get(drum_idx as usize) {
-                            self.effects.digidrum_start(voice, sample.clone(), freq);
-                            self.drum_active[voice] = true;
+                            let should_restart = !self.drum_active[voice]
+                                || self.active_drum_index[voice] != Some(drum_idx)
+                                || self.active_drum_freq[voice] != freq;
+                            if should_restart {
+                                self.effects.digidrum_start(voice, sample.clone(), freq);
+                                self.drum_active[voice] = true;
+                                self.active_drum_index[voice] = Some(drum_idx);
+                                self.active_drum_freq[voice] = freq;
+                            }
                         }
                     } else if self.drum_active[voice] {
                         self.effects.digidrum_stop(voice);
                         self.drum_active[voice] = false;
+                        self.active_drum_index[voice] = None;
+                        self.active_drum_freq[voice] = 0;
                     }
 
                     if let Some((freq, volume)) = sid_sin_intent[voice] {

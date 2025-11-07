@@ -303,13 +303,18 @@ impl Ym2149 {
                 self.last_channel_output[ch] = 0;
                 continue;
             }
+            if let Some(sample) = self.drum_sample_overrides[ch] {
+                channel_outputs[ch] = sample;
+                self.last_channel_output[ch] = sample;
+                mixed += sample;
+                continue;
+            }
+
             let tone_state = ((self.tone_pos[ch] as i32) >> 31) as u32;
             let bt =
                 (tone_state | self.mixer_tone_mask[ch]) & (noise_mask | self.mixer_noise_mask[ch]);
 
-            let base_volume = if let Some(sample) = self.drum_sample_overrides[ch] {
-                sample
-            } else if self.tone_use_envelope[ch] {
+            let base_volume = if self.tone_use_envelope[ch] {
                 self.env_volume
             } else {
                 self.tone_volume[ch]

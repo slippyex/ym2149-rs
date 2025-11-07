@@ -10,7 +10,7 @@
 //! - Interleaved or non-interleaved format
 //! - Optional LZH compression
 
-use super::FormatParser;
+use super::{ATTR_DRUM_4BIT, FormatParser, decode_4bit_digidrum};
 use crate::Result;
 use std::io::Cursor;
 
@@ -185,7 +185,7 @@ impl Ym6Parser {
     /// Parse YM6 file and return frames, metadata, and digidrum samples
     pub fn parse_full(&self, data: &[u8]) -> Result<Ym6ParseResult> {
         // Parse header
-        let header = Self::parse_header(data)?;
+        let mut header = Self::parse_header(data)?;
 
         // Skip extra data section before digidrums (matches reference)
         let mut offset: usize = 34;
@@ -213,9 +213,16 @@ impl Ym6Parser {
             if offset.checked_add(sample_size).is_none() || offset + sample_size > data.len() {
                 return Err("Incomplete digidrum sample data".into());
             }
-            let sample = data[offset..offset + sample_size].to_vec();
+            let mut sample = data[offset..offset + sample_size].to_vec();
+            if (header.attributes & ATTR_DRUM_4BIT) != 0 {
+                sample = decode_4bit_digidrum(&sample);
+            }
             digidrums.push(sample);
             offset += sample_size;
+        }
+
+        if (header.attributes & ATTR_DRUM_4BIT) != 0 {
+            header.attributes &= !ATTR_DRUM_4BIT;
         }
 
         // Skip extra data if present
