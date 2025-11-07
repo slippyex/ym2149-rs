@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 description = "Cycle-accurate YM2149 PSG emulator with real-time streaming audio output"
 documentation = "https://docs.rs/ym2149"
-readme = "../../README.md"
+readme = "README.md"
 keywords = ["emulator", "ym2149", "psg", "atari", "sound"]
 categories = ["emulators", "multimedia::audio"]
 
@@ -28,6 +28,10 @@ tempfile.workspace = true  # Safe temporary file handling with automatic cleanup
 
 # Utilities
 bitflags.workspace = true
+
+# Audio export (optional)
+hound = { version = "3.5", optional = true }  # WAV file writing
+mp3lame-encoder = { version = "0.2", optional = true }  # MP3 encoding
 
 [dev-dependencies]
 # Testing utilities
@@ -62,3 +66,8 @@ visualization = []
 
 # Optional softsynth backend
 softsynth = []
+
+# Audio export features
+export = ["export-wav", "export-mp3"]
+export-wav = ["dep:hound"]
+export-mp3 = ["dep:mp3lame-encoder"]

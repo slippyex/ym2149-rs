@@ -85,6 +85,8 @@ pub mod ym2149; // YM2149 PSG Emulation (core)
 
 #[cfg(feature = "ym-format")]
 pub mod compression; // Data Decompression (LHA/LZH)
+#[cfg(any(feature = "export-wav", feature = "export-mp3"))]
+pub mod export; // Audio export (WAV/MP3)
 pub mod mfp; // MFP Timer Effects (helpers)
 #[cfg(feature = "replayer")]
 pub mod replayer; // Playback Engine
