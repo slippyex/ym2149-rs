@@ -60,7 +60,8 @@ struct DrumState {
 }
 
 impl DrumState {
-    /// Get current sample value scaled like STSound (8-bit × 255 / 6)
+    /// Get current sample value scaled for better bass presence (8-bit × 255 / 3)
+    /// Note: STSound reference uses /6, but /3 provides better punch and bass
     fn current_sample(&self) -> Option<i32> {
         if !self.active {
             return None;
@@ -70,7 +71,8 @@ impl DrumState {
             return None;
         }
         let sample = self.data[idx] as i32;
-        Some((sample * 255) / 6)
+        // Changed from /6 to /3 to give samples more amplitude and bass presence
+        Some((sample * 255) / 3)
     }
 
     /// Advance position and return whether playback is still active
