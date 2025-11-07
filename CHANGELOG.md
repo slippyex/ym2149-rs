@@ -2,7 +2,7 @@
 
 All notable changes to the ym2149-rs project.
 
-## [Unreleased] - v0.next
+## [v0.6.0] - Current Release
 
 ### New Crates
 
@@ -54,13 +54,9 @@ All notable changes to the ym2149-rs project.
 - `Ym2149PluginConfig::visualization` removed; add `Ym2149VizPlugin` explicitly when UI is desired
 - Advanced features require explicit opt-in via `Ym2149PluginConfig`
 
-### Statistics
-
-- 52 files changed: +8,245 / -1,018 lines
-- 11 commits
 
 ---
 
-## [0.5.1] - Current Release
+## [0.5.1] - Previous Release
 
 Initial stable release of bevy_ym2149 plugin.
