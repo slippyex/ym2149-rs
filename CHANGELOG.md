@@ -13,6 +13,7 @@ All notable changes to the ym2149-rs project.
 
 - **Playlist System** - `.ymplaylist` assets with automatic track progression and multiple playback modes
 - **Playlist Crossfading** - Dual-deck blending that starts at 90% by default, supports fixed-time triggers, and now accepts explicit overlap window durations
+- **bevy_ym2149_viz** - Visualization helpers extracted into a dedicated crate with `Ym2149VizPlugin`
 - **Music State Graph** - Named state machine for dynamic soundtrack transitions
 - **Audio Bridge** - Mirror generated samples into Bevy's audio graph with per-entity gain/pan control
 - **Channel Events** - Per-frame channel snapshots and lifecycle events (TrackStarted/TrackFinished)
@@ -45,10 +46,12 @@ All notable changes to the ym2149-rs project.
 
 - Added integration test suite (550+ lines covering playback and plugin lifecycle)
 - Added playlist crossfade scheduler tests (triggering, completion, and TrackFinished suppression)
+- Added `bevy_ym2149_viz` crate-level coverage via the advanced example
 
 ### Breaking Changes
 
 - Visualization moved to `bevy_ym2149_viz` crate - requires separate dependency and import
+- `Ym2149PluginConfig::visualization` removed; add `Ym2149VizPlugin` explicitly when UI is desired
 - Advanced features require explicit opt-in via `Ym2149PluginConfig`
 
 ### Statistics

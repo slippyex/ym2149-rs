@@ -11,7 +11,7 @@ use bevy_ym2149::events::TrackStarted;
 use bevy_ym2149::playlist::{
     CrossfadeConfig, PlaylistMode, PlaylistSource, Ym2149Playlist, Ym2149PlaylistPlayer,
 };
-use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig};
+use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin};
 use bevy_ym2149_examples::example_plugins;
 
 const CROSSFADE_SECONDS: f32 = 15.0;
@@ -19,9 +19,7 @@ const CROSSFADE_SECONDS: f32 = 15.0;
 fn main() {
     App::new()
         .add_plugins(example_plugins())
-        .add_plugins(Ym2149Plugin::with_config(
-            Ym2149PluginConfig::default().visualization(false),
-        ))
+        .add_plugins(Ym2149Plugin::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Update, (toggle_playback, log_track_transitions))
         .run();

@@ -25,10 +25,9 @@ use bevy::{
     window::{MonitorSelection, PrimaryWindow, WindowMode, WindowResized},
 };
 use bevy_mesh::Mesh2d;
-#[cfg(feature = "visualization")]
-use bevy_ym2149::SpectrumBar;
 use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin, Ym2149Settings};
 use bevy_ym2149_examples::ASSET_BASE;
+use bevy_ym2149_viz::{SpectrumBar, Ym2149VizPlugin};
 
 // === Easing Functions (Demoscene Style) =====================================
 fn ease_out_cubic(t: f32) -> f32 {
@@ -474,6 +473,7 @@ fn main() {
             Material2dPlugin::<CubeFacesMaterial>::default(),
             Material2dPlugin::<CrtPostMaterial>::default(),
             Ym2149Plugin::default(),
+            Ym2149VizPlugin::default(),
         ))
         .add_message::<PushOverlayText>()
         .add_systems(
@@ -600,11 +600,8 @@ fn setup(
         duration: STARTUP_FADE_DURATION,
     });
 
-    #[cfg(feature = "visualization")]
     spawn_spectrum_bars(&mut commands);
 }
-
-#[cfg(feature = "visualization")]
 fn spawn_spectrum_bars(commands: &mut Commands) {
     const CHANNEL_COUNT: usize = 3;
     const BIN_COUNT: usize = 16;

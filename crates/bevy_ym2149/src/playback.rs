@@ -416,6 +416,18 @@ impl Ym2149Playback {
         self.frame_position
     }
 
+    /// Clone the internal YM player handle for read-only inspection.
+    pub fn player_handle(&self) -> Option<Arc<Mutex<Ym6Player>>> {
+        self.player.as_ref().map(Arc::clone)
+    }
+
+    /// Query the current audio sink buffer fill percentage (0.0 - 1.0).
+    pub fn audio_buffer_fill(&self) -> Option<f32> {
+        self.audio_device
+            .as_ref()
+            .map(|device| device.buffer_fill_level())
+    }
+
     /// Access the metrics of the currently loaded track, if known.
     pub(crate) fn metrics(&self) -> Option<PlaybackMetrics> {
         self.metrics

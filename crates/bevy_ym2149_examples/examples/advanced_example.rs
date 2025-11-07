@@ -6,18 +6,18 @@
 //! - Audio bridge mixing with volume and pan controls
 //! - Keyboard-based playback control
 
-#![cfg(feature = "visualization")]
-
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{
     audio_bridge::{AudioBridgeMix, AudioBridgeMixes},
-    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
-    create_status_display, AudioBridgeRequest, AudioBridgeTargets, Ym2149Playback, Ym2149Plugin,
-    Ym2149Settings,
+    AudioBridgeRequest, AudioBridgeTargets, Ym2149Playback, Ym2149Plugin, Ym2149Settings,
 };
 use bevy_ym2149_examples::ASSET_BASE;
+use bevy_ym2149_viz::{
+    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
+    create_status_display, Ym2149VizPlugin,
+};
 
 #[derive(Resource)]
 struct PlaybackEntity(Entity);
@@ -47,6 +47,7 @@ fn main() {
                 }),
         )
         .add_plugins(Ym2149Plugin::default())
+        .add_plugins(Ym2149VizPlugin::default())
         .add_systems(Startup, setup)
         .add_systems(
             Update,

@@ -1,12 +1,13 @@
-use crate::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
-use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
-use crate::viz_components::*;
-use crate::viz_helpers::{
+use crate::components::*;
+use crate::helpers::{
     format_freq_label, format_note_label, frequency_to_note, get_channel_period,
     period_to_frequency,
 };
+use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
 use bevy::prelude::*;
 use bevy::ui::ComputedNode;
+use bevy_ym2149::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+use bevy_ym2149::OscilloscopeBuffer;
 use std::array::from_fn;
 use std::f32::consts::PI;
 
@@ -49,11 +50,10 @@ pub fn update_status_display(
 
             let frame_pos = playback.frame_position();
             let volume_percent = (playback.volume * 100.0) as u32;
-            let buffer_fill = if let Some(device) = &playback.audio_device {
-                (device.buffer_fill_level() * 100.0) as u32
-            } else {
-                0
-            };
+            let buffer_fill = playback
+                .audio_buffer_fill()
+                .map(|fill| (fill * 100.0) as u32)
+                .unwrap_or(0);
 
             let status_text = format!(
                 "Status: {}\n\
@@ -78,7 +78,7 @@ pub fn update_detailed_channel_display(
     )>,
 ) {
     if let Some(playback) = playbacks.iter().next() {
-        if let Some(player) = &playback.player {
+        if let Some(player) = playback.player_handle() {
             let player_locked = player.lock();
             let chip = player_locked.get_chip();
             let regs = chip.dump_registers();
@@ -152,7 +152,7 @@ pub fn update_song_progress(
     let mut ratio = 0.0f32;
     let looping = settings.loop_enabled;
     if let Some(playback) = playbacks.iter().next() {
-        if let Some(player) = &playback.player {
+        if let Some(player) = playback.player_handle() {
             let player_locked = player.lock();
             let total_frames = player_locked.frame_count().max(1);
             let current = playback.frame_position().min(total_frames as u32) as f32;

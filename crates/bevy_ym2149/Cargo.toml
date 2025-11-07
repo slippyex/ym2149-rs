@@ -9,8 +9,7 @@ homepage.workspace = true
 description = "Bevy audio plugin for YM2149 PSG emulator"
 
 [features]
-default = ["visualization"]
-visualization = []
+default = []
 
 [dependencies]
 ym2149 = { path = "../ym2149-core", version = "0.5", features = ["emulator", "ym-format", "replayer", "streaming"] }

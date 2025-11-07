@@ -26,15 +26,6 @@ use crate::playlist::{
     register_playlist_assets, Ym2149Playlist,
 };
 use crate::spatial::update_spatial_audio;
-#[cfg(feature = "visualization")]
-use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
-#[cfg(feature = "visualization")]
-use crate::viz_components::OscilloscopeBuffer;
-#[cfg(feature = "visualization")]
-use crate::viz_systems::{
-    update_detailed_channel_display, update_oscilloscope, update_song_info, update_song_progress,
-    update_status_display,
-};
 use bevy::prelude::*;
 
 /// Bevy plugin responsible for YM2149 playback integration.
@@ -124,20 +115,6 @@ impl Plugin for Ym2149Plugin {
         if self.config.diagnostics {
             register_diagnostics(app);
             app.add_systems(Update, update_diagnostics);
-        }
-
-        // Visualization extras (oscilloscope, labels, progress).
-        #[cfg(feature = "visualization")]
-        if self.config.visualization {
-            app.init_resource::<OscilloscopeBuffer>();
-            app.init_resource::<OscilloscopeUniform>();
-            app.init_resource::<SpectrumUniform>();
-
-            app.add_systems(Update, update_song_info);
-            app.add_systems(Update, update_status_display);
-            app.add_systems(Update, update_detailed_channel_display);
-            app.add_systems(Update, update_song_progress);
-            app.add_systems(Update, update_oscilloscope);
         }
     }
 }

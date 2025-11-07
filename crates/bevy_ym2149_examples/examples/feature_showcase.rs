@@ -19,8 +19,7 @@ use bevy_ym2149::events::{AudioBridgeRequest, MusicStateRequest, PlaylistAdvance
 use bevy_ym2149::music_state::{MusicStateDefinition, MusicStateGraph};
 use bevy_ym2149::playlist::{PlaylistMode, PlaylistSource, Ym2149Playlist, Ym2149PlaylistPlayer};
 use bevy_ym2149::{
-    AudioBridgeTargets, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig, Ym2149Settings,
-    FRAME_POSITION_PATH,
+    AudioBridgeTargets, Ym2149Playback, Ym2149Plugin, Ym2149Settings, FRAME_POSITION_PATH,
 };
 use bevy_ym2149_examples::ASSET_BASE;
 
@@ -42,9 +41,7 @@ fn main() {
             file_path: ASSET_BASE.into(),
             ..default()
         }))
-        .add_plugins(Ym2149Plugin::with_config(
-            Ym2149PluginConfig::default().visualization(false),
-        ))
+        .add_plugins(Ym2149Plugin::default())
         .add_systems(Startup, setup_demo)
         .add_systems(Update, demo_keyboard_controls)
         .add_systems(Update, request_bridge_audio)

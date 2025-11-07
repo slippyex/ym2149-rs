@@ -1545,7 +1545,16 @@ dependencies = [
  "bevy",
  "bevy_mesh",
  "bevy_ym2149",
+ "bevy_ym2149_viz",
  "ym2149",
+]
+
+[[package]]
+name = "bevy_ym2149_viz"
+version = "0.5.1"
+dependencies = [
+ "bevy",
+ "bevy_ym2149",
 ]
 
 [[package]]

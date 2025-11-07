@@ -2,13 +2,12 @@ use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
 use crate::audio_sink;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
 use crate::events::{ChannelSnapshot, TrackFinished, TrackStarted};
+use crate::oscilloscope::OscilloscopeBuffer;
 use crate::playback::{
     ActiveCrossfade, PlaybackMetrics, PlaybackState, TrackSource, Ym2149Playback, Ym2149Settings,
     YM2149_SAMPLE_RATE, YM2149_SAMPLE_RATE_F32,
 };
 use crate::plugin::Ym2149PluginConfig;
-#[cfg(feature = "visualization")]
-use crate::viz_components::OscilloscopeBuffer;
 use bevy::prelude::*;
 use bevy::tasks::{block_on, poll_once, IoTaskPool, Task};
 use parking_lot::Mutex;
@@ -321,7 +320,7 @@ pub(super) fn update_playback(
     settings: Res<Ym2149Settings>,
     config: Res<Ym2149PluginConfig>,
     time: Res<Time>,
-    #[cfg(feature = "visualization")] mut oscilloscope_buffer: Option<ResMut<OscilloscopeBuffer>>,
+    mut oscilloscope_buffer: Option<ResMut<OscilloscopeBuffer>>,
     mut snapshot_events: MessageWriter<ChannelSnapshot>,
     mut started_events: MessageWriter<TrackStarted>,
     mut finished_events: MessageWriter<TrackFinished>,
@@ -481,7 +480,6 @@ pub(super) fn update_playback(
                 channel_energy[1] += ch_b.abs();
                 channel_energy[2] += ch_c.abs();
 
-                #[cfg(feature = "visualization")]
                 if let Some(buffer) = oscilloscope_buffer.as_mut() {
                     buffer.push_sample([ch_a, ch_b, ch_c]);
                 }

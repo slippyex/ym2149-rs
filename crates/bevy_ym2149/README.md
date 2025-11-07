@@ -132,42 +132,31 @@ fn control_system(mut settings: ResMut<Ym2149Settings>) {
 **Available Settings:**
 - `loop_enabled: bool` - Whether to loop the song after finishing
 
-### Visualization Components
+### Visualization Components (`bevy_ym2149_viz`)
 
-#### Built-in Display Functions
-
-The plugin provides helper functions to create pre-configured UI displays:
+UI helpers now live in the companion crate [`bevy_ym2149_viz`](../bevy_ym2149_viz).
+Add `Ym2149VizPlugin` alongside `Ym2149Plugin` and import the builders/components
+from the visualization crate:
 
 ```rust
-// Top panel with song info and status
+use bevy_ym2149::Ym2149Plugin;
+use bevy_ym2149_viz::{
+    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
+    create_status_display, Ym2149VizPlugin,
+};
+
+App::new()
+    .add_plugins(Ym2149Plugin::default())
+    .add_plugins(Ym2149VizPlugin::default());
+
 create_status_display(&mut commands);
-
-// Detailed channel information (T/N/A/E flags, frequency, notes)
 create_detailed_channel_display(&mut commands);
-
-// Transport progress, loop indicator, and per-channel spectrum rows
-create_channel_visualization(&mut commands, 3);  // 3 channels for YM2149
+create_channel_visualization(&mut commands, 3);
 ```
 
-#### Custom Visualization
+The visualization crate also re-exports the individual component types (`SongInfoDisplay`,
+`SpectrumBar`, `OscilloscopePoint`, etc.) if you want to build custom layouts.
 
-All visualization components are exported for custom UI implementations:
-
-- `PlaybackStatusDisplay` - Component for status text
-- `SongInfoDisplay` - Component for song metadata
-- `DetailedChannelDisplay` - Component for channel details
-- `SongProgressFill` / `SongProgressLabel` - Components for transport progress display
-- `LoopStatusLabel` - Component reflecting the loop toggle
-- `ChannelNoteLabel` / `ChannelFreqLabel` - Channel headers showing the active note and frequency
-- `SpectrumBar` - Individual bar segments in the channel spectrum ribbon
-- `Oscilloscope`, `OscilloscopePoint`, `OscilloscopeHead`, `OscilloscopeGridLine`, `ChannelBadge` - Building blocks used by the oscilloscope helpers
-- `SpectrumBar` - Individual frequency bin visual in the spectrum rows
-- `Oscilloscope`, `OscilloscopePoint`, `OscilloscopeHead` - Components that power the scope canvas
-- `OscilloscopeGridLine`, `ChannelBadge` - Decorative helpers used by the built-in scope
-
-```rust
-// Create a custom status display
-commands.spawn((
     Text::new("Custom Status"),
     Node { /* your layout */ },
     PlaybackStatusDisplay,
@@ -474,9 +463,8 @@ All examples are built entirely on the public API surface:
 ```rust
 use bevy::asset::AssetServer;
 use bevy::prelude::*;
-use bevy_ym2149::{
-    create_status_display, Ym2149AudioSource, Ym2149Playback, Ym2149Plugin,
-};
+use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin};
+use bevy_ym2149_viz::{create_status_display, Ym2149VizPlugin};
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // File-system path
@@ -494,9 +482,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 ```
 
-All helper UI builders and systems live under the `visualization` module, while the core playback
-loop resides in `plugin::systems`. This keeps the plugin lean and makes it easy to opt out of the
-default visualization layer if you only need audio playback.
+All helper UI builders and systems live in the `bevy_ym2149_viz` crate, while the core playback
+loop resides in `bevy_ym2149`. This keeps the audio plugin lean and makes it easy to opt out of the
+visualization layer if you only need audio playback.
 
 ### Multiple Simultaneous Playbacks
 

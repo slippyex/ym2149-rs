@@ -70,23 +70,9 @@
 //!
 //! # Visualization
 //!
-//! The plugin provides helper functions to create UI displays:
-//!
-//! ```no_run
-//! use bevy::prelude::*;
-//! use bevy_ym2149::{create_status_display, create_detailed_channel_display, create_channel_visualization};
-//!
-//! fn setup_ui(mut commands: Commands) {
-//!     // Top panel with song info and playback status
-//!     create_status_display(&mut commands);
-//!
-//!     // Detailed channel information (flags, frequency, notes)
-//!     create_detailed_channel_display(&mut commands);
-//!
-//!     // Interactive visualization bars for 3 channels
-//!     create_channel_visualization(&mut commands, 3);
-//! }
-//! ```
+//! Visualization widgets now live in the companion crate `bevy_ym2149_viz`. Add
+//! [`Ym2149VizPlugin`](https://docs.rs/bevy_ym2149_viz) alongside this crate's
+//! [`Ym2149Plugin`] and use the helpers provided there to build UI components.
 //!
 //! # Architecture
 //!
@@ -104,7 +90,7 @@
 //! - [`plugin`] - Bevy plugin integration and systems
 //! - [`audio_sink`] - Trait-based audio output abstraction (pluggable implementations)
 //! - [`audio_source`] - YM file loading and metadata extraction
-//! - [`visualization`] - UI components and display helpers
+//! - [`bevy_ym2149_viz`](https://crates.io/crates/bevy_ym2149_viz) - Optional UI components and display helpers
 
 pub mod audio_bridge;
 pub mod audio_sink;
@@ -113,20 +99,11 @@ pub mod diagnostics;
 pub mod error;
 pub mod events;
 pub mod music_state;
+pub mod oscilloscope;
 pub mod playback;
 pub mod playlist;
 pub mod plugin;
 pub mod spatial;
-#[cfg(feature = "visualization")]
-pub mod uniforms;
-#[cfg(feature = "visualization")]
-pub mod viz_builders;
-#[cfg(feature = "visualization")]
-pub mod viz_components;
-#[cfg(feature = "visualization")]
-pub mod viz_helpers;
-#[cfg(feature = "visualization")]
-pub mod viz_systems;
 
 pub use ::ym2149::*;
 pub use audio_bridge::{
@@ -142,6 +119,7 @@ pub use events::{
     TrackStarted,
 };
 pub use music_state::{process_music_state_requests, MusicStateDefinition, MusicStateGraph};
+pub use oscilloscope::OscilloscopeBuffer;
 pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 pub use playlist::{
     advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
@@ -150,16 +128,3 @@ pub use playlist::{
 };
 pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
 pub use spatial::{Ym2149Listener, Ym2149SpatialAudio};
-#[cfg(feature = "visualization")]
-pub use viz_builders::{
-    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
-    create_song_info_display, create_status_display,
-};
-#[cfg(feature = "visualization")]
-pub use viz_components::{
-    ChannelFreqLabel, ChannelNoteLabel, DetailedChannelDisplay, LoopStatusLabel, Oscilloscope,
-    OscilloscopeBuffer, OscilloscopeHead, OscilloscopePoint, PlaybackStatusDisplay,
-    SongInfoDisplay, SongProgressFill, SongProgressLabel, SpectrumBar,
-};
-#[cfg(feature = "visualization")]
-pub use viz_systems::update_oscilloscope;

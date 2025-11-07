@@ -3,7 +3,7 @@ members = [
     "crates/ym2149-core",
     "crates/bevy_ym2149",
     "crates/bevy_ym2149_examples",
-    "crates/ym2149-bevy",
+    "crates/ym2149-bevy", "crates/bevy_ym2149_viz",
 ]
 resolver = "2"
 
