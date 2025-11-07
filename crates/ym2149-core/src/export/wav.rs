@@ -1,8 +1,8 @@
 //! WAV file export functionality
 
-use super::{apply_fade_out, normalize_samples, ExportConfig};
-use crate::replayer::{LoadSummary, PlaybackController, Ym6Player};
+use super::{ExportConfig, apply_fade_out, normalize_samples};
 use crate::Result;
+use crate::replayer::{LoadSummary, PlaybackController, Ym6Player};
 use std::path::Path;
 
 /// Export YM playback to WAV file
@@ -75,7 +75,11 @@ pub fn export_to_wav_with_config<P: AsRef<Path>>(
     let total_samples = info.total_samples();
 
     // Generate all samples
-    println!("Rendering {} frames ({:.1}s)...", info.frame_count, total_samples as f32 / config.sample_rate as f32);
+    println!(
+        "Rendering {} frames ({:.1}s)...",
+        info.frame_count,
+        total_samples as f32 / config.sample_rate as f32
+    );
     let mut samples = player.generate_samples(total_samples);
 
     // Apply post-processing

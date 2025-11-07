@@ -4,6 +4,16 @@ Example applications demonstrating the bevy_ym2149 plugin.
 
 This crate contains comprehensive runnable examples showing how to use the YM2149 PSG emulator plugin in Bevy applications, from basic playback to advanced visualization and audio routing.
 
+## Example Matrix
+
+| Example | Highlights |
+|---------|------------|
+| `basic_example` | Minimal playback & keyboard controls |
+| `crossfade_example` | Dual-deck playlist with seamless crossfades |
+| `advanced_example` | Tracker UI, oscilloscope, drag-and-drop, audio bridge |
+| `feature_showcase` | Multiple playbacks, playlists, music states, diagnostics |
+| `demoscene` | Shader-heavy CRT pipeline + synchronized overlays |
+
 ## Examples
 
 ### basic_example
@@ -31,6 +41,8 @@ Advanced features including:
 
 **Run:** `cargo run --example advanced_example -p bevy_ym2149_examples`
 
+<img src="../../docs/screenshots/advanced_example.png" alt="Advanced example UI" width="780">
+
 ### feature_showcase
 Comprehensive demonstration of:
 - Multiple simultaneous YM file playbacks
@@ -48,12 +60,16 @@ Demoscene-style example featuring:
 - Bitmap font rendering with multiple animated overlay modes (Typewriter, BounceIn, CascadeZoom, etc.)
 - Responsive layout with swing/breathing motion and DPI-aware scaling
 - Dual-pass WGSL pipeline: raymarched scene + CRT post-process shader (toggle with `C`)
+- Fullscreen / Windowed mode switching (toggle with `F`)
 - Easing functions for text animation timing and shader sequencing
 
 **Run:** `cargo run --example demoscene -p bevy_ym2149_examples`
 
+<img src="../../docs/screenshots/demoscene.png" alt="Demoscene example" width="780">
+
 **Controls**
 - `C` – Toggle CRT post-processing (single-pass scene vs. CRT overlay)
+- `F` - Toggle fullscreen mode
 - `Esc` – Exit the application
 
 ## Crate Structure
@@ -147,16 +163,6 @@ pub const ASSET_BASE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets");
 }))
 ```
 
-**Trade-offs:**
-
-| Aspect | Compile-Time (Examples) | Runtime (Bevy Standard) |
-|--------|-------------------------|------------------------|
-| Works from any directory | ✅ Yes | ❌ No |
-| Follows Bevy conventions | ⚠️ Custom pattern | ✅ Standard |
-| Good for monorepos | ✅ Yes | ❌ No |
-| Good for distributed binaries | ⚠️ Assets tied to build location | ✅ Yes |
-| Development convenience | ✅ High | ⚠️ Requires setup |
-
 ### Using This Pattern in Your Project
 
 **For examples and development tools** (recommended to use our approach):
@@ -190,9 +196,10 @@ The examples use the following asset structure:
 ```
 assets/                          # Base directory set at compile time
 ├── music/                       # YM2149 music files
-│   ├── ND-Toxygene.ym
-│   ├── Credits.ym
 │   ├── Ashtray.ym
+│   ├── Credits.ym
+│   ├── ND-Toxygene.ym
+│   ├── Prelude.ym
 │   ├── Scout.ym
 │   └── Steps.ym
 ├── fonts/                       # Bitmap fonts for UI
@@ -216,19 +223,7 @@ cargo run --example <example_name> -p bevy_ym2149_examples
 
 ## Features
 
-The examples crate supports the `visualization` feature (enabled by default):
-
-```bash
-# Run with visualization enabled (default)
-cargo run --example advanced_example -p bevy_ym2149_examples
-
-# Run examples that work without visualization feature
-cargo run --example basic_example -p bevy_ym2149_examples --no-default-features
-cargo run --example feature_showcase -p bevy_ym2149_examples --no-default-features
-cargo run --example demoscene -p bevy_ym2149_examples --no-default-features
-```
-
-**Note:** The `advanced_example` requires the `visualization` feature and cannot run without it, as it demonstrates real-time visualization capabilities.
+This crate does not define Cargo feature flags. Visualization-heavy demos simply register `Ym2149VizPlugin` in code, while headless-friendly ones omit it. Run the examples directly with the commands shown above—no `--no-default-features` juggling required. (The `advanced_example` always enables the viz plugin, so keep the `bevy_ym2149_viz` dependency if you plan to run it.)
 
 ## Dependencies
 

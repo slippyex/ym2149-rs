@@ -1,415 +1,95 @@
-# bevy_ym2149
-
-A [Bevy](https://bevyengine.org/) plugin for real-time YM2149 PSG audio playback and visualization. This crate integrates the high-fidelity [ym2149](https://github.com/slippyex/ym2149-rs) emulator with Bevy's ECS architecture, providing seamless YM file playback with live channel visualization.
+# bevy_ym2149 – YM2149 Audio for Bevy
 
 [![Crates.io](https://img.shields.io/crates/v/bevy_ym2149.svg)](https://crates.io/crates/bevy_ym2149)
 [![Docs.rs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
-## Features
+Bevy plugin that embeds the cycle-accurate [`ym2149`](../ym2149-core) emulator, providing real-time YM playback, playlists, crossfades, diagnostics, audio mirroring, and optional UI widgets via `bevy_ym2149_viz`.
 
-- **Real-time YM2149 Audio Playback**: Stream YM2-YM6 format files with cycle-accurate emulation
-- **Flexible Playback Control**: Play, pause, restart, volume adjustment, and loop support
-- **Live Channel Visualization**: Real-time visual feedback for all three PSG channels
-- **Metadata Display**: Automatic extraction and display of song title and artist information
-- **Frame-by-Frame Control**: Access to individual playback frames for custom effects or analysis
-- **Time-Accurate Pacing**: Proper time-based frame advancement matching the original YM file playback rate
-- **Audio Buffering**: Configurable ring buffer for smooth, artifact-free playback
-- **Modular Architecture**: Clean separation between audio, visualization, and playback systems
-- **Playlist Playback**: Drive multiple tracks from `.ymplaylist` assets with automatic advancement
-- **Channel Events**: Subscribe to per-frame channel snapshots and playback lifecycle messages
-- **Spatial Audio**: Optional stereo panning that reacts to Bevy transforms
-- **Music State Graph**: Named state machine for swapping playlists or sources at runtime
-- **Shader Uniforms**: Live oscilloscope and spectrum data for custom rendering pipelines
-- **Diagnostics Hooks**: Report buffer fill and frame position through Bevy's diagnostics system
-- **Audio Bridge Buffers**: Mirror generated samples into Bevy's audio graph via `AudioBridgeBuffers`
-- **Bridge Mixing Controls**: Adjust per-entity gain/pan for bridged audio via `AudioBridgeMixes`
+<img src="../../docs/screenshots/advanced_example.png" alt="Advanced Bevy example" width="780">
 
-## Quick Start
+## Why Use This Plugin?
 
-### Installation
+- 🎵 **Accurate playback**: YM2–YM6/YMT files rendered with the same core as the CLI/exporter
+- 🎚️ **ECS-native control**: `Ym2149Playback` component (play/pause/seek/volume/stereo gain)
+- 🧭 **Music systems**: playlists with seamless crossfades, `.ymplaylist` loader, music state graphs
+- 🔊 **Audio bridge**: mirror samples into Bevy’s audio graph or your own sinks
+- 🛰️ **Spatial audio**: per-entity listener & panning helpers
+- 📈 **Diagnostics & events**: buffer fill metrics + `TrackStarted/TrackFinished`/`ChannelSnapshot` messages
+- 🖥️ **Visualization**: drop in `Ym2149VizPlugin` for oscilloscope, spectrum, progress HUD (kept in a separate crate so headless builds stay lean)
 
-Add to your `Cargo.toml`:
+## Getting Started
 
 ```toml
 [dependencies]
 bevy = "0.17"
-bevy_ym2149 = "0.5"
+bevy_ym2149 = "0.6"
+bevy_ym2149_viz = { path = "../bevy_ym2149_viz", optional = true }
 ```
-
-### Minimal Example
 
 ```rust
 use bevy::prelude::*;
-use bevy_ym2149::{Ym2149Plugin, Ym2149Playback};
+use bevy_ym2149::{Ym2149Playback, Ym2149Plugin};
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(Ym2149Plugin)
+        .add_plugins((DefaultPlugins, Ym2149Plugin::default()))
         .add_systems(Startup, setup)
         .run();
 }
 
 fn setup(mut commands: Commands) {
-    commands.spawn(Camera2d::default());
-    commands.spawn(Ym2149Playback::new("path/to/song.ym"));
+    commands.spawn(Camera2d);
+    commands.spawn(Ym2149Playback::new("assets/music/ND-Toxygene.ym"));
 }
 ```
 
-### Plugin Configuration
-
-`Ym2149Plugin` exposes feature toggles through [`Ym2149PluginConfig`](https://docs.rs/bevy_ym2149/latest/bevy_ym2149/struct.Ym2149PluginConfig.html). Each toggle maps directly to a subsystem (visualization, playlists, channel events, spatial audio, music state graph, shader uniforms, diagnostics, and audio bridge buffers):
+Add `Ym2149VizPlugin` (from `bevy_ym2149_viz`) when you want the UI builders:
 
 ```rust
-use bevy::prelude::*;
-use bevy_ym2149::{Ym2149Plugin, Ym2149PluginConfig};
+use bevy_ym2149_viz::{create_status_display, Ym2149VizPlugin};
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(Ym2149Plugin::with_config(
-            Ym2149PluginConfig::default()
-                .playlists(true)
-                .channel_events(true)
-                .spatial_audio(true)
-                .diagnostics(true)
-                .bevy_audio_bridge(true),
-        ))
-        .add_systems(Startup, setup)
+        .add_plugins((DefaultPlugins, Ym2149Plugin::default(), Ym2149VizPlugin::default()))
+        .add_systems(Startup, |mut commands: Commands| {
+            commands.spawn(Camera2d);
+            commands.spawn(Ym2149Playback::new("music/song.ym"));
+            create_status_display(&mut commands);
+        })
         .run();
 }
 ```
 
-Disable subsystems you don't need to keep the runtime lean (for example, turning off `visualization` for headless audio playback or skipping `spatial_audio` when you only require mono output).
+## Subsystem Toggles
 
-## API Overview
+Configure the plugin at runtime via `Ym2149PluginConfig`:
 
-### Core Components
+| Config flag | Default | Purpose |
+|-------------|---------|---------|
+| `playlists` | ✅ | `.ymplaylist` loader + `Ym2149PlaylistPlayer`, crossfade driver |
+| `channel_events` | ✅ | Emits `ChannelSnapshot` + `TrackStarted/Finished` |
+| `spatial_audio` | ✅ | `Ym2149SpatialAudio` component + listener resource |
+| `music_state` | ✅ | `MusicStateGraph` + `MusicStateRequest` routing |
+| `diagnostics` | ✅ | Registers `ym2149/buffer_fill` & `ym2149/frame_position` metrics |
+| `bevy_audio_bridge` | ✅ | Mirrors samples into `AudioBridgeBuffers` + rodio bridge sinks |
 
-#### `Ym2149Playback`
+Disable what you don’t need to keep your app lean.
 
-The main component for controlling YM file playback. Spawn this component on an entity to start playing a YM file.
+## Runtime Flow
 
-```rust
-// Create and spawn a playback entity
-let playback = Ym2149Playback::new("path/to/your_song.ym");
-commands.spawn(playback);
+1. **Initialization** – `initialize_playback` loads YM sources (file, asset, or bytes), instantiates the emulator, and warms a rodio sink.
+2. **Playback** – `update_playback` advances frames based on elapsed time, fills ring buffers, emits diagnostics, and handles playlist/crossfade bookkeeping.
+3. **Observability** – messages & diagnostics provide current frame, buffer fill, and per-channel snapshots.
+4. **Visualization (optional)** – `bevy_ym2149_viz` systems consume the observability data to render UI.
 
-// Query and control playback
-let mut playback = playbacks.iter_mut().next().unwrap();
-playback.play();
-playback.set_volume(0.8);
-playback.pause();
-playback.restart();
-```
+## Key APIs
 
-**Key Methods:**
-- `new(path: &str)` - Create a new playback entity from a YM file
-- `play()` - Start playback
-- `pause()` - Pause playback
-- `stop()` - Stop playback
-- `restart()` - Restart from the beginning (reloads file from disk)
-- `set_volume(volume: f32)` - Set volume (0.0 to 1.0)
-
-**Key Fields:**
-- `state: PlaybackState` - Current playback state (Idle, Playing, Paused, Finished)
-- `frame_position: u32` - Current frame number
-- `volume: f32` - Current volume (0.0 to 1.0)
-- `song_title: String` - Extracted song title
-- `song_author: String` - Extracted author name
-
-#### `Ym2149Settings`
-
-Global plugin settings accessible as a Bevy resource.
+### `Ym2149Playback`
 
 ```rust
-fn control_system(mut settings: ResMut<Ym2149Settings>) {
-    settings.loop_enabled = true;  // Enable looping
-}
-```
-
-**Available Settings:**
-- `loop_enabled: bool` - Whether to loop the song after finishing
-
-### Visualization Components (`bevy_ym2149_viz`)
-
-UI helpers now live in the companion crate [`bevy_ym2149_viz`](../bevy_ym2149_viz).
-Add `Ym2149VizPlugin` alongside `Ym2149Plugin` and import the builders/components
-from the visualization crate:
-
-```rust
-use bevy_ym2149::Ym2149Plugin;
-use bevy_ym2149_viz::{
-    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
-    create_status_display, Ym2149VizPlugin,
-};
-
-App::new()
-    .add_plugins(Ym2149Plugin::default())
-    .add_plugins(Ym2149VizPlugin::default());
-
-create_status_display(&mut commands);
-create_detailed_channel_display(&mut commands);
-create_channel_visualization(&mut commands, 3);
-```
-
-The visualization crate also re-exports the individual component types (`SongInfoDisplay`,
-`SpectrumBar`, `OscilloscopePoint`, etc.) if you want to build custom layouts.
-
-    Text::new("Custom Status"),
-    Node { /* your layout */ },
-    PlaybackStatusDisplay,
-));
-```
-
-### Playback States
-
-```rust
-pub enum PlaybackState {
-    Idle,      // Not playing
-    Playing,   // Currently playing
-    Paused,    // Paused
-    Finished,  // Song finished
-}
-```
-
-## Pluggable Audio Output
-
-The plugin uses a trait-based [`AudioSink`](https://docs.rs/bevy_ym2149/latest/bevy_ym2149/trait.AudioSink.html) abstraction for audio output, allowing you to bring your own implementation while rodio remains the default.
-
-### Using the Default Rodio Implementation
-
-By default, the plugin automatically uses `RodioAudioSink` for real-time audio playback. No additional setup is required.
-
-### Implementing a Custom Audio Sink
-
-You can implement the `AudioSink` trait for custom outputs like WAV file writing, network streaming, or other mechanisms:
-
-```rust
-use bevy_ym2149::AudioSink;
-use std::sync::Arc;
-
-struct MyWavSink {
-    // Your state
-}
-
-impl AudioSink for MyWavSink {
-    fn push_samples(&self, samples: Vec<f32>) -> Result<(), String> {
-        // Write samples to WAV file or stream
-        Ok(())
-    }
-
-    fn pause(&self) {
-        // Optional: handle pause
-    }
-
-    fn resume(&self) {
-        // Optional: handle resume
-    }
-
-    fn buffer_fill_level(&self) -> f32 {
-        // Return 0.0 (empty) to 1.0 (full)
-        // For file output, return 0.5
-        0.5
-    }
-}
-```
-
-### Using a Custom Sink (Future Enhancement)
-
-While the current implementation uses rodio by default, the architecture is designed to support injecting custom sinks. Future versions may provide a resource-based mechanism for registering custom implementations without modifying the plugin code.
-
-## Architecture
-
-### System Flow
-
-1. **Initialization** (`initialize_playback` system)
-   - Loads YM file from disk
-   - Creates emulator instance
-   - Extracts song metadata
-   - Initializes audio sink (defaults to rodio, but pluggable)
-
-2. **Playback** (`update_playback` system)
-   - Advances frames based on elapsed time
-   - Generates audio samples at correct rate
-   - Maintains 50Hz playback synchronization
-   - Handles state transitions
-
-3. **Visualization** (`update_playback_status` system)
-   - Updates display texts with current state
-   - Calculates frequency and note information
-   - Monitors channel output levels
-   - Refreshes UI every frame
-
-4. **Bar Animation** (`update_channel_bars` system)
-   - Scales bar widths based on channel output
-   - Provides real-time visual feedback
-
-### Key Design Decisions
-
-**Time-Based Frame Advancement**
-
-YM files don't play at Bevy's frame rate (60 FPS). Instead, the plugin uses accumulated delta time to determine when to generate the next frame:
-
-```rust
-// Pseudo-code
-time_since_last_frame += delta_time;
-if time_since_last_frame >= frame_duration {
-    player.generate_frame();
-    time_since_last_frame -= frame_duration;
-}
-```
-
-This ensures audio plays at the exact rate specified in the YM file, typically 50Hz.
-
-**Audio Sink Abstraction**
-
-Audio samples flow from the emulator to a pluggable audio sink (trait-based):
-
-```
-YM2149 Emulator → AudioSink trait → RodioAudioSink (or custom implementation)
-                                      ↓
-                              Ring Buffer → rodio AudioDevice → Speaker
-```
-
-The default `RodioAudioSink` uses a ring buffer (~250ms at 44.1kHz) to prevent underruns while maintaining low latency. Users can implement the `AudioSink` trait for alternative outputs.
-
-**Metadata Extraction**
-
-Song title and artist information is extracted from the YM file header during initialization using the emulator's `format_info()` method.
-
-## Controls and File Loading (Examples)
-
-The `bevy_ym2149_examples` crate provides runnable examples demonstrating the plugin. For instance, the `basic_example` implements the following controls:
-
-### Keyboard Controls
-- **SPACE**: Play/Pause toggle
-- **R**: Restart from beginning
-- **L**: Toggle looping
-- **UP**: Increase volume
-- **DOWN**: Decrease volume
-
-### Drag and Drop
-**The examples support drag-and-drop file loading!** Simply drag any `.ym` file into the window to load and play it immediately. This works with all YM format variants (YM2-YM6) and automatically decompresses LHA-compressed files.
-
-This makes it easy to test playback of any YM file in your collection without modifying the code.
-
-## Advanced Usage
-
-### Playlists
-
-`Ym2149Playlist` assets drive multi-track playback. They support filesystem paths, preloaded Bevy assets, or embedded byte arrays:
-
-```ron
-(
-    mode: "loop",
-    tracks: [
-        { type: "file", path: "music/title.ym" },
-        { type: "asset", path: "music/game.ym" },
-        { type: "bytes", data: [/* YM payload */] },
-    ],
-)
-```
-
-Attach a `Ym2149PlaylistPlayer` to your playback entity to advance automatically:
-
-```rust
-use bevy::prelude::*;
-use bevy_ym2149::{Ym2149Playback, Ym2149Playlist, Ym2149PlaylistPlayer};
-
-let playlist: Handle<Ym2149Playlist> = asset_server.load("music/demo.ymplaylist");
-commands.spawn((
-    Ym2149Playback::default(),
-    Ym2149PlaylistPlayer::new(playlist),
-));
-```
-
-Dispatch `PlaylistAdvanceRequest` messages when you need to jump to specific indices.
-
-### Channel Events & Observability
-
-Enabling the `channel_events` toggle surfaces rich introspection:
-
-- `ChannelSnapshot` – per-frame amplitude and frequency for each PSG channel
-- `TrackStarted` / `TrackFinished` – lifecycle messages for playlist and state-graph logic
-
-```rust
-fn dump_snapshots(mut snapshots: MessageReader<ChannelSnapshot>) {
-    for snapshot in snapshots.read() {
-        info!(
-            "entity={:?} channel={} amp={:.2} freq={:?}",
-            snapshot.entity,
-            snapshot.channel,
-            snapshot.amplitude,
-            snapshot.frequency
-        );
-    }
-}
-```
-
-### Music State Graph
-
-The `MusicStateGraph` resource maps names to playlists, file paths, or raw YM buffers, letting you express higher-level soundtrack flows:
-
-```rust
-fn configure_states(mut graph: ResMut<MusicStateGraph>, playlist: Handle<Ym2149Playlist>) {
-    graph.set_target(Entity::from_raw(1)); // Default playback entity
-    graph.insert("title", MusicStateDefinition::Playlist(playlist));
-    graph.insert("battle", MusicStateDefinition::SourcePath("music/battle.ym".into()));
-}
-
-fn switch_to_battle(mut writer: MessageWriter<MusicStateRequest>) {
-    writer.write(MusicStateRequest { state: "battle".into(), target: None });
-}
-```
-
-### Audio Bridge Buffers
-
-With `bevy_audio_bridge` enabled, `AudioBridgeRequest` messages mark entities whose generated stereo samples should be mirrored into `AudioBridgeBuffers`. Downstream systems (including Bevy's own audio graph or third-party DSP pipelines) can read these buffers every frame:
-
-```rust
-use bevy::prelude::*;
-use bevy_ym2149::audio_bridge::{
-    AudioBridgeBuffers, AudioBridgeMixes, AudioBridgeRequest,
-};
-
-fn mirror_audio(mut requests: MessageWriter<AudioBridgeRequest>, playback: Entity) {
-    requests.write(AudioBridgeRequest { entity: playback });
-}
-
-fn consume_bridge(
-    mut mixes: ResMut<AudioBridgeMixes>,
-    buffers: Res<AudioBridgeBuffers>,
-) {
-    mixes.set_pan(my_entity, -0.35);
-    mixes.set_volume_db(my_entity, -2.0);
-
-    if let Some(samples) = buffers.0.get(&my_entity) {
-        // Push `samples` into an AudioSink or perform custom processing.
-    }
-}
-```
-
-### Diagnostics
-
-The optional diagnostics subsystem registers two entries (`ym2149/buffer_fill` and `ym2149/frame_position`) with Bevy's diagnostics store. Consume them via `DiagnosticsStore` or your preferred telemetry sink to monitor stream health.
-
-### Feature Flags
-
-- `visualization` (default): enables the oscilloscope UI helpers and related systems. Disable this
-  feature (`--no-default-features`) if you only need audio playback and want to trim Bevy UI
-  dependencies. All visualization APIs (`create_oscilloscope`, `update_oscilloscope`, etc.) are only
-  available when the feature is enabled.
-
-### Custom Playback Control
-
-```rust
-fn custom_playback_system(
-    mut playbacks: Query<&mut Ym2149Playback>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-) {
-    for mut playback in playbacks.iter_mut() {
+fn handle_input(mut query: Query<&mut Ym2149Playback>, keyboard: Res<ButtonInput<KeyCode>>) {
+    if let Ok(mut playback) = query.get_single_mut() {
         if keyboard.just_pressed(KeyCode::Space) {
             if playback.is_playing() {
                 playback.pause();
@@ -417,176 +97,112 @@ fn custom_playback_system(
                 playback.play();
             }
         }
-    }
-}
-```
-
-### Accessing Spectrum Data
-
-`SpectrumBar` entities expose the computed bin magnitude through their layout. The height of
-each node is proportional to the energy in that frequency window:
-
-```rust
-fn inspect_spectrum(bars: Query<(&SpectrumBar, &Node)>) {
-    for (bar, node) in bars.iter() {
-        if let Val::Px(height) = node.height {
-            println!("Channel {} bin {} height {:.1} px", bar.channel, bar.bin, height);
+        if keyboard.just_pressed(KeyCode::KeyR) {
+            playback.restart();
+            playback.play();
+        }
+        if keyboard.any_just_pressed([KeyCode::ArrowUp, KeyCode::ArrowDown]) {
+            let delta = if keyboard.just_pressed(KeyCode::ArrowUp) { 0.1 } else { -0.1 };
+            playback.set_volume((playback.volume + delta).clamp(0.0, 1.0));
         }
     }
 }
 ```
 
-### Access to `ym2149-core`
+Other helpers:
+- `Ym2149Playback::from_asset(handle)` and `::from_bytes(bytes)` for asset-server or embedded sources
+- `set_source_path / asset / bytes` to retarget an entity mid-game
+- `set_stereo_gain(left, right)` used by the spatial audio system
 
-`bevy_ym2149` re-exports the entire [`ym2149`](https://crates.io/crates/ym2149) crate so you can
-use the low-level chip types alongside the Bevy integration:
+### Playlists & Crossfades
+
+```ron
+// assets/music/demo.ymplaylist
+(
+    mode: "loop",
+    tracks: [
+        { type: "asset", path: "music/Ashtray.ym" },
+        { type: "asset", path: "music/Credits.ym" },
+    ],
+)
+```
 
 ```rust
-use bevy_ym2149::ym2149::Ym2149;
+commands.spawn((
+    Ym2149Playback::default(),
+    Ym2149PlaylistPlayer::with_crossfade(
+        asset_server.load("music/demo.ymplaylist"),
+        CrossfadeConfig::start_at_seconds(12.0).with_window_seconds(12.0),
+    ),
+));
+```
 
-fn tweak_chip(chip: &mut Ym2149) {
-    chip.set_color_filter(true);
+`drive_crossfade_playlists` automatically preloads the next deck, and `PlaylistAdvanceRequest` lets you manually jump to indices.
+
+### Music State Graph
+
+```rust
+fn configure(mut graph: ResMut<MusicStateGraph>, playlist: Handle<Ym2149Playlist>) {
+    graph.set_target(Entity::from_raw(1)); // default playback entity
+    graph.insert("title", MusicStateDefinition::Playlist(playlist));
+    graph.insert("battle", MusicStateDefinition::SourcePath("music/battle.ym".into()));
+}
+
+fn switch(mut requests: MessageWriter<MusicStateRequest>) {
+    requests.write(MusicStateRequest { state: "battle".into(), target: None });
 }
 ```
 
-### Examples
-
-Comprehensive examples are provided in the separate `bevy_ym2149_examples` crate:
-
-- `basic_example` — minimal example showing basic playback and controls
-- `advanced_example` — visualization-heavy tracker layout with oscilloscope and spectrum analysis
-- `feature_showcase` — headless-friendly demo covering playlists, music states, diagnostics, and bridge mixing
-- `demoscene` — demoscene-style example with custom shaders and visual effects
-
-All examples are built entirely on the public API surface:
+### Audio Bridge
 
 ```rust
-use bevy::asset::AssetServer;
-use bevy::prelude::*;
-use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin};
-use bevy_ym2149_viz::{create_status_display, Ym2149VizPlugin};
+fn enable_bridge(
+    mut requests: MessageWriter<AudioBridgeRequest>,
+    mut mixes: ResMut<AudioBridgeMixes>,
+    playback: Query<Entity, With<Ym2149Playback>>,
+) {
+    let entity = playback.single();
+    requests.write(AudioBridgeRequest { entity });
+    mixes.set(entity, AudioBridgeMix::from_db(-2.0, -0.25));
+}
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // File-system path
-    commands.spawn(Ym2149Playback::new("music/song.ym"));
-
-    // Bevy asset handle (hot-reload, virtual file systems, etc.)
-    let handle: Handle<Ym2149AudioSource> = asset_server.load("music/other_song.ym");
-    commands.spawn(Ym2149Playback::from_asset(handle));
-
-    // Raw in-memory bytes (e.g. fetched from network or embedded in the binary)
-    let embedded = include_bytes!("../assets/demo.ym");
-    commands.spawn(Ym2149Playback::from_bytes(&embedded[..]));
-
-    create_status_display(&mut commands);
+fn consume(buffers: Res<AudioBridgeBuffers>) {
+    if let Some(samples) = buffers.0.get(&my_entity) {
+        // feed samples into Bevy's audio graph or a custom DSP chain
+    }
 }
 ```
 
-All helper UI builders and systems live in the `bevy_ym2149_viz` crate, while the core playback
-loop resides in `bevy_ym2149`. This keeps the audio plugin lean and makes it easy to opt out of the
-visualization layer if you only need audio playback.
+### Diagnostics
 
-### Multiple Simultaneous Playbacks
+- `DiagnosticsStore::get(&BUFFER_FILL_PATH)` exposes average sink fill level (0–1)
+- `FRAME_POSITION_PATH` tracks the furthest frame processed across playbacks
 
-Spawn multiple `Ym2149Playback` entities to play different songs:
+### Visualization (`bevy_ym2149_viz`)
 
-```rust
-commands.spawn(Ym2149Playback::new("song1.ym"));
-commands.spawn(Ym2149Playback::new("song2.ym"));
-```
+Builders such as `create_status_display`, `create_detailed_channel_display`, and `create_channel_visualization` spawn flexbox-based UIs. Component types (`bevy_ym2149_viz::SongInfoDisplay`, `SpectrumBar`, `OscilloscopePoint`, etc.) are public so you can author your own layouts. See the `advanced_example` and `demoscene` demos for reference.
 
-Each playback is independent with its own emulator instance and audio output.
+## Examples
 
-## Frequency and Note Calculation
+The `bevy_ym2149_examples` crate contains:
 
-The plugin calculates musical notes from YM register values:
+| Example | Focus |
+|---------|-------|
+| `basic_example` | Minimal playback + keyboard control |
+| `crossfade_example` | Playlist crossfades with decks |
+| `advanced_example` | Full tracker-style UI + drag-and-drop + audio bridge knobs |
+| `feature_showcase` | Multiple playbacks, music state graph, diagnostics |
+| `demoscene` | Shader-heavy scene synchronized to YM playback |
 
-1. **Register Values** → **Period** (14-bit value from registers)
-2. **Period** → **Frequency** (Hz = 2MHz / (16 × period))
-3. **Frequency** → **MIDI Note** (logarithmic scale, A4 = 440Hz)
-4. **MIDI Note** → **Note Name** (C0 to G8)
+Run e.g. `cargo run --example advanced_example -p bevy_ym2149_examples`.
 
-Example output: "C4" (Middle C), "A#5", "E3"
+## Troubleshooting Tips
 
-## YM File Format Support
-
-Supports all standard YM formats:
-- YM2 (Mad Max format with digi-drums)
-- YM3/YM3b (Standard format)
-- YM4 (Stereo mixdown)
-- YM5 (Effects support)
-- YM6 (Digidrums and additional effects)
-
-Compressed YM files (LHA) are automatically decompressed during loading.
-
-## Performance Considerations
-
-- **Frame Generation**: ~0.5-1ms per 50Hz frame on modern hardware
-- **Ring Buffer**: 250ms default (44.1kHz stereo) prevents audio underruns
-- **Visualization Updates**: Every Bevy frame (60 FPS) without blocking audio
-- **Memory Usage**: ~1-2MB per concurrent playback instance
-
-## Troubleshooting
-
-### No Audio Output
-
-1. Verify the YM file path is correct
-2. Check that `Ym2149Plugin` is added to the app
-3. Ensure rodio can access system audio (permissions, audio device present)
-4. Check console output for initialization logs
-
-### Crackling or Audio Artifacts
-
-1. Increase the ring buffer size (in `audio_output.rs`)
-2. Ensure adequate system resources
-3. Try reducing other system load
-
-### Playback Too Fast/Slow
-
-This shouldn't happen due to time-based frame advancement. If it does:
-1. Check system time accuracy
-2. Verify YM file isn't corrupted
-3. Review `frame_duration` calculation in `plugin.rs`
-
-## Building and Testing
-
-```bash
-# Build the crate
-cargo build -p bevy_ym2149
-
-# Run an example (from the bevy_ym2149_examples crate)
-cargo run --example basic_example -p bevy_ym2149_examples
-
-# Run all examples
-cargo run --example advanced_example -p bevy_ym2149_examples
-cargo run --example feature_showcase -p bevy_ym2149_examples
-cargo run --example demoscene -p bevy_ym2149_examples
-
-# Run tests
-cargo test -p bevy_ym2149
-
-# Generate documentation
-cargo doc -p bevy_ym2149 --open
-```
-
-## Integration with ym2149
-
-This plugin uses the [ym2149](https://crates.io/crates/ym2149) crate for core emulation. All audio processing, register handling, and effects support come from the parent crate's cycle-accurate implementation.
+- **No audio**: ensure the YM path is valid, `Ym2149Plugin` is added, and your OS exposes an audio device
+- **Crackling / underruns**: increase ring buffer size in `AudioSink::rodio::RodioAudioSink::new`, avoid heavy work on the audio thread
+- **Playback too fast/slow**: confirm `Time` resource is advancing; the plugin uses delta-time pacing rather than Bevy’s frame rate
+- **Bridge audio silent**: make sure the entity was added to `AudioBridgeTargets` (via `AudioBridgeRequest`) and that its mix isn’t muted
 
 ## License
 
-MIT — see the main repository LICENSE file.
-
-## Contributing
-
-Contributions are welcome! Please ensure:
-- Code follows Bevy style conventions
-- All public APIs are documented
-- Examples work correctly
-- Tests pass
-
-## See Also
-
-- [ym2149](https://github.com/slippyex/ym2149-rs) - Core emulator library
-- [Bevy](https://bevyengine.org/) - Game engine documentation
-- [rodio](https://github.com/RustAudio/rodio) - Audio output backend
+MIT License – see [LICENSE](../../LICENSE).

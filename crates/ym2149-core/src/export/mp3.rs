@@ -1,8 +1,8 @@
 //! MP3 file export functionality using LAME encoder
 
-use super::{apply_fade_out, normalize_samples, ExportConfig};
-use crate::replayer::{LoadSummary, PlaybackController, Ym6Player};
+use super::{ExportConfig, apply_fade_out, normalize_samples};
 use crate::Result;
+use crate::replayer::{LoadSummary, PlaybackController, Ym6Player};
 use std::path::Path;
 
 /// Export YM playback to MP3 file with default bitrate (192 kbps)

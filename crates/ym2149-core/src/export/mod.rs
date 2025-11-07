@@ -165,9 +165,7 @@ mod tests {
 
     #[test]
     fn test_export_config_builder() {
-        let config = ExportConfig::stereo()
-            .normalize(false)
-            .fade_out(2.0);
+        let config = ExportConfig::stereo().normalize(false).fade_out(2.0);
 
         assert_eq!(config.channels, 2);
         assert!(!config.normalize);
