@@ -906,9 +906,9 @@ fn toggle_crt(keys: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
 }
 
 fn update_surface_scale_on_resize(
-    mut resize_events: EventReader<WindowResized>,
+    mut resize_events: MessageReader<WindowResized>,
     mut surfaces: Query<&mut Transform, With<SurfaceQuad>>,
-    mut pending: Option<ResMut<PendingSurface>>,
+    pending: Option<ResMut<PendingSurface>>,
 ) {
     let mut has_resize = false;
     let mut latest_scale = Vec3::ONE;
