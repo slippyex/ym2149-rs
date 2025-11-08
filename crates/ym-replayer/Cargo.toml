@@ -1,0 +1,75 @@
+[package]
+name = "ym-replayer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "YM file format parser and music replayer for YM2149 PSG"
+documentation = "https://docs.rs/ym-replayer"
+readme = "README.md"
+keywords = ["ym2149", "psg", "atari", "music", "chiptune"]
+categories = ["multimedia::audio", "parser-implementations"]
+
+[[bin]]
+name = "ym-replayer"
+path = "src/main.rs"
+required-features = ["streaming"]
+
+[dependencies]
+# Core YM2149 chip emulation (backend trait + streaming + visualization)
+ym2149 = { path = "../ym2149-core", version = "0.6.0", features = ["streaming", "visualization"] }
+
+# Optional softsynth backend
+ym-softsynth = { path = "../ym-softsynth", version = "0.6.0", optional = true }
+
+# Error handling
+thiserror.workspace = true
+
+# Synchronization
+parking_lot.workspace = true
+
+# Compression support (LHA/LZH decompression for YM files)
+delharc.workspace = true
+tempfile.workspace = true
+
+# Utilities
+bitflags.workspace = true
+
+# Audio output (optional)
+rodio = { workspace = true, optional = true }
+
+# Audio export (optional)
+hound = { version = "3.5", optional = true }  # WAV file writing
+mp3lame-encoder = { version = "0.2", optional = true }  # MP3 encoding
+
+[dev-dependencies]
+approx.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["effects", "tracker", "digidrums"]
+
+# YM6 effects support (SID, Sync Buzzer)
+effects = []
+
+# Tracker mode support (YMT1/YMT2)
+tracker = []
+
+# Mad Max digi-drums support
+digidrums = []
+
+# Streaming audio output (optional, for realtime playback)
+streaming = ["dep:rodio"]
+
+# Softsynth backend support (experimental)
+softsynth = ["dep:ym-softsynth"]
+
+# Audio export features (optional, for WAV/MP3 export)
+export = ["export-wav", "export-mp3"]
+export-wav = ["dep:hound"]
+export-mp3 = ["dep:mp3lame-encoder"]

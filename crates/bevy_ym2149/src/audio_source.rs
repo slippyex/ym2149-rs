@@ -4,7 +4,7 @@ use bevy::asset::{Asset, AssetLoader, LoadContext};
 use bevy::reflect::TypePath;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use ym2149::ym_loader;
+use ym_replayer::loader;
 
 use crate::error::{BevyYm2149Error, Result};
 
@@ -88,12 +88,12 @@ impl AssetLoader for Ym2149Loader {
 
 /// Extract metadata from YM file data
 fn extract_metadata(data: &[u8]) -> Result<Ym2149Metadata> {
-    let _frames = ym_loader::load_bytes(data).map_err(|e| {
+    let _frames = loader::load_bytes(data).map_err(|e| {
         BevyYm2149Error::MetadataExtraction(format!("Failed to load frames: {}", e))
     })?;
 
     // Use load_song to get the player with metadata
-    let (player, summary) = ym2149::load_song(data)
+    let (player, summary) = ym_replayer::load_song(data)
         .map_err(|e| BevyYm2149Error::MetadataExtraction(format!("Failed to load song: {}", e)))?;
 
     let frame_count = summary.frame_count;

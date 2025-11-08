@@ -6,7 +6,7 @@
 //! Effects are managed separately from the core PSG emulation to maintain clean separation
 //! of concerns: the chip is pure hardware emulation, effects are format-specific playback tricks.
 
-use crate::Ym2149;
+use ym2149::Ym2149;
 
 const DRUM_PREC: u32 = 15;
 

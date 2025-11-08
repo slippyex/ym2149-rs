@@ -16,22 +16,14 @@ categories = ["emulators", "multimedia::audio"]
 # Error handling
 thiserror.workspace = true
 
-# Audio output
-rodio = { workspace = true, optional = true }  # Audio playback (streaming feature)
+# Audio output (streaming feature)
+rodio = { workspace = true, optional = true }
 
 # Synchronization
-parking_lot.workspace = true  # Better synchronization primitives
-
-# Compression support (LHA/LZH decompression for YM files)
-delharc.workspace = true  # LHA/LZH archive decompression
-tempfile.workspace = true  # Safe temporary file handling with automatic cleanup
+parking_lot.workspace = true
 
 # Utilities
 bitflags.workspace = true
-
-# Audio export (optional)
-hound = { version = "3.5", optional = true }  # WAV file writing
-mp3lame-encoder = { version = "0.2", optional = true }  # MP3 encoding
 
 [dev-dependencies]
 # Testing utilities
@@ -42,32 +34,13 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = [
-    "emulator",
-    "ym-format",
-    "replayer",
-    "visualization",
-]
+default = ["emulator", "streaming", "visualization"]
 
 # Core YM2149 emulator
 emulator = []
-
-# YM file parsing and loading (YM2/3/4/5/6)
-ym-format = []
-
-# Replayer (depends on ym-format)
-replayer = ["ym-format"]
 
 # Streaming audio output (enables rodio-based AudioDevice)
 streaming = ["dep:rodio"]
 
 # Terminal visualization helpers
 visualization = []
-
-# Optional softsynth backend
-softsynth = []
-
-# Audio export features
-export = ["export-wav", "export-mp3"]
-export-wav = ["dep:hound"]
-export-mp3 = ["dep:mp3lame-encoder"]

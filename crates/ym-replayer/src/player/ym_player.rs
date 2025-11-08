@@ -8,13 +8,14 @@ use super::tracker_player::{
     TrackerFormat, TrackerLine, TrackerSample, TrackerState, deinterleave_tracker_bytes,
 };
 use super::{PlaybackController, PlaybackState, VblSync};
-use crate::ym_parser::FormatParser;
-use crate::ym_parser::{
+use crate::parser::FormatParser;
+use crate::parser::{
     ATTR_LOOP_MODE, ATTR_STREAM_INTERLEAVED, Ym6Parser, YmParser,
     effects::{EffectCommand, Ym6EffectDecoder, decode_effects_ym5},
 };
-use crate::{Result, Ym2149, compression};
+use crate::{Result, compression};
 use std::fmt;
+use ym2149::Ym2149;
 
 /// Supported YM file formats handled by the loader.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,8 +144,11 @@ struct PlaybackStateInit {
 }
 
 /// YM6 File Player
+///
+/// Uses hardware-accurate Ym2149 emulation to support YM6 effects (SID, Sync Buzzer, DigiDrums).
+/// These effects require hardware-specific features not available in the generic backend trait.
 pub struct Ym6Player {
-    /// PSG chip emulator
+    /// PSG chip (hardware-accurate Ym2149)
     chip: Ym2149,
     /// VBL synchronization
     vbl: VblSync,

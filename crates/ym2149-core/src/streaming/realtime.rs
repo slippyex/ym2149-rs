@@ -4,9 +4,19 @@
 //! In a full implementation, this would use CPAL for audio device output.
 
 use super::{BUFFER_BACKOFF_MICROS, RingBuffer, StreamConfig};
-use crate::replayer::PlaybackState;
 use parking_lot::Mutex;
 use std::sync::Arc;
+
+/// Playback state for real-time player
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlaybackState {
+    /// Player is stopped
+    Stopped,
+    /// Player is playing
+    Playing,
+    /// Player is paused
+    Paused,
+}
 
 /// Real-time audio player with streaming
 pub struct RealtimePlayer {
@@ -130,40 +140,32 @@ impl RealtimePlayer {
     pub fn config(&self) -> &StreamConfig {
         &self.config
     }
-}
 
-impl crate::replayer::PlaybackController for RealtimePlayer {
     /// Start playback
-    fn play(&mut self) -> crate::Result<()> {
+    pub fn play(&mut self) {
         let mut state = self.state.lock();
         *state = PlaybackState::Playing;
-        Ok(())
     }
 
     /// Pause playback
-    fn pause(&mut self) -> crate::Result<()> {
+    pub fn pause(&mut self) {
         let mut state = self.state.lock();
         if *state == PlaybackState::Playing {
             *state = PlaybackState::Paused;
         }
-        Ok(())
     }
 
     /// Stop playback
-    fn stop(&mut self) -> crate::Result<()> {
+    pub fn stop(&mut self) {
         let mut state = self.state.lock();
         *state = PlaybackState::Stopped;
         self.buffer.lock().flush();
-        Ok(())
     }
 
     /// Get current playback state
-    fn state(&self) -> PlaybackState {
+    pub fn state(&self) -> PlaybackState {
         *self.state.lock()
     }
-}
-
-impl RealtimePlayer {
     /// Get reference to the ring buffer for audio device integration
     /// This allows the audio device to read samples as they're produced
     pub fn get_buffer(&self) -> Arc<parking_lot::Mutex<RingBuffer>> {

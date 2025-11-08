@@ -36,7 +36,7 @@ use crate::audio_source::Ym2149AudioSource;
 use bevy::prelude::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
-use ym2149::replayer::Ym6Player;
+use ym_replayer::Ym6Player;
 
 /// Fixed output sample rate used by the YM2149 mixer.
 pub const YM2149_SAMPLE_RATE: u32 = 44_100;
@@ -61,8 +61,8 @@ impl PlaybackMetrics {
     }
 }
 
-impl From<&ym2149::LoadSummary> for PlaybackMetrics {
-    fn from(summary: &ym2149::LoadSummary) -> Self {
+impl From<&ym_replayer::LoadSummary> for PlaybackMetrics {
+    fn from(summary: &ym_replayer::LoadSummary) -> Self {
         Self {
             frame_count: summary.frame_count,
             samples_per_frame: summary.samples_per_frame,

@@ -7,6 +7,7 @@
 
 use super::constants::VOLUME_TABLE;
 use super::registers::RegisterBank;
+use crate::backend::Ym2149Backend;
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -436,17 +437,15 @@ impl Ym2149 {
         *self.registers.as_slice()
     }
 
-    pub(crate) fn set_mixer_overrides(
-        &mut self,
-        force_tone: [bool; 3],
-        force_noise_mute: [bool; 3],
-    ) {
+    /// Set mixer overrides for effects (used by EffectsManager in ym-replayer)
+    pub fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
         self.mixer_overrides.force_tone = force_tone;
         self.mixer_overrides.force_noise_mute = force_noise_mute;
         self.update_mixer_masks();
     }
 
-    pub(crate) fn set_drum_sample_override(&mut self, voice: usize, sample: Option<i32>) {
+    /// Set drum sample override for a voice (used by EffectsManager in ym-replayer)
+    pub fn set_drum_sample_override(&mut self, voice: usize, sample: Option<i32>) {
         if voice >= 3 {
             return;
         }
@@ -649,5 +648,64 @@ mod tests {
         }
         let sample = chip.get_sample();
         assert!(sample.abs() > 0.0);
+    }
+}
+
+// Implement the Ym2149Backend trait for the hardware-accurate chip
+impl Ym2149Backend for Ym2149 {
+    fn new() -> Self {
+        Ym2149::new()
+    }
+
+    fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
+        Ym2149::with_clocks(master_clock, sample_rate)
+    }
+
+    fn reset(&mut self) {
+        self.reset();
+    }
+
+    fn write_register(&mut self, addr: u8, value: u8) {
+        self.write_register(addr, value);
+    }
+
+    fn read_register(&self, addr: u8) -> u8 {
+        self.read_register(addr)
+    }
+
+    fn load_registers(&mut self, regs: &[u8; 16]) {
+        self.load_registers(regs);
+    }
+
+    fn dump_registers(&self) -> [u8; 16] {
+        self.dump_registers()
+    }
+
+    fn clock(&mut self) {
+        self.clock();
+    }
+
+    fn get_sample(&self) -> f32 {
+        self.get_sample()
+    }
+
+    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
+        self.generate_samples(count)
+    }
+
+    fn get_channel_outputs(&self) -> (f32, f32, f32) {
+        self.get_channel_outputs()
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.set_channel_mute(channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.is_channel_muted(channel)
+    }
+
+    fn set_color_filter(&mut self, enabled: bool) {
+        self.set_color_filter(enabled);
     }
 }

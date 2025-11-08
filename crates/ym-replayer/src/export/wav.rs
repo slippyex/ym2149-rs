@@ -2,7 +2,7 @@
 
 use super::{ExportConfig, apply_fade_out, normalize_samples};
 use crate::Result;
-use crate::replayer::{LoadSummary, PlaybackController, Ym6Player};
+use crate::{LoadSummary, PlaybackController, Ym6Player};
 use std::path::Path;
 
 /// Export YM playback to WAV file

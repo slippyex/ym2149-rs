@@ -1,34 +1,27 @@
-# YM2149-RS Architecture
+# YM2149 Core Architecture
 
-A modular YM2149 PSG emulator with real-time streaming playback, designed for accurate hardware emulation and low-latency audio output.
+Hardware-accurate emulation of the Yamaha YM2149 Programmable Sound Generator chip.
+
+## Scope
+
+This document describes the **ym2149-core** crate only. For the overall workspace architecture including YM file parsing, playback, and Bevy integration, see the [root ARCHITECTURE.md](../../ARCHITECTURE.md).
 
 ## System Overview
 
 ```mermaid
-graph LR
-    A["YM File\n(YM2–YM6)"] --> B["Decompress (LHA)\n(feature: ym-format)"]
-    B --> C["Parse Format\nYM2/3/3b/4/5/6"]
-    C --> D["Replayer\n(frames + effects)"]
-    D --> E["Ring Buffer\n(concurrent)"]
-    E --> F["Audio Device\n(rodio)"]
-    D --> G["YM2149 Chip\n(integer-accurate)"]
-    D --> H["Experimental\nSoftSynth"]
-    D --> I["CLI Viz"]
+graph TD
+    subgraph ym2149-core["YM2149 Core Emulator"]
+        API["Public API<br/>Ym2149Backend trait"] --> CHIP["Chip Implementation<br/>ym2149/chip.rs"]
+        CHIP --> ENV["Envelope Generator"]
+        CHIP --> NOISE["Noise Generator"]
+        CHIP --> TONE["3x Tone Generators"]
+        CHIP --> MIX["Mixer & Filter"]
+        ENV --> OUT["Audio Output<br/>f32 samples"]
+        NOISE --> OUT
+        TONE --> OUT
+        MIX --> OUT
+    end
 ```
-
-## Module Organization
-
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `ym2149/` | Core YM chip (chip, envelope, mixer, constants, registers) |
-| `replayer/` | Playback orchestration (frames, VBL sync, effects) |
-| `ym_parser/` | YM format parsing (YM3/3b/4/5 and YM6; de‑interleave YM2/3) |
-| `streaming/` | Concurrent ring buffer & audio device (rodio) |
-| `compression/` | LHA/LZH decompression |
-| `softsynth/` | Experimental synth engine |
-| `visualization/` | Terminal UI helpers |
-
----
 
 ## Hardware Emulation (ym2149/)
 
@@ -108,227 +101,64 @@ R14-R15: I/O ports (not emulated)
 #### Mixer
 - **Gate logic**: Hardware AND combines tone and noise per channel
 - **Enable mask**: R7 bits control which channels produce output
-- **Effect overrides**: SID/DigiDrum can force channels on/off
+- **Effect overrides**: SID/DigiDrum can force channels on/off (via public methods)
 - **Output combining**: Simple addition of 3 channels (auto-scales)
 - **Color filter**: Optional ST-style filter for authentic tone
 
 ---
 
-## Streaming Playback (replayer/)
+## Backend Trait
 
-Frame-based VBL-synced playback with SID, DigiDrum, and Sync Buzzer effects.
+The `Ym2149Backend` trait provides a common interface for all chip implementations:
 
-### Playback State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> Stopped
-    Stopped --> Playing: play()
-    Playing --> Paused: pause()
-    Playing --> Stopped: stop() or end
-    Paused --> Playing: play()
-    Paused --> Stopped: stop()
+```rust
+pub trait Ym2149Backend: Send {
+    fn new() -> Self where Self: Sized;
+    fn with_clocks(master_clock: u32, sample_rate: u32) -> Self where Self: Sized;
+    fn reset(&mut self);
+    fn write_register(&mut self, addr: u8, value: u8);
+    fn read_register(&self, addr: u8) -> u8;
+    fn load_registers(&mut self, regs: &[u8; 16]);
+    fn dump_registers(&self) -> [u8; 16];
+    fn clock(&mut self);
+    fn get_sample(&self) -> f32;
+    fn generate_samples(&mut self, count: usize) -> Vec<f32>;
+    fn get_channel_outputs(&self) -> (f32, f32, f32);
+    fn set_channel_mute(&mut self, channel: usize, mute: bool);
+    fn is_channel_muted(&self, channel: usize) -> bool;
+    fn set_color_filter(&mut self, enabled: bool);
+}
 ```
 
-### Frame-Based Playback
-
-The unified replayer manages playback by operating on register **frames** (snapshots of all 16 registers at a single time):
-
-```
-┌───────────────────────────────────────────┐
-│ Load Song (parsing)                       │
-├───────────────────────────────────────────┤
-│ frames: Vec<[u8; 16]>     100-1000 frames │
-│ samples_per_frame: u32    882 @ 50Hz      │
-│ loop_point: Option<usize> Frame to loop   │
-└───────────────────────────────────────────┘
-                  ↓
-        ┌─────────────────────┐
-        │ Playback Loop       │
-        │ (sample generation) │
-        │ 44,100 samples/sec  │
-        └────────┬────────────┘
-                 │
-            Every frame (882 samples):
-              1. Load registers from frames[current_frame]
-              2. Parse and apply effects (YM5/YM6 only)
-              3. Generate 882 samples
-              4. Advance to next frame
-              5. If at loop_point → restart
-```
-
-### Sample Generation Algorithm
-
-```
-generate_sample() [called 44,100 times/sec]
-
-  if not Playing → return 0.0
-
-  if samples_in_frame == 0:
-    # Load register frame (once per 882 samples)
-    regs = frames[current_frame]
-    chip.load_registers(regs)
-
-    # Decode and apply effects for this frame
-    effects = decode_effects(regs)
-    for effect in effects:
-      if SID: effects_mgr.start_sid(voice, freq, volume)
-      if DigiDrum: effects_mgr.start_digidrum(voice, sample_idx, speed)
-      if SyncBuzzer: effects_mgr.start_buzzer(freq)
-
-  # Core emulation: advance by one sample
-  chip.clock()
-
-  # Update effect states for this sample
-  effects_mgr.update()
-
-  # Get output sample
-  sample = chip.get_sample()
-
-  # Increment frame position
-  samples_in_frame += 1
-  if samples_in_frame >= samples_per_frame:
-    samples_in_frame = 0
-    current_frame += 1
-    if current_frame >= frames.len():
-      if loop_point:
-        current_frame = loop_point  # Restart
-      else:
-        state = Stopped
-
-  return sample
-```
-
-### Effects
-
-Three independent effects can modify the chip output:
-
-| Effect | Mechanism | Use |
-|--------|-----------|-----|
-| **SID** | Amplitude gating at 4-8 kHz frequency | "Sidekick" voice timbre |
-| **DigiDrum** | Sample playback at variable speed | Drum/percussion samples |
-| **Sync Buzzer** | Fast envelope retriggering | Buzzer/trill sounds |
-
-Effects are decoded from register frame data and applied per-sample during generation.
+**Implementations:**
+- `Ym2149` (this crate): Hardware-accurate emulation
+- `SoftSynth` (ym-softsynth crate): Experimental synthesizer
 
 ---
 
-## Real-Time Streaming (streaming/)
+## Effect Support Methods
 
-Multi-threaded architecture with lock-free ring buffer for decoupled sample generation and audio output.
+The `Ym2149` implementation provides additional public methods for hardware effects (used by ym-replayer):
 
-### Threading Model
-
-```mermaid
-graph LR
-    subgraph Threads["Concurrent Threads"]
-        A["🔵 Playback<br/>generate_samples<br/>44.1 kHz"]
-        B["🔴 Audio Out<br/>CPAL callback<br/>~11 Hz"]
-        C["🟢 Visualization<br/>Status display<br/>20 Hz"]
-    end
-
-    A -->|write| RB["Ring Buffer<br/>4-16 KB<br/>lock-free"]
-    B -->|read| RB
-    C -->|read state| RB
+### Mixer Overrides
+```rust
+pub fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3])
 ```
+Used by SID voice and Sync Buzzer effects to override mixer settings.
 
-### Ring Buffer (Lock-Free)
-
-A circular buffer decouples sample generation from audio output:
-
+### DigiDrum Support
+```rust
+pub fn set_drum_sample_override(&mut self, voice: usize, sample: Option<i32>)
 ```
-Structure:
-  ├─ buffer: Arc<Vec<f32>>             (shared sample storage)
-  ├─ write_pos: Arc<AtomicUsize>       (producer position)
-  ├─ read_pos: Arc<AtomicUsize>        (consumer position)
-  └─ capacity: usize (power of 2, e.g., 4096)
+Allows injecting drum sample values directly into channel outputs.
 
-Operations:
-  write(samples):
-    ├─ Calculate available space
-    ├─ Copy samples to circular buffer (wrap at capacity)
-    └─ Atomically advance write_pos (no locks!)
-
-  read(count):
-    ├─ Calculate available samples
-    ├─ Copy from circular buffer (wrap at capacity)
-    └─ Atomically advance read_pos
+### Envelope Triggering
+```rust
+pub fn trigger_envelope(&mut self, shape: u8)
 ```
+Immediate envelope restart, used by Sync Buzzer effect.
 
-**Benefits**:
-- Zero-copy between threads (just pointers)
-- Lock-free reads/writes (atomic operations only)
-- Configurable latency (buffer size controls delay)
-- Backpressure: producer sleeps if buffer full
-
-### Latency Configuration
-
-```
-Buffer Size → Latency (at 44.1 kHz)
-────────────────────────────────
-4 KB        → ~93 ms (low-latency, risk underruns)
-8 KB        → ~186 ms
-16 KB       → ~372 ms (stable, standard)
-32 KB       → ~744 ms (very stable)
-
-Total end-to-end: 120-150 ms (buffer + OS + audio device)
-```
-
----
-
-## Data Flow
-
-### File Loading Pipeline
-
-```mermaid
-graph LR
-    A["File<br/>bytes"] --> B{Compressed?}
-    B -->|LHA sig| C["Decompress<br/>(delharc)"]
-    C --> D["Detect Format"]
-    B -->|raw| D
-
-    D --> E{Format}
-    E -->|YM2| F["YmParser"]
-    E -->|YM3-5| F
-    E -->|YM6| G["Ym6Parser"]
-
-    F --> H["Parse frames"]
-    G --> H
-
-    H --> I["(Ym6Player, LoadSummary)"]
-    I --> J["Ready for playback"]
-```
-
-### Sample Generation → Output
-
-```mermaid
-sequenceDiagram
-    participant P as Playback Thread
-    participant RB as Ring Buffer
-    participant A as Audio Device
-
-    P ->> P: generate_sample() x4096
-    P ->> RB: write_blocking(samples)
-    RB ->> RB: advance write_pos
-
-    A ->> RB: read(buffer_size)
-    RB ->> RB: advance read_pos
-    A ->> A: output to speaker
-```
-
----
-
-## File Format Support
-
-| Format | Frames | Regs | Metadata | Effects | Drums |
-|--------|--------|------|----------|---------|-------|
-| YM2 | Raw | 14 | ❌ | ❌ | ❌ |
-| YM3/3b | Raw | 14 | ✓ | ❌ | ❌ |
-| YM4 | Raw | 14 | ✓ | ❌ | ✓ |
-| YM5 | Raw | 16 | ✓ | ✓ | ✓ |
-| YM6 | Commands | 16 | ✓ | ✓ | ✓ |
-
-All formats transparently decompress if LHA-compressed.
+**Note**: These methods are hardware-specific and not part of the `Ym2149Backend` trait, which is why YM6 effects require the concrete `Ym2149` type.
 
 ---
 
@@ -336,9 +166,8 @@ All formats transparently decompress if LHA-compressed.
 
 | Operation | Time | CPU |
 |-----------|------|-----|
-| YM2149.clock() | ~1-2 µs per sample | ~5% per core |
-| Effects update | ~0.2-0.5 µs | included above |
-| Ring buffer ops | ~0.1 µs (atomic only) | negligible |
+| Ym2149.clock() | ~1-2 µs per sample | ~5% per core |
+| generate_samples(882) | ~1-2 ms per frame | typical VBL period |
 | Total @ 44.1 kHz | ~45-90 ms per second | ~5% sustained |
 
 Low CPU overhead enables playback on modest systems.
@@ -349,18 +178,47 @@ Low CPU overhead enables playback on modest systems.
 
 1. **Fixed-point phase accumulators** (16.16 format) for sub-sample frequency precision
 2. **Pre-computed envelope lookup tables** (16 shapes × 65K values) for smooth, fast amplitude modulation
-3. **Lock-free ring buffer** with atomic positions for zero-copy inter-thread communication
-4. **Frame-based playback** mimicking ATARI ST VBL interrupts @ 50Hz
-5. **Effects decoupled from core emulation** for clean separation and testability
-6. **Transparent decompression** supporting multiple file format versions
+3. **Zero allocations** in sample generation hot path
+4. **Hardware-accurate mixer logic** with proper AND gate behavior
+5. **Trait-based backend** for alternative implementations (e.g., SoftSynth)
+6. **Public effect methods** to support YM6 playback without breaking encapsulation
 
 ---
 
-## Related Code Locations
+## Module Organization
 
-- **Main entry**: `src/main.rs` - CLI and threading setup
-- **Chip emulation**: `src/ym2149/chip.rs` - Core sample generation loop
-- **Playback orchestration**: `src/replayer/ym_player.rs` - Frame loading and effects
-- **Ring buffer**: `src/streaming/ring_buffer.rs` - Lock-free circular buffer
-- **Audio output**: `src/streaming/audio_device.rs` - CPAL integration
-- **File parsing**: `src/ym_parser/` - Format detection and frame extraction
+```
+ym2149-core/src/
+├── ym2149/
+│   ├── chip.rs           # Main Ym2149 implementation
+│   ├── channel.rs        # Tone generator (square wave)
+│   ├── envelope.rs       # Envelope generator with 16 shapes
+│   ├── noise.rs          # 17-bit LFSR noise generator
+│   ├── mixer.rs          # Channel mixing and filtering
+│   ├── constants.rs      # Clock rates, frequencies
+│   └── registers.rs      # Register definitions
+├── backend.rs            # Ym2149Backend trait
+├── mfp.rs                # MFP timer helpers
+├── streaming/            # Optional audio output (feature: streaming)
+├── visualization/        # Terminal UI helpers (feature: visualization)
+└── lib.rs                # Public API exports
+```
+
+---
+
+## Deprecated Modules (v0.6.0)
+
+The following modules are deprecated and maintained only for backward compatibility. Use the new crates instead:
+
+- `compression/` → Use `ym-replayer` crate
+- `ym_parser/` → Use `ym-replayer` crate
+- `ym_loader/` → Use `ym-replayer` crate
+- `replayer/` → Use `ym-replayer` crate
+
+---
+
+## Related Documentation
+
+- [Workspace Architecture](../../ARCHITECTURE.md) - Overall system design
+- [Streaming Guide](../../STREAMING_GUIDE.md) - Real-time audio output details
+- [API Documentation](https://docs.rs/ym2149) - Full API reference

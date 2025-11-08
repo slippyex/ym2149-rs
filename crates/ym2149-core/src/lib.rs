@@ -14,12 +14,13 @@
 //! - Audio sample generation and optional streaming playback
 //!
 //! # Crate feature flags
-//! - `emulator` (default): Core YM2149 integer-accurate emulator (`ym2149`)
-//! - `ym-format` (default): YM file parsing/loader (`ym_parser`, `ym_loader`, `compression`)
-//! - `replayer` (default): YM replayer and effects decoding (`replayer`)
-//! - `visualization` (default): Terminal visualization helpers (`visualization`)
-//! - `streaming` (opt-in): Real-time audio output (enables optional `rodio` dep)
-//! - `softsynth` (opt-in): Experimental software synthesizer (`softsynth`)
+//! - `emulator` (default): Core YM2149 cycle-accurate emulator
+//! - `streaming` (default): Real-time audio output via rodio
+//! - `visualization` (default): Terminal visualization helpers
+//!
+//! # Backend Trait
+//! The `Ym2149Backend` trait allows alternative implementations (e.g., `ym-softsynth` crate)
+//! to be used interchangeably with the hardware-accurate emulation.
 //!
 //! # Quick start
 //! ## Core emulator only
@@ -33,74 +34,41 @@
 //! let sample = chip.get_sample();
 //! ```
 //!
-//! ## Load and play YM (no streaming)
+//! ## Real-time streaming with chip demo
 //! ```no_run
-//! # #[cfg(feature = "replayer")]
+//! # #[cfg(feature = "streaming")]
 //! # {
-//! use ym2149::replayer::PlaybackController;
-//! use ym2149::{load_song, Ym6Player};
-//! // Buffer-based API: pass bytes (LHA-compressed OK)
-//! let data = std::fs::read("song.ym").unwrap();
-//! let (mut player, summary) = load_song(&data).unwrap(); // YM2–YM6 auto-detect
-//! player.play().unwrap();
-//! let audio = player.generate_samples(summary.samples_per_frame as usize);
-//! # }
-//! ```
+//! use ym2149::{Ym2149, RealtimePlayer, StreamConfig, AudioDevice};
+//! use std::sync::Arc;
 //!
-//! ## Real-time streaming
-//! ```no_run
-//! # #[cfg(all(feature = "replayer", feature = "streaming"))]
-//! # {
-//! use ym2149::replayer::PlaybackController;
-//! use ym2149::{load_song, RealtimePlayer, StreamConfig, AudioDevice};
-//! let data = std::fs::read("song.ym").unwrap();
-//! let (mut player, summary) = load_song(&data).unwrap();
-//! player.play().unwrap();
-//! let cfg = StreamConfig::low_latency(44_100);
+//! // Create chip and configure for A4 tone
+//! let mut chip = Ym2149::new();
+//! chip.write_register(0x07, 0x3E); // Enable tone A
+//! chip.write_register(0x00, 0x1C); // A4 period low
+//! chip.write_register(0x01, 0x01); // A4 period high
+//! chip.write_register(0x08, 0x0F); // Max volume
+//!
+//! // Setup audio streaming
+//! let cfg = StreamConfig::default();
 //! let stream = RealtimePlayer::new(cfg).unwrap();
 //! let _dev = AudioDevice::new(cfg.sample_rate, cfg.channels, stream.get_buffer()).unwrap();
-//! // push samples into the stream in a loop
 //! # }
 //! ```
-
-//! ## File loader (frames from files or buffers)
-//! ```no_run
-//! # #[cfg(feature = "ym-format")]
-//! # {
-//! // From a file path
-//! let frames = ym2149::ym_loader::load_file("song.ym").unwrap();
-//! assert!(!frames.is_empty());
 //!
-//! // From an in-memory buffer
-//! let data = std::fs::read("song.ym").unwrap();
-//! let frames2 = ym2149::ym_loader::load_bytes(&data).unwrap();
-//! assert_eq!(frames.len(), frames2.len());
-//! # }
-//! ```
+//! For YM file playback, use the `ym-replayer` crate which provides YM2-YM6 format support.
 
 #![warn(missing_docs)]
 
 // Domain modules (feature-gated for modular use)
-pub mod ym2149; // YM2149 PSG Emulation (core)
+pub mod backend; // Backend trait abstraction
+pub mod mfp;
+pub mod ym2149; // YM2149 PSG Emulation (core) // MFP Timer Effects (helpers)
 
-#[cfg(feature = "ym-format")]
-pub mod compression; // Data Decompression (LHA/LZH)
-#[cfg(any(feature = "export-wav", feature = "export-mp3"))]
-pub mod export; // Audio export (WAV/MP3)
-pub mod mfp; // MFP Timer Effects (helpers)
-#[cfg(feature = "replayer")]
-pub mod replayer; // Playback Engine
-#[cfg(feature = "softsynth")]
-/// Experimental software synthesizer (non-bit-accurate)
-pub mod softsynth;
 #[cfg(feature = "streaming")]
 pub mod streaming; // Audio Output & Streaming
+
 #[cfg(feature = "visualization")]
 pub mod visualization; // Terminal UI Helpers
-#[cfg(feature = "ym-format")]
-pub mod ym_loader; // YM File I/O
-#[cfg(feature = "ym-format")]
-pub mod ym_parser; // YM Format Parsing
 
 /// Error types for YM2149 emulator operations
 #[derive(thiserror::Error, Debug)]
@@ -175,18 +143,12 @@ impl From<&str> for Ym2149Error {
 pub type Result<T> = std::result::Result<T, Ym2149Error>;
 
 // Public API exports
+pub use backend::Ym2149Backend;
+pub use mfp::Mfp;
 pub use ym2149::Ym2149;
 
-#[cfg(feature = "ym-format")]
-pub use compression::decompress_if_needed;
-pub use mfp::Mfp;
-#[cfg(feature = "replayer")]
-pub use replayer::{LoadSummary, Player, Ym6Info, Ym6Player, YmFileFormat, load_song};
-#[cfg(feature = "softsynth")]
-pub use softsynth::SoftPlayer;
 #[cfg(feature = "streaming")]
 pub use streaming::{AudioDevice, RealtimePlayer, RingBuffer, StreamConfig};
+
 #[cfg(feature = "visualization")]
 pub use visualization::create_volume_bar;
-#[cfg(feature = "ym-format")]
-pub use ym_parser::effects::{EffectCommand, Ym6EffectDecoder, decode_effects_ym5};

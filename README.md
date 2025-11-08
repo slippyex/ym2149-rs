@@ -15,7 +15,9 @@
 
 | Crate | Purpose | Crates.io | Docs |
 |-------|---------|-----------|------|
-| [`ym2149`](crates/ym2149-core) | Core emulator + CLI/export tooling | [crates.io/crates/ym2149](https://crates.io/crates/ym2149) | [docs.rs/ym2149](https://docs.rs/ym2149) |
+| [`ym2149`](crates/ym2149-core) | Core YM2149 chip emulator (cycle-accurate) | [crates.io/crates/ym2149](https://crates.io/crates/ym2149) | [docs.rs/ym2149](https://docs.rs/ym2149) |
+| [`ym-replayer`](crates/ym-replayer) | YM file parsing and music playback (YM2–YM6, tracker support) | [crates.io/crates/ym-replayer](https://crates.io/crates/ym-replayer) | [docs.rs/ym-replayer](https://docs.rs/ym-replayer) |
+| [`ym-softsynth`](crates/ym-softsynth) | Experimental software synthesizer backend | [crates.io/crates/ym-softsynth](https://crates.io/crates/ym-softsynth) | [docs.rs/ym-softsynth](https://docs.rs/ym-softsynth) |
 | [`bevy_ym2149`](crates/bevy_ym2149) | Bevy audio plugin (playback, playlists, diagnostics, audio bridge) | [crates.io/crates/bevy_ym2149](https://crates.io/crates/bevy_ym2149) | [docs.rs/bevy_ym2149](https://docs.rs/bevy_ym2149) |
 | [`bevy_ym2149_viz`](crates/bevy_ym2149_viz) | Optional visualization systems & UI builders | [crates.io/crates/bevy_ym2149_viz](https://crates.io/crates/bevy_ym2149_viz) | [docs.rs/bevy_ym2149_viz](https://docs.rs/bevy_ym2149_viz) |
 | [`bevy_ym2149_examples`](crates/bevy_ym2149_examples) | Runnable Bevy demos (basic, advanced, crossfade, feature showcase, demoscene) | Workspace-only | [crates/bevy_ym2149_examples/README.md](crates/bevy_ym2149_examples/README.md) |
@@ -37,19 +39,20 @@
 
 ```toml
 [dependencies]
-ym2149 = { version = "0.6", features = ["emulator", "ym-format", "replayer", "streaming"] }
+ym2149 = { version = "0.6", features = ["emulator", "streaming"] }
+ym-replayer = "0.6"
 ```
 
 ```rust
-use ym2149::replayer::load_song;
+use ym_replayer::{load_song, PlaybackController};
 
 fn main() -> anyhow::Result<()> {
     let data = std::fs::read("song.ym")?;
-    let (mut player, info) = load_song(&data)?;
+    let (mut player, summary) = load_song(&data)?;
 
     player.play()?;
-    let samples = player.generate_samples(44_100);
-    println!("{} frames • {} samples", info.frame_count, samples.len());
+    let samples = player.generate_samples(summary.samples_per_frame as usize);
+    println!("{} frames • {} samples", summary.frame_count, samples.len());
     Ok(())
 }
 ```
@@ -58,11 +61,14 @@ fn main() -> anyhow::Result<()> {
 
 ```bash
 # Real-time playback with scope overlay
-cargo run -p ym2149 --features streaming -- examples/ND-Toxygene.ym
+cargo run -p ym-replayer --features streaming -- examples/ND-Toxygene.ym
+
+# Interactive chip demo with audio output
+cargo run --example chip_demo -p ym2149 --features streaming
 
 # Export to WAV / MP3
-cargo run --example export -p ym2149 --features export-wav -- song.ym out.wav
-cargo run --example export -p ym2149 --features export-mp3 -- song.ym out.mp3 --bitrate 320
+cargo run --example export -p ym-replayer --features export-wav -- song.ym out.wav
+cargo run --example export -p ym-replayer --features export-mp3 -- song.ym out.mp3 --bitrate 320
 ```
 
 <img src="docs/screenshots/cli.png" alt="CLI player" width="700">
@@ -121,7 +127,9 @@ cargo test -p ym2149 --features export-wav
 ```
 ym2149-rs/
 ├── crates/
-│   ├── ym2149-core/          # Core emulator (published as `ym2149`)
+│   ├── ym2149-core/          # Core YM2149 chip emulator (published as `ym2149`)
+│   ├── ym-replayer/          # YM file parsing and playback
+│   ├── ym-softsynth/         # Experimental synthesizer backend
 │   ├── bevy_ym2149/          # Bevy audio plugin
 │   ├── bevy_ym2149_viz/      # Visualization helpers
 │   ├── bevy_ym2149_examples/ # Runnable Bevy demos

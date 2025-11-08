@@ -1,10 +1,10 @@
-//! YM File Loader
+//! YM File Loader Domain
 //!
-//! Loads YM music files from disk or in-memory bytes with automatic
-//! format detection and transparent LHA decompression support.
+//! Handles file I/O operations for loading YM music files from disk,
+//! including format auto-detection and compression handling.
 
-use crate::ym_parser::FormatParser;
-use crate::{Result, compression, ym_parser};
+use crate::parser::FormatParser;
+use crate::{Result, compression, parser};
 use std::fs;
 
 /// Loads YM files from disk
@@ -32,11 +32,11 @@ impl YmFileLoader {
         // Parse and return frames based on detected format
         match format {
             "YM3" | "YM3b" | "YM4" | "YM5" => {
-                let parser = ym_parser::YmParser;
+                let parser = parser::YmParser;
                 parser.parse(&data)
             }
             "YM6" => {
-                let parser = ym_parser::Ym6Parser;
+                let parser = parser::Ym6Parser;
                 parser.parse(&data)
             }
             _ => Err(
@@ -62,6 +62,18 @@ impl YmFileLoader {
             _ => "unknown",
         }
     }
+}
+
+/// Convenience function to load a YM file from disk
+pub fn load_file(path: &str) -> Result<Vec<[u8; 16]>> {
+    YmFileLoader::load(path)
+}
+
+/// Convenience function to load a YM file from an in-memory byte buffer
+///
+/// Supports automatic LHA decompression and format auto-detection.
+pub fn load_bytes(data: &[u8]) -> Result<Vec<[u8; 16]>> {
+    YmFileLoader::load_from_bytes(data)
 }
 
 #[cfg(test)]

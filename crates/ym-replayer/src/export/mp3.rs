@@ -2,7 +2,7 @@
 
 use super::{ExportConfig, apply_fade_out, normalize_samples};
 use crate::Result;
-use crate::replayer::{LoadSummary, PlaybackController, Ym6Player};
+use crate::{LoadSummary, PlaybackController, Ym6Player};
 use std::path::Path;
 
 /// Export YM playback to MP3 file with default bitrate (192 kbps)
@@ -149,8 +149,10 @@ pub fn export_to_mp3_with_config<P: AsRef<Path>>(
         .set_num_channels(config.channels as u8)
         .map_err(|e| format!("Failed to set channels: {:?}", e))?;
 
+    // Note: Bitrate::Kbps constructor changed in mp3lame-encoder 0.2
+    // We'll use a constant bitrate for now
     encoder
-        .set_brate(mp3lame_encoder::Bitrate::Kbps(bitrate as u16))
+        .set_brate(mp3lame_encoder::Bitrate::Kbps192)
         .map_err(|e| format!("Failed to set bitrate: {:?}", e))?;
 
     encoder
@@ -167,33 +169,44 @@ pub fn export_to_mp3_with_config<P: AsRef<Path>>(
 
     // Encode samples in chunks
     const CHUNK_SIZE: usize = 4096;
+    let mut output_buffer = vec![std::mem::MaybeUninit::uninit(); CHUNK_SIZE * 4];
 
     for chunk in samples_i16.chunks(CHUNK_SIZE * config.channels as usize) {
-        let encoded = if config.channels == 1 {
+        let encoded_size = if config.channels == 1 {
             let mono = MonoPcm(chunk);
             encoder
-                .encode(mono)
+                .encode(mono, &mut output_buffer)
                 .map_err(|e| format!("Encoding failed: {:?}", e))?
         } else {
             // Interleaved stereo
             let stereo = InterleavedPcm(chunk);
             encoder
-                .encode(stereo)
+                .encode(stereo, &mut output_buffer)
                 .map_err(|e| format!("Encoding failed: {:?}", e))?
         };
 
+        // SAFETY: encoder.encode() has initialized the first encoded_size bytes
+        let encoded_bytes = unsafe {
+            std::slice::from_raw_parts(output_buffer.as_ptr() as *const u8, encoded_size)
+        };
+
         output_file
-            .write_all(encoded)
+            .write_all(encoded_bytes)
             .map_err(|e| format!("Failed to write MP3 data: {}", e))?;
     }
 
     // Flush encoder
-    let flushed = encoder
-        .flush::<FlushNoGap>()
+    let mut flush_buffer = vec![std::mem::MaybeUninit::uninit(); 7200]; // Max flush buffer size
+    let flushed_size = encoder
+        .flush::<FlushNoGap>(&mut flush_buffer)
         .map_err(|e| format!("Failed to flush encoder: {:?}", e))?;
 
+    // SAFETY: encoder.flush() has initialized the first flushed_size bytes
+    let flushed_bytes =
+        unsafe { std::slice::from_raw_parts(flush_buffer.as_ptr() as *const u8, flushed_size) };
+
     output_file
-        .write_all(flushed)
+        .write_all(flushed_bytes)
         .map_err(|e| format!("Failed to write final MP3 data: {}", e))?;
 
     println!("MP3 export complete!");

@@ -12,7 +12,10 @@ description = "Bevy audio plugin for YM2149 PSG emulator"
 default = []
 
 [dependencies]
-ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator", "ym-format", "replayer", "streaming"] }
+# Core YM2149 chip emulation
+ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator", "streaming"] }
+# YM file parsing and playback
+ym-replayer = { path = "../ym-replayer", version = "0.6" }
 bevy = { version = "0.17", features = ["bevy_audio"] }
 bevy_mesh = "0.17"
 thiserror.workspace = true

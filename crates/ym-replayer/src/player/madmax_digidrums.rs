@@ -50,9 +50,8 @@ fn parse_madmax_samples() -> Vec<Vec<u8>> {
     let mut samples = Vec::new();
     let data = MADMAX_SAMPLES_BIN;
 
-    if data.is_empty() {
-        return samples;
-    }
+    // MADMAX_SAMPLES_BIN is a compile-time constant from include_bytes!()
+    // No need to check if it's empty as it's always the same size
 
     // Read number of samples
     let count = data[0] as usize;

@@ -15,16 +15,17 @@ mod cli {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Instant;
 
-    use ym2149::replayer::{PlaybackController, Player, Ym6Player, load_song};
-    #[cfg(feature = "softsynth")]
-    use ym2149::softsynth::SoftPlayer;
+    use ym_replayer::{PlaybackController, PlaybackState, Player, Ym6Player, load_song};
+    // Note: SoftPlayer has been removed to avoid circular dependencies
+    // TODO: Re-implement as a generic player in ym-replayer that can use SoftSynth as backend
     use ym2149::streaming::{
         BUFFER_BACKOFF_MICROS, DEFAULT_SAMPLE_RATE, StreamConfig, VISUALIZATION_UPDATE_MS,
     };
     use ym2149::visualization::{create_channel_status, create_volume_bar};
     use ym2149::{AudioDevice, RealtimePlayer};
-    #[cfg(feature = "softsynth")]
-    use ym2149::{Ym6Info, YmFileFormat};
+    // SoftPlayer removed
+    // #[cfg(feature = "softsynth")]
+    // use ym_replayer::{Ym6Info, YmFileFormat};
 
     const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
     const NOTE_NAMES: [&str; 12] = [
@@ -201,6 +202,9 @@ mod cli {
         }
     }
 
+    // SoftPlayer has been removed to avoid circular dependencies
+    // TODO: Re-implement as a generic player that uses SoftSynth backend
+    /*
     #[cfg(feature = "softsynth")]
     impl RealtimeChip for SoftPlayer {
         fn generate_samples(&mut self, count: usize) -> Vec<f32> {
@@ -232,6 +236,7 @@ mod cli {
             SoftPlayer::get_playback_position(self)
         }
     }
+    */
 
     #[cfg(unix)]
     fn restore_terminal_mode() {
@@ -348,30 +353,36 @@ mod cli {
                     }
                     #[cfg(feature = "softsynth")]
                     ChipChoice::SoftSynth => {
-                        if matches!(summary.format, YmFileFormat::Ymt1 | YmFileFormat::Ymt2) {
-                            return Err(
-                                "Softsynth backend does not yet support tracker formats".into()
-                            );
-                        }
-                        let mut soft_player = SoftPlayer::from_ym_player(&ym_player)?;
-                        drop(ym_player);
-                        if let Some(cf) = color_filter_override {
-                            soft_player.set_color_filter(cf);
-                        }
-                        let info_str = format!(
-                            "File: {} ({})\n{}",
-                            file_path,
-                            summary.format,
-                            soft_player.format_info()
-                        );
-                        let duration_secs = soft_player.duration_seconds();
-                        let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
-                        (
-                            Box::new(soft_player) as Box<dyn RealtimeChip>,
-                            total_samples,
-                            info_str,
-                        )
-                    }
+                        return Err("SoftSynth backend temporarily disabled due to refactoring. Use --chip ym2149 instead.".into());
+                    } // SoftPlayer removed - circular dependency issue
+                      // TODO: Re-implement using SoftSynth backend directly
+                      /*
+                      ChipChoice::SoftSynth => {
+                          if matches!(summary.format, YmFileFormat::Ymt1 | YmFileFormat::Ymt2) {
+                              return Err(
+                                  "Softsynth backend does not yet support tracker formats".into()
+                              );
+                          }
+                          let mut soft_player = SoftPlayer::from_ym_player(&ym_player)?;
+                          drop(ym_player);
+                          if let Some(cf) = color_filter_override {
+                              soft_player.set_color_filter(cf);
+                          }
+                          let info_str = format!(
+                              "File: {} ({})\n{}",
+                              file_path,
+                              summary.format,
+                              soft_player.format_info()
+                          );
+                          let duration_secs = soft_player.duration_seconds();
+                          let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
+                          (
+                              Box::new(soft_player) as Box<dyn RealtimeChip>,
+                              total_samples,
+                              info_str,
+                          )
+                      }
+                      */
                 }
             }
             None => {
@@ -401,30 +412,35 @@ mod cli {
                     }
                     #[cfg(feature = "softsynth")]
                     ChipChoice::SoftSynth => {
-                        let mut demo_player = SoftPlayer::new();
-                        let frames = vec![[0u8; 16]; 250];
-                        let info = Ym6Info {
-                            song_name: "Demo".into(),
-                            author: "SoftSynth".into(),
-                            comment: "Generated silence".into(),
-                            frame_count: 250,
-                            frame_rate: 50,
-                            loop_frame: 0,
-                            master_clock: 2_000_000,
-                        };
-                        demo_player.load_frames(frames, 50, None, info);
-                        let duration_secs = demo_player.duration_seconds();
-                        let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
-                        let info_str = format!(
-                            "Demo Mode (SoftSynth): {:.2} seconds of silence",
-                            duration_secs
-                        );
-                        (
-                            Box::new(demo_player) as Box<dyn RealtimeChip>,
-                            total_samples,
-                            info_str,
-                        )
-                    }
+                        return Err("SoftSynth backend temporarily disabled due to refactoring. Use --chip ym2149 instead.".into());
+                    } // SoftPlayer removed - circular dependency issue
+                      /*
+                      ChipChoice::SoftSynth => {
+                          let mut demo_player = SoftPlayer::new();
+                          let frames = vec![[0u8; 16]; 250];
+                          let info = Ym6Info {
+                              song_name: "Demo".into(),
+                              author: "SoftSynth".into(),
+                              comment: "Generated silence".into(),
+                              frame_count: 250,
+                              frame_rate: 50,
+                              loop_frame: 0,
+                              master_clock: 2_000_000,
+                          };
+                          demo_player.load_frames(frames, 50, None, info);
+                          let duration_secs = demo_player.duration_seconds();
+                          let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
+                          let info_str = format!(
+                              "Demo Mode (SoftSynth): {:.2} seconds of silence",
+                              duration_secs
+                          );
+                          (
+                              Box::new(demo_player) as Box<dyn RealtimeChip>,
+                              total_samples,
+                              info_str,
+                          )
+                      }
+                      */
                 }
             }
         };
@@ -471,7 +487,7 @@ mod cli {
                 let batch_size = sample_buffer.len();
                 {
                     let mut player = player_clone.lock();
-                    if player.state() == ym2149::replayer::PlaybackState::Stopped {
+                    if player.state() == PlaybackState::Stopped {
                         let _ = player.stop();
                         let _ = player.play();
                     }
@@ -535,7 +551,7 @@ mod cli {
                     }
                     b' ' => {
                         let mut guard = player.lock();
-                        use ym2149::replayer::PlaybackState;
+                        use ym_replayer::PlaybackState;
                         match guard.state() {
                             PlaybackState::Playing => {
                                 let _ = guard.pause();

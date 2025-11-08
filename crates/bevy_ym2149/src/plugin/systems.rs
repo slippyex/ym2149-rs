@@ -13,7 +13,7 @@ use bevy::tasks::{IoTaskPool, Task, block_on, poll_once};
 use parking_lot::Mutex;
 use std::collections::{HashMap, hash_map::Entry};
 use std::sync::Arc;
-use ym2149::replayer::PlaybackController;
+use ym_replayer::PlaybackController;
 
 const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
 
@@ -558,7 +558,7 @@ pub(super) fn update_playback(
 
         let player_state = player.state();
 
-        if player_state != ym2149::replayer::PlaybackState::Playing
+        if player_state != ym_replayer::PlaybackState::Playing
             && playback.state == PlaybackState::Playing
         {
             entry.time_since_last_frame = 0.0;
@@ -614,7 +614,7 @@ fn channel_frequencies(registers: &[u8; 16]) -> [Option<f32>; 3] {
 }
 
 struct LoadResult {
-    player: ym2149::replayer::Ym6Player,
+    player: ym_replayer::Ym6Player,
     metrics: PlaybackMetrics,
     title: String,
     author: String,
@@ -625,7 +625,7 @@ fn load_player_from_bytes(
     metadata: Option<&Ym2149Metadata>,
 ) -> Result<LoadResult, String> {
     let (player, summary) =
-        ym2149::load_song(&data).map_err(|e| format!("Failed to load song: {}", e))?;
+        ym_replayer::load_song(&data).map_err(|e| format!("Failed to load song: {}", e))?;
     let metrics = PlaybackMetrics::from(&summary);
 
     let (title, author) = if let Some(meta) = metadata {

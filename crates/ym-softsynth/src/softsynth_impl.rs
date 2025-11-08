@@ -1,8 +1,5 @@
-use crate::Result;
-use crate::replayer::{PlaybackController, PlaybackState, Ym6Info};
-use crate::ym_parser::effects::{EffectCommand, Ym6EffectDecoder};
-use crate::ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
 use std::f32::consts::PI;
+use ym2149::ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
 
 const SAMPLE_RATE: f32 = 44_100.0;
 
@@ -493,10 +490,14 @@ fn period_to_frequency(period: u16) -> f32 {
     }
 }
 
-/// Simple player for feeding YM frames into the experimental SoftSynth.
-///
-/// This mirrors `Ym6Player` API but renders using the non-bit-accurate
-/// synth engine. YM6 effects (SID, Sync Buzzer) are decoded and applied.
+// NOTE: SoftPlayer has been removed to avoid circular dependency with ym-replayer.
+// TODO: Re-implement as a generic player in ym-replayer that can use SoftSynth as backend.
+//
+// /// Simple player for feeding YM frames into the experimental SoftSynth.
+// ///
+// /// This mirrors `Ym6Player` API but renders using the non-bit-accurate
+// /// synth engine. YM6 effects (SID, Sync Buzzer) are decoded and applied.
+/* DISABLED - Circular dependency
 pub struct SoftPlayer {
     chip: SoftSynth,
     frames: Vec<[u8; 16]>,
@@ -560,35 +561,36 @@ impl SoftPlayer {
         self.state = PlaybackState::Stopped;
     }
 
-    /// Construct from an existing integer-accurate player
-    pub fn from_ym_player(src: &crate::replayer::Ym6Player) -> Result<Self> {
-        if src.is_tracker_mode() {
-            return Err("SoftSynth backend does not yet support tracker formats".into());
-        }
-
-        let frames = src
-            .frames_clone()
-            .ok_or("Unable to clone frames from player")?;
-
-        let loop_point = src.loop_point_value();
-        let samples_per_frame = src.samples_per_frame_value();
-        let info = src.info().cloned().unwrap_or_else(|| Ym6Info {
-            song_name: String::new(),
-            author: String::new(),
-            comment: String::new(),
-            frame_count: frames.len() as u32,
-            frame_rate: 50,
-            loop_frame: 0,
-            master_clock: 2_000_000,
-        });
-
-        let frame_rate = info.frame_rate;
-
-        let mut player = SoftPlayer::new();
-        player.load_frames(frames, frame_rate, loop_point, info);
-        player.samples_per_frame = samples_per_frame.max(1);
-        Ok(player)
-    }
+    // TEMPORARILY DISABLED - Will be re-enabled once ym-replayer migration is complete
+    // /// Construct from an existing integer-accurate player
+    // pub fn from_ym_player(src: &Ym6Player) -> Result<Self, String> {
+    //     if src.is_tracker_mode() {
+    //         return Err("SoftSynth backend does not yet support tracker formats".into());
+    //     }
+    //
+    //     let frames = src
+    //         .frames_clone()
+    //         .ok_or("Unable to clone frames from player")?;
+    //
+    //     let loop_point = src.loop_point_value();
+    //     let samples_per_frame = src.samples_per_frame_value();
+    //     let info = src.info().cloned().unwrap_or_else(|| Ym6Info {
+    //         song_name: String::new(),
+    //         author: String::new(),
+    //         comment: String::new(),
+    //         frame_count: frames.len() as u32,
+    //         frame_rate: 50,
+    //         loop_frame: 0,
+    //         master_clock: 2_000_000,
+    //     });
+    //
+    //     let frame_rate = info.frame_rate;
+    //
+    //     let mut player = SoftPlayer::new();
+    //     player.load_frames(frames, frame_rate, loop_point, info);
+    //     player.samples_per_frame = samples_per_frame.max(1);
+    //     Ok(player)
+    // }
 
     /// Mute or unmute a channel (0=A,1=B,2=C)
     pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
@@ -776,19 +778,19 @@ impl Default for SoftPlayer {
 }
 
 impl PlaybackController for SoftPlayer {
-    fn play(&mut self) -> Result<()> {
+    fn play(&mut self) -> ym_replayer::Result<()> {
         if !self.frames.is_empty() {
             self.state = PlaybackState::Playing;
         }
         Ok(())
     }
 
-    fn pause(&mut self) -> Result<()> {
+    fn pause(&mut self) -> ym_replayer::Result<()> {
         self.state = PlaybackState::Paused;
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<()> {
+    fn stop(&mut self) -> ym_replayer::Result<()> {
         self.state = PlaybackState::Stopped;
         self.current_frame = 0;
         self.samples_in_frame = 0;
@@ -799,3 +801,4 @@ impl PlaybackController for SoftPlayer {
         self.state
     }
 }
+*/

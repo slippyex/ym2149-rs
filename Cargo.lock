@@ -1544,6 +1544,7 @@ dependencies = [
  "ron 0.8.1",
  "serde",
  "thiserror 1.0.69",
+ "ym-replayer",
  "ym2149",
 ]
 
@@ -5742,7 +5743,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
-name = "ym2149"
+name = "ym-replayer"
 version = "0.6.0"
 dependencies = [
  "approx",
@@ -5753,6 +5754,27 @@ dependencies = [
  "parking_lot",
  "rodio 0.17.3",
  "tempfile",
+ "thiserror 1.0.69",
+ "ym-softsynth",
+ "ym2149",
+]
+
+[[package]]
+name = "ym-softsynth"
+version = "0.6.0"
+dependencies = [
+ "approx",
+ "ym2149",
+]
+
+[[package]]
+name = "ym2149"
+version = "0.6.0"
+dependencies = [
+ "approx",
+ "bitflags 2.10.0",
+ "parking_lot",
+ "rodio 0.17.3",
  "thiserror 1.0.69",
 ]
 
