@@ -58,7 +58,7 @@ impl EnvelopeShape {
     /// Maps all 16 hardware codes to their canonical unique shapes
     pub const fn from_value(val: u8) -> Self {
         match val & 0x0F {
-            0x00 | 0x01 | 0x02 | 0x03 => EnvelopeShape::AttackDecay,
+            0x00..=0x03 => EnvelopeShape::AttackDecay,
             0x04 | 0x05 => EnvelopeShape::AttackSustainRelease,
             0x06 => EnvelopeShape::Triangle,
             0x07 => EnvelopeShape::TriangleSustain,

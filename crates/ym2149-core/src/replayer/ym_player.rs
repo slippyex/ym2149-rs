@@ -978,7 +978,7 @@ impl Ym6Player {
     fn load_frame_registers(&mut self) {
         let frame_to_load = self.current_frame;
         // Clone the frame data to avoid borrow checker issues
-        let regs = self.frames[frame_to_load].clone();
+        let regs = self.frames[frame_to_load];
 
         if self.is_ym2_mode {
             self.load_ym2_frame(&regs);

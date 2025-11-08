@@ -1,4 +1,4 @@
-/// Mad Max (YM2) prebuilt digi-drum sample bank
+//! Mad Max (YM2) prebuilt digi-drum sample bank
 
 /// Sample rate base for Mad Max digi-drums
 pub const MADMAX_SAMPLE_RATE_BASE: u32 = 2_457_600;
@@ -40,7 +40,7 @@ impl MadMaxSampleBank {
 
     /// Iterate over all samples
     pub fn iter(&self) -> impl Iterator<Item = &Vec<u8>> {
-        let samples = MADMAX_SAMPLES_LAZY.get_or_init(|| parse_madmax_samples());
+        let samples = MADMAX_SAMPLES_LAZY.get_or_init(parse_madmax_samples);
         samples.iter()
     }
 }
