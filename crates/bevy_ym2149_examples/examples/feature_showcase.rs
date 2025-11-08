@@ -276,7 +276,7 @@ fn update_bridge_mix(
         } else {
             1.0
         };
-        mix = mix.with_volume_db(mix.volume_db() + step);
+        mix.volume = AudioBridgeMix::db_to_gain(mix.volume_db() + step);
         changed = true;
     }
     if keyboard.any_just_pressed([KeyCode::KeyA, KeyCode::KeyD]) {
@@ -285,7 +285,7 @@ fn update_bridge_mix(
         } else {
             0.1
         };
-        mix = mix.with_pan((mix.pan + delta).clamp(-1.0, 1.0));
+        mix.pan = (mix.pan + delta).clamp(-1.0, 1.0);
         changed = true;
     }
 

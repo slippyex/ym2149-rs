@@ -81,34 +81,99 @@ fn ease_out_elastic(t: f32) -> f32 {
 //   - Typewriter at 1280px: 100px × 1.0 × 1.0 × 1.5 × 1.0 = 150px
 //   - ZoomIn at 1280px: 100px × 1.0 × 1.0 × 1.5 × 1.0 = 150px
 //   - Text at 800px width: 100px × 1.0 × 1.0 × 1.5 × 0.875 = 131px
-const BASE_TEXT_SCALE: f32 = 1.5; // Base scale for all text (1.5x larger)
-const DESIGN_WIDTH: f32 = 1280.0; // Reference viewport width for scaling calculations
-const MIN_VIEWPORT_SCALE: f32 = 0.8; // Prevent text from becoming too small on narrow screens
-const MAX_VIEWPORT_SCALE: f32 = 1.5; // Prevent text from becoming too large on wide screens
-const SWING_FREQUENCY: f32 = 2.0; // Hz (0.5s period for full ellipse)
-const SWING_AMPLITUDE_PX: f32 = 25.0; // Horizontal swing at 1280px width (~2%)
-const SWING_VERTICAL_AMPLITUDE_PX: f32 = 40.0; // Vertical swing (stronger, ~3%)
-const SWING_PHASE_OFFSET: f32 = 0.5; // ~28.6° phase offset between text and block
-const BACKGROUND_OVERHANG_PX: f32 = 64.0; // Extra width on each side for swinging background
-const BREATH_FREQUENCY: f32 = 1.6; // Hz
-const BREATH_AMPLITUDE: f32 = 0.1; // Oscillation magnitude
-const PULSE_SCALING: f32 = 0.6; // Scale factor for beat pulse energy
-const STARTUP_FADE_DURATION: f32 = 2.5; // Black overlay fade-out duration (music starts at fade begin)
+// Text Layout Configuration
+struct TextLayoutConfig;
+impl TextLayoutConfig {
+    const BASE_SCALE: f32 = 1.5;
+    const DESIGN_WIDTH: f32 = 1280.0;
+    const MIN_VIEWPORT_SCALE: f32 = 0.8;
+    const MAX_VIEWPORT_SCALE: f32 = 1.5;
+    const BACKGROUND_OVERHANG_PX: f32 = 64.0;
+}
 
-// Animation Timing Constants
-const SIMPLE_FADE_DURATION: f32 = 1.2; // SimpleFade: total duration for alpha fade
-const ELASTIC_REVEAL_TIME_PER_CHAR: f32 = 0.04; // ElasticReveal: 40ms per character
-const BOUNCE_DURATION: f32 = 1.3; // BounceIn: dramatic bounce needs time for multiple bounces
-const STAGGERED_CHAR_DELAY: f32 = 0.05; // StaggeredSlide: 50ms delay between each character
-const STAGGERED_BASE_DURATION: f32 = 0.5; // StaggeredSlide: base duration after all chars revealed
-const SLIDE_DISTANCE_PX: f32 = 100.0; // StaggeredSlide: horizontal slide distance
-const CASCADE_IN_DURATION: f32 = 0.55; // CascadeZoom: per-character ease-in duration
-const CASCADE_OUT_DURATION: f32 = 0.45; // CascadeZoom: per-character ease-out duration
-const CASCADE_CHAR_DELAY: f32 = 0.05; // CascadeZoom: offset between successive characters
-const CASCADE_MIN_SCALE: f32 = 0.05; // CascadeZoom: starting scale factor per glyph
-const CASCADE_TARGET_SCALE: f32 = 1.0; // CascadeZoom: resting scale per glyph (before fade-out)
-const CASCADE_MAX_SCALE: f32 = 1.25; // CascadeZoom: maximum overshoot scale
-const CASCADE_OVERSHOOT: f32 = 0.22; // CascadeZoom: overshoot factor applied during bounce
+// Background Swing Animation
+struct SwingConfig;
+impl SwingConfig {
+    const FREQUENCY: f32 = 2.0;
+    const AMPLITUDE_H_PX: f32 = 25.0;
+    const AMPLITUDE_V_PX: f32 = 40.0;
+    const PHASE_OFFSET: f32 = 0.5;
+}
+
+// Visual Effects
+struct VisualEffectsConfig;
+impl VisualEffectsConfig {
+    const BREATH_FREQUENCY: f32 = 1.6;
+    const BREATH_AMPLITUDE: f32 = 0.1;
+    const PULSE_SCALING: f32 = 0.6;
+    const STARTUP_FADE_DURATION: f32 = 2.5;
+}
+
+// Simple Fade Animation
+struct SimpleFadeConfig;
+impl SimpleFadeConfig {
+    const DURATION: f32 = 1.2;
+}
+
+// Elastic Reveal Animation
+struct ElasticRevealConfig;
+impl ElasticRevealConfig {
+    const TIME_PER_CHAR: f32 = 0.04;
+}
+
+// Bounce In Animation
+struct BounceConfig;
+impl BounceConfig {
+    const DURATION: f32 = 1.3;
+}
+
+// Staggered Slide Animation
+struct StaggeredSlideConfig;
+impl StaggeredSlideConfig {
+    const CHAR_DELAY: f32 = 0.05;
+    const BASE_DURATION: f32 = 0.5;
+    const SLIDE_DISTANCE_PX: f32 = 100.0;
+}
+
+// Cascade Zoom Animation
+struct CascadeZoomConfig;
+impl CascadeZoomConfig {
+    const IN_DURATION: f32 = 0.55;
+    const OUT_DURATION: f32 = 0.45;
+    const CHAR_DELAY: f32 = 0.05;
+    const MIN_SCALE: f32 = 0.05;
+    const TARGET_SCALE: f32 = 1.0;
+    const MAX_SCALE: f32 = 1.25;
+    const OVERSHOOT: f32 = 0.22;
+}
+
+// Legacy constants for backwards compatibility (to be replaced gradually)
+const BASE_TEXT_SCALE: f32 = TextLayoutConfig::BASE_SCALE;
+const DESIGN_WIDTH: f32 = TextLayoutConfig::DESIGN_WIDTH;
+const MIN_VIEWPORT_SCALE: f32 = TextLayoutConfig::MIN_VIEWPORT_SCALE;
+const MAX_VIEWPORT_SCALE: f32 = TextLayoutConfig::MAX_VIEWPORT_SCALE;
+const SWING_FREQUENCY: f32 = SwingConfig::FREQUENCY;
+const SWING_AMPLITUDE_PX: f32 = SwingConfig::AMPLITUDE_H_PX;
+const SWING_VERTICAL_AMPLITUDE_PX: f32 = SwingConfig::AMPLITUDE_V_PX;
+const SWING_PHASE_OFFSET: f32 = SwingConfig::PHASE_OFFSET;
+const BACKGROUND_OVERHANG_PX: f32 = TextLayoutConfig::BACKGROUND_OVERHANG_PX;
+const BREATH_FREQUENCY: f32 = VisualEffectsConfig::BREATH_FREQUENCY;
+const BREATH_AMPLITUDE: f32 = VisualEffectsConfig::BREATH_AMPLITUDE;
+const PULSE_SCALING: f32 = VisualEffectsConfig::PULSE_SCALING;
+const STARTUP_FADE_DURATION: f32 = VisualEffectsConfig::STARTUP_FADE_DURATION;
+const SIMPLE_FADE_DURATION: f32 = SimpleFadeConfig::DURATION;
+const ELASTIC_REVEAL_TIME_PER_CHAR: f32 = ElasticRevealConfig::TIME_PER_CHAR;
+const BOUNCE_DURATION: f32 = BounceConfig::DURATION;
+const STAGGERED_CHAR_DELAY: f32 = StaggeredSlideConfig::CHAR_DELAY;
+const STAGGERED_BASE_DURATION: f32 = StaggeredSlideConfig::BASE_DURATION;
+const SLIDE_DISTANCE_PX: f32 = StaggeredSlideConfig::SLIDE_DISTANCE_PX;
+const CASCADE_IN_DURATION: f32 = CascadeZoomConfig::IN_DURATION;
+const CASCADE_OUT_DURATION: f32 = CascadeZoomConfig::OUT_DURATION;
+const CASCADE_CHAR_DELAY: f32 = CascadeZoomConfig::CHAR_DELAY;
+const CASCADE_MIN_SCALE: f32 = CascadeZoomConfig::MIN_SCALE;
+const CASCADE_TARGET_SCALE: f32 = CascadeZoomConfig::TARGET_SCALE;
+const CASCADE_MAX_SCALE: f32 = CascadeZoomConfig::MAX_SCALE;
+const CASCADE_OVERSHOOT: f32 = CascadeZoomConfig::OVERSHOOT;
 
 // === Material + Uniforms =====================================================
 
@@ -1454,12 +1519,8 @@ fn apply_background_swing(
     }
 }
 
-fn rebuild_bitmap_text(
-    text: &str,
-    font: &BitmapFont,
-    handle: &Handle<Image>,
-    images: &mut Assets<Image>,
-) -> UVec2 {
+/// Prepare font image by converting to RGBA8 format if needed
+fn prepare_font_image(font: &BitmapFont, images: &mut Assets<Image>) {
     if let Some(font_image) = images.get_mut(&font.image) {
         if font_image.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb {
             if let Some(converted) = font_image.convert(TextureFormat::Rgba8UnormSrgb) {
@@ -1467,15 +1528,44 @@ fn rebuild_bitmap_text(
             }
         }
     }
+}
+
+/// Get font texture data (width, height, pixels)
+fn get_font_data(font: &BitmapFont, images: &Assets<Image>) -> Option<(u32, u32, Vec<u8>)> {
+    let font_image = images.get(&font.image)?;
+    let font_pixels = font_image.data.clone()?;
+    if font_pixels.is_empty() {
+        return None;
+    }
+    Some((
+        font_image.texture_descriptor.size.width,
+        font_image.texture_descriptor.size.height,
+        font_pixels,
+    ))
+}
+
+/// Create empty 1x1 transparent image
+fn create_empty_image(handle: &Handle<Image>, images: &mut Assets<Image>) {
+    if let Some(image) = images.get_mut(handle) {
+        image.resize(Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        });
+        image.data = Some(vec![0, 0, 0, 0]);
+    }
+}
+
+fn rebuild_bitmap_text(
+    text: &str,
+    font: &BitmapFont,
+    handle: &Handle<Image>,
+    images: &mut Assets<Image>,
+) -> UVec2 {
+    prepare_font_image(font, images);
+
     if text.is_empty() {
-        if let Some(image) = images.get_mut(handle) {
-            image.resize(Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            });
-            image.data = Some(vec![0, 0, 0, 0]);
-        }
+        create_empty_image(handle, images);
         return UVec2::new(1, 1);
     }
 
@@ -1484,21 +1574,8 @@ fn rebuild_bitmap_text(
         return UVec2::ZERO;
     }
 
-    let (texture_width, texture_height, font_pixels) = {
-        let Some(font_image) = images.get(&font.image) else {
-            return UVec2::ZERO;
-        };
-        let Some(font_pixels) = font_image.data.clone() else {
-            return UVec2::ZERO;
-        };
-        if font_pixels.is_empty() {
-            return UVec2::ZERO;
-        }
-        (
-            font_image.texture_descriptor.size.width,
-            font_image.texture_descriptor.size.height,
-            font_pixels,
-        )
+    let Some((texture_width, texture_height, font_pixels)) = get_font_data(font, images) else {
+        return UVec2::ZERO;
     };
 
     let Some(image) = images.get_mut(handle) else {
@@ -1602,22 +1679,10 @@ fn rebuild_bitmap_text_cascade(
     rest_scale: f32,
     max_scale: f32,
 ) -> CascadeImageMetrics {
-    if let Some(font_image) = images.get_mut(&font.image) {
-        if font_image.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb {
-            if let Some(converted) = font_image.convert(TextureFormat::Rgba8UnormSrgb) {
-                *font_image = converted;
-            }
-        }
-    }
+    prepare_font_image(font, images);
+
     if text.is_empty() {
-        if let Some(image) = images.get_mut(handle) {
-            image.resize(Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            });
-            image.data = Some(vec![0, 0, 0, 0]);
-        }
+        create_empty_image(handle, images);
         return CascadeImageMetrics {
             rest: UVec2::new(1, 1),
             texture: UVec2::new(1, 1),
@@ -1632,30 +1697,11 @@ fn rebuild_bitmap_text_cascade(
         };
     }
 
-    let (texture_width, texture_height, font_pixels) = {
-        let Some(font_image) = images.get(&font.image) else {
-            return CascadeImageMetrics {
-                rest: UVec2::ZERO,
-                texture: UVec2::ZERO,
-            };
+    let Some((texture_width, texture_height, font_pixels)) = get_font_data(font, images) else {
+        return CascadeImageMetrics {
+            rest: UVec2::ZERO,
+            texture: UVec2::ZERO,
         };
-        let Some(font_pixels) = font_image.data.clone() else {
-            return CascadeImageMetrics {
-                rest: UVec2::ZERO,
-                texture: UVec2::ZERO,
-            };
-        };
-        if font_pixels.is_empty() {
-            return CascadeImageMetrics {
-                rest: UVec2::ZERO,
-                texture: UVec2::ZERO,
-            };
-        }
-        (
-            font_image.texture_descriptor.size.width,
-            font_image.texture_descriptor.size.height,
-            font_pixels,
-        )
     };
 
     let Some(image) = images.get_mut(handle) else {

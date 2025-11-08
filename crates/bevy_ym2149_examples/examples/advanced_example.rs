@@ -228,7 +228,7 @@ fn bridge_mix_controls(
             } else {
                 1.0
             };
-            mix = mix.with_volume_db(mix.volume_db() + step_db);
+            mix.volume = AudioBridgeMix::db_to_gain(mix.volume_db() + step_db);
             changed = true;
         }
 
@@ -238,7 +238,7 @@ fn bridge_mix_controls(
             } else {
                 0.1
             };
-            mix = mix.with_pan((mix.pan + delta).clamp(-1.0, 1.0));
+            mix.pan = (mix.pan + delta).clamp(-1.0, 1.0);
             changed = true;
         }
     }

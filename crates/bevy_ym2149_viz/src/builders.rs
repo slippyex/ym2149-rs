@@ -2,20 +2,39 @@ use crate::components::*;
 use crate::helpers::{format_freq_label, format_note_label};
 use bevy::prelude::*;
 
+// UI Layout Constants
+const UI_PADDING: f32 = 10.0;
+const UI_MARGIN_SMALL: f32 = 6.0;
+const UI_MARGIN_MEDIUM: f32 = 12.0;
+const UI_MARGIN_LARGE: f32 = 14.0;
+
+// UI Colors
+const PANEL_BG_DARK: Color = Color::srgba(0.0, 0.0, 0.0, 0.3);
+const PANEL_BG_DARKER: Color = Color::srgba(0.01, 0.01, 0.02, 0.95);
+const BADGE_PANEL_BG: Color = Color::srgba(0.05, 0.05, 0.07, 0.75);
+const OSCILLOSCOPE_BG: Color = Color::srgb(0.02, 0.06, 0.1);
+const BADGE_BG_DARK: Color = Color::srgba(0.1, 0.12, 0.18, 0.8);
+const BADGE_BAR_BG: Color = Color::srgba(0.18, 0.2, 0.24, 0.6);
+const GRID_COLOR: Color = Color::srgba(0.12, 0.18, 0.2, 0.4);
+const GRID_COLOR_BRIGHT: Color = Color::srgba(0.12, 0.18, 0.2, 0.85);
+const GRID_COLOR_MID: Color = Color::srgba(0.12, 0.18, 0.2, 0.6);
+const GRID_COLOR_DIM: Color = Color::srgba(0.12, 0.18, 0.2, 0.32);
+const CHANNEL_LABEL_COLOR: Color = Color::srgb(0.74, 0.82, 0.9);
+
 pub fn create_status_display(commands: &mut Commands) -> Entity {
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(10.0),
-                left: Val::Px(10.0),
-                right: Val::Px(10.0),
+                top: Val::Px(UI_PADDING),
+                left: Val::Px(UI_PADDING),
+                right: Val::Px(UI_PADDING),
                 height: Val::Auto,
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.3)),
+            BackgroundColor(PANEL_BG_DARK),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -82,21 +101,21 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
             Node {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(280.0),
-                right: Val::Px(10.0),
+                right: Val::Px(UI_PADDING),
                 width: Val::Px(324.0),
                 height: Val::Px(220.0),
                 flex_direction: FlexDirection::Column,
-                padding: UiRect::all(Val::Px(10.0)),
+                padding: UiRect::all(Val::Px(UI_PADDING)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.01, 0.01, 0.02, 0.95)),
+            BackgroundColor(PANEL_BG_DARKER),
         ))
         .with_children(|panel| {
             panel.spawn((
                 Text::new("~ Oscilloscope ~"),
                 Node {
                     width: Val::Percent(100.0),
-                    margin: UiRect::bottom(Val::Px(6.0)),
+                    margin: UiRect::bottom(Val::Px(UI_MARGIN_SMALL)),
                     ..default()
                 },
             ));
@@ -107,8 +126,8 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                     width: Val::Percent(100.0),
                     height: Val::Px(OSCILLOSCOPE_HEIGHT),
                     flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(12.0),
-                    margin: UiRect::bottom(Val::Px(14.0)),
+                    column_gap: Val::Px(UI_MARGIN_MEDIUM),
+                    margin: UiRect::bottom(Val::Px(UI_MARGIN_LARGE)),
                     ..default()
                 },))
                 .with_children(|row| {
@@ -116,18 +135,21 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                         Node {
                             width: Val::Px(72.0),
                             flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(12.0),
-                            padding: UiRect::axes(Val::Px(6.0), Val::Px(6.0)),
+                            row_gap: Val::Px(UI_MARGIN_MEDIUM),
+                            padding: UiRect::axes(
+                                Val::Px(UI_MARGIN_SMALL),
+                                Val::Px(UI_MARGIN_SMALL),
+                            ),
                             ..default()
                         },
-                        BackgroundColor(Color::srgba(0.05, 0.05, 0.07, 0.75)),
+                        BackgroundColor(BADGE_PANEL_BG),
                     ))
                     .with_children(|badges| {
                         for channel_index in 0..3 {
                             badges
                                 .spawn((Node {
                                     flex_direction: FlexDirection::Column,
-                                    row_gap: Val::Px(6.0),
+                                    row_gap: Val::Px(UI_MARGIN_SMALL),
                                     ..default()
                                 },))
                                 .with_children(|column| {
@@ -138,13 +160,13 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                                             font_size: 12.0,
                                             ..default()
                                         },
-                                        TextColor(Color::srgb(0.74, 0.82, 0.9)),
+                                        TextColor(CHANNEL_LABEL_COLOR),
                                     ));
 
                                     column
                                         .spawn((Node {
                                             flex_direction: FlexDirection::Row,
-                                            column_gap: Val::Px(6.0),
+                                            column_gap: Val::Px(UI_MARGIN_SMALL),
                                             align_items: AlignItems::Center,
                                             ..default()
                                         },))
@@ -155,7 +177,7 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                                                     height: Val::Px(6.0),
                                                     ..default()
                                                 },
-                                                BackgroundColor(Color::srgba(0.18, 0.2, 0.24, 0.6)),
+                                                BackgroundColor(BADGE_BAR_BG),
                                                 ChannelBadge {
                                                     channel: channel_index,
                                                     kind: BadgeKind::Amplitude,
@@ -168,8 +190,8 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                                                     height: Val::Px(12.0),
                                                     ..default()
                                                 },
-                                                BorderRadius::all(Val::Px(6.0)),
-                                                BackgroundColor(Color::srgba(0.1, 0.12, 0.18, 0.8)),
+                                                BorderRadius::all(Val::Px(UI_MARGIN_SMALL)),
+                                                BackgroundColor(BADGE_BG_DARK),
                                                 ChannelBadge {
                                                     channel: channel_index,
                                                     kind: BadgeKind::HighFreq,
@@ -196,7 +218,7 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                                         overflow: Overflow::clip(),
                                         ..default()
                                     },
-                                    BackgroundColor(Color::srgb(0.02, 0.06, 0.1)),
+                                    BackgroundColor(OSCILLOSCOPE_BG),
                                     Oscilloscope,
                                 ))
                                 .with_children(|canvas| {
@@ -221,12 +243,11 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                                                         top: Val::Percent(i as f32 * 25.0),
                                                         ..default()
                                                     },
-                                                    BackgroundColor(Color::srgba(
-                                                        0.12,
-                                                        0.18,
-                                                        0.2,
-                                                        if i == 2 { 0.85 } else { 0.4 },
-                                                    )),
+                                                    BackgroundColor(if i == 2 {
+                                                        GRID_COLOR_BRIGHT
+                                                    } else {
+                                                        GRID_COLOR
+                                                    }),
                                                     OscilloscopeGridLine,
                                                 ));
                                             }
@@ -243,12 +264,11 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                                                         left: Val::Percent(i as f32 * 12.5),
                                                         ..default()
                                                     },
-                                                    BackgroundColor(Color::srgba(
-                                                        0.12,
-                                                        0.18,
-                                                        0.2,
-                                                        if i == 4 { 0.6 } else { 0.32 },
-                                                    )),
+                                                    BackgroundColor(if i == 4 {
+                                                        GRID_COLOR_MID
+                                                    } else {
+                                                        GRID_COLOR_DIM
+                                                    }),
                                                     OscilloscopeGridLine,
                                                 ));
                                             }

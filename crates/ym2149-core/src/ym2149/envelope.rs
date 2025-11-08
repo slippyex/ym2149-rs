@@ -13,23 +13,17 @@ use std::fmt;
 use super::constants::get_volume;
 
 /// Envelope Shape Control - Register R13
+///
+/// Note: YM2149 has only 10 unique envelope patterns, but 16 shape codes.
+/// Shapes 0x00-0x03 and 0x0D/0x0F produce identical output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvelopeShape {
-    /// 0000: Attack-Decay
+    /// 0000-0003: Attack-Decay (all identical)
     /// Pattern: Attack 0→1, Decay 1→0 once, then silence
     AttackDecay = 0x00,
-    /// 0001: Attack-Decay (variant 1 - same pattern as 0x00)
-    AttackDecay1 = 0x01,
-    /// 0010: Attack-Decay (variant 2 - same pattern as 0x00)
-    AttackDecay2 = 0x02,
-    /// 0011: Attack-Decay (variant 3 - same pattern as 0x00)
-    AttackDecay3 = 0x03,
-    /// 0100: Attack-Decay-Release
-    /// Pattern: Attack, Decay to middle, Release to silence
-    AttackDecayRelease = 0x04,
-    /// 0101: Attack-Sustain-Release
+    /// 0100-0101: Attack-Sustain-Release (both identical)
     /// Pattern: Attack, Hold high, Release to silence
-    AttackSustainRelease = 0x05,
+    AttackSustainRelease = 0x04,
     /// 0110: Triangle (Attack-Decay symmetric)
     /// Pattern: Attack 0→1, Decay 1→0, Hold 0, Hold 0
     Triangle = 0x06,
@@ -38,7 +32,6 @@ pub enum EnvelopeShape {
     TriangleSustain = 0x07,
     /// 1000: Sawtooth-Down (repeating) - BUZZER SOUND
     /// Pattern: Decay 1→0 repeated 4 times = continuous sawtooth
-    /// Creates buzzing when combined with tone frequency
     SawtoothDown = 0x08,
     /// 1001: Attack then Sawtooth-Down (repeating)
     /// Pattern: Attack 0→1, then Sawtooth-Down 1→0 repeated 3x
@@ -51,29 +44,22 @@ pub enum EnvelopeShape {
     AttackSustainSawtooth = 0x0B,
     /// 1100: Sawtooth-Up (repeating) - BUZZER SOUND
     /// Pattern: Attack 0→1 repeated 4 times = continuous sawtooth
-    /// Creates buzzing when combined with tone frequency
     SawtoothUp = 0x0C,
-    /// 1101: Attack then Hold
+    /// 1101, 1111: Attack then Hold (both identical)
     /// Pattern: Attack 0→1, then Hold 1 forever
     AttackHold = 0x0D,
     /// 1110: Sawtooth-Down once then silence
     /// Pattern: Decay 1→0 once, then silence
     SawtoothDownOnce = 0x0E,
-    /// 1111: Attack then Hold
-    /// Pattern: Attack 0→1, then Hold 1 forever
-    AttackHoldLong = 0x0F,
 }
 
 impl EnvelopeShape {
     /// Create from raw register value
-    pub fn from_value(val: u8) -> Self {
+    /// Maps all 16 hardware codes to their canonical unique shapes
+    pub const fn from_value(val: u8) -> Self {
         match val & 0x0F {
-            0x00 => EnvelopeShape::AttackDecay,
-            0x01 => EnvelopeShape::AttackDecay1,
-            0x02 => EnvelopeShape::AttackDecay2,
-            0x03 => EnvelopeShape::AttackDecay3,
-            0x04 => EnvelopeShape::AttackDecayRelease,
-            0x05 => EnvelopeShape::AttackSustainRelease,
+            0x00 | 0x01 | 0x02 | 0x03 => EnvelopeShape::AttackDecay,
+            0x04 | 0x05 => EnvelopeShape::AttackSustainRelease,
             0x06 => EnvelopeShape::Triangle,
             0x07 => EnvelopeShape::TriangleSustain,
             0x08 => EnvelopeShape::SawtoothDown,
@@ -81,10 +67,27 @@ impl EnvelopeShape {
             0x0A => EnvelopeShape::SustainSawtoothDown,
             0x0B => EnvelopeShape::AttackSustainSawtooth,
             0x0C => EnvelopeShape::SawtoothUp,
-            0x0D => EnvelopeShape::AttackHold,
+            0x0D | 0x0F => EnvelopeShape::AttackHold,
             0x0E => EnvelopeShape::SawtoothDownOnce,
-            0x0F => EnvelopeShape::AttackHoldLong,
-            _ => EnvelopeShape::AttackDecay,
+            _ => EnvelopeShape::AttackDecay, // Unreachable due to & 0x0F
+        }
+    }
+
+    /// Get pattern index for lookup table
+    #[inline]
+    const fn pattern_index(self) -> usize {
+        match self {
+            EnvelopeShape::AttackDecay => 0,
+            EnvelopeShape::AttackSustainRelease => 1,
+            EnvelopeShape::Triangle => 2,
+            EnvelopeShape::TriangleSustain => 3,
+            EnvelopeShape::SawtoothDown => 4,
+            EnvelopeShape::AttackSawtoothDown => 5,
+            EnvelopeShape::SustainSawtoothDown => 6,
+            EnvelopeShape::AttackSustainSawtooth => 7,
+            EnvelopeShape::SawtoothUp => 8,
+            EnvelopeShape::AttackHold => 9,
+            EnvelopeShape::SawtoothDownOnce => 10,
         }
     }
 }
@@ -93,10 +96,6 @@ impl fmt::Display for EnvelopeShape {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EnvelopeShape::AttackDecay => write!(f, "Attack-Decay"),
-            EnvelopeShape::AttackDecay1 => write!(f, "Attack-Decay (variant 1)"),
-            EnvelopeShape::AttackDecay2 => write!(f, "Attack-Decay (variant 2)"),
-            EnvelopeShape::AttackDecay3 => write!(f, "Attack-Decay (variant 3)"),
-            EnvelopeShape::AttackDecayRelease => write!(f, "Attack-Decay-Release"),
             EnvelopeShape::AttackSustainRelease => write!(f, "Attack-Sustain-Release"),
             EnvelopeShape::Triangle => write!(f, "Triangle"),
             EnvelopeShape::TriangleSustain => write!(f, "Triangle-Sustain"),
@@ -107,7 +106,6 @@ impl fmt::Display for EnvelopeShape {
             EnvelopeShape::SawtoothUp => write!(f, "Sawtooth-Up (Buzzer)"),
             EnvelopeShape::AttackHold => write!(f, "Attack-Hold"),
             EnvelopeShape::SawtoothDownOnce => write!(f, "Sawtooth-Down-Once"),
-            EnvelopeShape::AttackHoldLong => write!(f, "Attack-Hold-Long"),
         }
     }
 }
@@ -187,74 +185,32 @@ const ENVELOPE_PATTERNS: [[u8; 8]; 11] = [
     [1, 0, 0, 0, 0, 0, 0, 0],
 ];
 
-/// Map envelope shapes to their pattern index
-const SHAPE_TO_PATTERN: [usize; 16] = [
-    0, 0, 0, 0, // 0x00-0x03: Attack-Decay
-    1, 1, // 0x04-0x05: Attack-Sustain-Release (different names but same pattern)
-    2, 3, // 0x06-0x07: Triangle / Triangle-Sustain
-    4, 5, 6, 7,  // 0x08-0x0B: Various sawtooth patterns
-    8,  // 0x0C: Sawtooth-Up (continuous buzzer)
-    9,  // 0x0D: Attack-Hold
-    10, // 0x0E: Sawtooth-Down Once (single pulse then silent)
-    9,  // 0x0F: Attack-Hold-Long (same as 0x0D)
-];
-
-/// Pre-computed lookup table: [pattern][phase][step]
-/// 11 patterns × 4 phases × 32 amplitude steps = 1408 values
+/// Compute envelope amplitude using direct interpolation
 ///
-/// # Structure
-/// - 11 patterns: Maps to 16 envelope shapes via SHAPE_TO_PATTERN
-/// - 4 phases: Phase data per pattern
-///   * Phase 0: Initial pattern (executes once on trigger)
-///   * Phase 1: Continuation pattern (loops forever via position overflow)
-///   * Phases 2-3: Reserved (not used in normal operation, included for lookup table structure)
-/// - 32 steps: Determined by using top 5 bits of 32-bit position accumulator (2^5 = 32)
-struct EnvelopeLookup {
-    /// Table[pattern_idx][phase][step] = normalized amplitude 0.0-1.0
-    data: [[[f32; 32]; 4]; 11],
-}
-
-impl EnvelopeLookup {
-    fn new() -> Self {
-        let mut data = [[[0.0; 32]; 4]; 11];
-
-        // Generate lookup table for each pattern
-        for (pattern_idx, pattern) in ENVELOPE_PATTERNS.iter().enumerate() {
-            // Each pattern has 4 phases (pairs of start→end values)
-            // Pattern values are 0-1 normalized amplitude
-            for phase in 0..4 {
-                let start_val = pattern[phase * 2] as f32;
-                let end_val = pattern[phase * 2 + 1] as f32;
-
-                // Interpolate 32 values using top 5 bits of position accumulator
-                // Step 0 = start_val, Step 31 = end_val
-                let phase_slice = &mut data[pattern_idx][phase];
-                for (step, slot) in phase_slice.iter_mut().enumerate() {
-                    // Linear interpolation from start to end across 32 steps
-                    let progress = (step as f32) / 31.0;
-                    let amplitude = start_val + (end_val - start_val) * progress;
-                    *slot = amplitude.clamp(0.0, 1.0);
-                }
-            }
-        }
-
-        EnvelopeLookup { data }
+/// This replaces the pre-computed lookup table with on-the-fly calculation,
+/// reducing memory footprint while maintaining cycle-accurate behavior.
+///
+/// # Arguments
+/// * `pattern_idx` - Pattern index (0-10)
+/// * `phase` - Current phase (0-3)
+/// * `step` - Step within phase (0-31)
+///
+/// # Returns
+/// Normalized amplitude 0.0-1.0
+#[inline]
+fn compute_envelope_amplitude(pattern_idx: usize, phase: usize, step: usize) -> f32 {
+    if pattern_idx >= 11 || phase >= 4 || step >= 32 {
+        return 0.0;
     }
 
-    fn get(&self, pattern: usize, phase: usize, step: usize) -> f32 {
-        if pattern < 11 && phase < 4 && step < 32 {
-            self.data[pattern][phase][step]
-        } else {
-            0.0
-        }
-    }
-}
+    let pattern = ENVELOPE_PATTERNS[pattern_idx];
+    let start_val = pattern[phase * 2] as f32;
+    let end_val = pattern[phase * 2 + 1] as f32;
 
-/// Static lookup table - initialized once
-static ENVELOPE_LOOKUP: std::sync::OnceLock<EnvelopeLookup> = std::sync::OnceLock::new();
-
-fn get_envelope_lookup() -> &'static EnvelopeLookup {
-    ENVELOPE_LOOKUP.get_or_init(EnvelopeLookup::new)
+    // Linear interpolation from start to end across 32 steps
+    let progress = (step as f32) / 31.0;
+    let amplitude = start_val + (end_val - start_val) * progress;
+    amplitude.clamp(0.0, 1.0)
 }
 
 /// Envelope Generator
@@ -372,13 +328,12 @@ impl EnvelopeGen {
         self.update_amplitude();
     }
 
-    /// Update amplitude from lookup table based on current shape, phase, and position
+    /// Update amplitude based on current shape, phase, and position
     fn update_amplitude(&mut self) {
-        let pattern_idx = SHAPE_TO_PATTERN[self.shape as usize];
+        let pattern_idx = self.shape.pattern_index();
         let step_idx = (self.position >> 27) as usize; // Top 5 bits select step 0-31
 
-        let lookup = get_envelope_lookup();
-        let normalized = lookup.get(pattern_idx, self.phase as usize, step_idx);
+        let normalized = compute_envelope_amplitude(pattern_idx, self.phase as usize, step_idx);
         let level = (normalized * 15.0).round() as u8;
         let level = level.min(15);
         self.amplitude = get_volume(level);
@@ -425,12 +380,11 @@ mod tests {
     }
 
     #[test]
-    fn test_envelope_lookup_generation() {
-        let lookup = EnvelopeLookup::new();
+    fn test_envelope_amplitude_computation() {
         // Pattern 8 is SawtoothUp: [0,1,0,1,0,1,0,1]
         // Phase 0: 0→1 interpolation
-        let phase0_start = lookup.get(8, 0, 0); // Should be near 0
-        let phase0_end = lookup.get(8, 0, 31); // Should be near 1
+        let phase0_start = compute_envelope_amplitude(8, 0, 0); // Should be near 0
+        let phase0_end = compute_envelope_amplitude(8, 0, 31); // Should be near 1
 
         eprintln!("Phase 0: start={}, end={}", phase0_start, phase0_end);
 

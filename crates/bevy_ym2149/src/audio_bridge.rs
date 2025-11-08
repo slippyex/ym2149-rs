@@ -1,10 +1,9 @@
 use crate::events::AudioBridgeRequest;
+use crate::playback::YM2149_SAMPLE_RATE;
 use bevy::prelude::*;
 use rodio::{OutputStream, OutputStreamHandle, Sink, buffer::SamplesBuffer};
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::f32::consts::FRAC_PI_2;
-
-const BRIDGE_SAMPLE_RATE: u32 = 44_100;
 
 /// Tracks which playback entities should publish audio frames to the bridge buffers.
 #[derive(Resource, Default)]
@@ -86,6 +85,14 @@ impl BridgeAudioSinks {
 }
 
 /// Mixing parameters applied before bridge audio is submitted to rodio.
+///
+/// Fields can be modified directly:
+/// ```
+/// # use bevy_ym2149::AudioBridgeMix;
+/// let mut mix = AudioBridgeMix::CENTER;
+/// mix.volume = 0.5;
+/// mix.pan = -0.5; // Pan left
+/// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AudioBridgeMix {
     /// Overall gain multiplier (0.0 = silent, 1.0 = unchanged).
@@ -96,65 +103,48 @@ pub struct AudioBridgeMix {
 
 impl AudioBridgeMix {
     /// Neutral mix (unity gain, centered).
-    pub const CENTER: Self = Self::new(1.0, 0.0);
+    pub const CENTER: Self = Self {
+        volume: 1.0,
+        pan: 0.0,
+    };
     /// Muted output (silences the bridged audio).
-    pub const MUTE: Self = Self::new(0.0, 0.0);
+    pub const MUTE: Self = Self {
+        volume: 0.0,
+        pan: 0.0,
+    };
     /// Hard pan left at unity gain.
-    pub const LEFT: Self = Self::new(1.0, -1.0);
+    pub const LEFT: Self = Self {
+        volume: 1.0,
+        pan: -1.0,
+    };
     /// Hard pan right at unity gain.
-    pub const RIGHT: Self = Self::new(1.0, 1.0);
+    pub const RIGHT: Self = Self {
+        volume: 1.0,
+        pan: 1.0,
+    };
 
-    /// Construct a mix from gain/pan values.
-    pub const fn new(volume: f32, pan: f32) -> Self {
-        Self { volume, pan }
+    /// Convert decibels to linear gain.
+    pub fn db_to_gain(volume_db: f32) -> f32 {
+        10_f32.powf(volume_db / 20.0)
     }
 
-    /// Construct a mix using a volume measured in decibels and a linear pan.
-    pub fn from_db(volume_db: f32, pan: f32) -> Self {
-        Self {
-            volume: Self::db_to_gain(volume_db),
-            pan,
-        }
+    /// Convert linear gain to decibels.
+    pub fn gain_to_db(volume: f32) -> f32 {
+        20.0 * volume.max(1e-6).log10()
     }
 
-    /// Set the volume using a linear gain multiplier.
-    pub fn with_volume(mut self, volume: f32) -> Self {
-        self.volume = volume;
-        self
+    /// Get the current volume in decibels.
+    pub fn volume_db(self) -> f32 {
+        Self::gain_to_db(self.volume)
     }
 
-    /// Set the volume using decibels.
-    pub fn with_volume_db(mut self, volume_db: f32) -> Self {
-        self.volume = Self::db_to_gain(volume_db);
-        self
-    }
-
-    /// Adjust the pan value and return the updated mix.
-    pub fn with_pan(mut self, pan: f32) -> Self {
-        self.pan = pan;
-        self
-    }
-
-    fn gains(self) -> (f32, f32) {
+    pub(crate) fn gains(self) -> (f32, f32) {
         let volume = self.volume.clamp(0.0, 2.0);
         let pan = self.pan.clamp(-1.0, 1.0);
         let angle = (pan + 1.0) * FRAC_PI_2 * 0.5;
         let left = volume * angle.cos();
         let right = volume * angle.sin();
         (left, right)
-    }
-
-    fn db_to_gain(volume_db: f32) -> f32 {
-        10_f32.powf(volume_db / 20.0)
-    }
-
-    fn gain_to_db(volume: f32) -> f32 {
-        20.0 * volume.max(1e-6).log10()
-    }
-
-    /// Convert the current gain to decibels.
-    pub fn volume_db(self) -> f32 {
-        Self::gain_to_db(self.volume)
     }
 }
 
@@ -270,7 +260,7 @@ pub fn drive_bridge_audio_buffers(
                 }
             }
 
-            let source = SamplesBuffer::new(2u16, BRIDGE_SAMPLE_RATE, samples);
+            let source = SamplesBuffer::new(2u16, YM2149_SAMPLE_RATE, samples);
             sink.append(source);
         }
     }

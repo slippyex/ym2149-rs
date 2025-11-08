@@ -4,6 +4,9 @@
 
 use super::effects_manager::EffectsManager;
 use super::madmax_digidrums::{MADMAX_SAMPLE_RATE_BASE, MADMAX_SAMPLES};
+use super::tracker_player::{
+    TrackerFormat, TrackerLine, TrackerSample, TrackerState, deinterleave_tracker_bytes,
+};
 use super::{PlaybackController, PlaybackState, VblSync};
 use crate::ym_parser::FormatParser;
 use crate::ym_parser::{
@@ -69,295 +72,6 @@ impl LoadSummary {
     }
 }
 
-const YM_TRACKER_PRECISION: u32 = 16;
-
-#[derive(Clone, Copy)]
-enum TrackerFormat {
-    Ymt1,
-    Ymt2,
-}
-
-#[derive(Clone, Copy)]
-struct TrackerLine {
-    note_on: u8,
-    volume: u8,
-    freq_high: u8,
-    freq_low: u8,
-}
-
-#[derive(Clone)]
-struct TrackerSample {
-    data: Vec<u8>,
-    repeat_len: usize,
-}
-
-#[derive(Clone)]
-struct TrackerVoiceState {
-    sample_index: Option<usize>,
-    sample_pos: u32,
-    sample_freq: u32,
-    sample_volume: u8,
-    loop_enabled: bool,
-    running: bool,
-    sample_inc: u32,
-}
-
-impl TrackerVoiceState {
-    fn new() -> Self {
-        TrackerVoiceState {
-            sample_index: None,
-            sample_pos: 0,
-            sample_freq: 0,
-            sample_volume: 0,
-            loop_enabled: false,
-            running: false,
-            sample_inc: 0,
-        }
-    }
-}
-
-struct TrackerState {
-    voices: Vec<TrackerVoiceState>,
-    lines: Vec<TrackerLine>,
-    samples: Vec<TrackerSample>,
-    volume_table: Vec<i16>,
-    freq_shift: u8,
-    nb_voice: usize,
-    total_frames: usize,
-    loop_frame: usize,
-    loop_enabled: bool,
-    player_rate: u16,
-    current_frame: usize,
-    samples_until_update: f64,
-    samples_per_step: f64,
-    sample_rate: u32,
-}
-
-impl TrackerState {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        nb_voice: usize,
-        player_rate: u16,
-        total_frames: usize,
-        loop_frame: usize,
-        loop_enabled: bool,
-        freq_shift: u8,
-        samples: Vec<TrackerSample>,
-        lines: Vec<TrackerLine>,
-        sample_rate: u32,
-    ) -> Self {
-        let clamped_voice_count = nb_voice.max(1);
-        let mut scale = ((256 * 100) / (clamped_voice_count * 100)) as i32;
-        if scale == 0 {
-            scale = 1;
-        }
-        let mut volume_table = Vec::with_capacity(64 * 256);
-        for volume in 0..64 {
-            for sample in -128..128 {
-                let value = (sample * scale * volume) / 64;
-                volume_table.push(value as i16);
-            }
-        }
-
-        let voices = (0..nb_voice).map(|_| TrackerVoiceState::new()).collect();
-        let samples_per_step = if player_rate == 0 {
-            sample_rate as f64
-        } else {
-            sample_rate as f64 / f64::from(player_rate)
-        };
-
-        TrackerState {
-            voices,
-            lines,
-            samples,
-            volume_table,
-            freq_shift,
-            nb_voice,
-            total_frames,
-            loop_frame,
-            loop_enabled,
-            player_rate,
-            current_frame: 0,
-            samples_until_update: 0.0,
-            samples_per_step,
-            sample_rate,
-        }
-    }
-
-    fn reset(&mut self) {
-        self.current_frame = 0;
-        self.samples_until_update = 0.0;
-        for voice in &mut self.voices {
-            *voice = TrackerVoiceState::new();
-        }
-    }
-
-    fn compute_sample_inc(&self, sample_freq: u32) -> u32 {
-        if sample_freq == 0 || self.sample_rate == 0 {
-            return 0;
-        }
-        let mut step = (sample_freq as u64) << YM_TRACKER_PRECISION;
-        step <<= u32::from(self.freq_shift.min(15));
-        (step / self.sample_rate as u64) as u32
-    }
-
-    fn advance_frame(&mut self) -> bool {
-        if self.total_frames == 0 {
-            return false;
-        }
-
-        if self.current_frame >= self.total_frames {
-            if self.loop_enabled && self.loop_frame < self.total_frames {
-                self.current_frame = self.loop_frame;
-            } else {
-                return false;
-            }
-        }
-
-        let start = self.current_frame.saturating_mul(self.nb_voice);
-        for voice_index in 0..self.nb_voice {
-            let line = self.lines[start + voice_index];
-            let freq = ((line.freq_high as u32) << 8) | (line.freq_low as u32);
-            let sample_inc = if freq != 0 {
-                self.compute_sample_inc(freq)
-            } else {
-                0
-            };
-            let voice = &mut self.voices[voice_index];
-
-            if freq != 0 {
-                voice.sample_freq = freq;
-                voice.sample_volume = line.volume & 0x3F;
-                voice.loop_enabled = (line.volume & 0x40) != 0;
-
-                if line.note_on != 0xFF {
-                    let sample_idx = line.note_on as usize;
-                    if let Some(sample) = self.samples.get(sample_idx) {
-                        if !sample.data.is_empty() {
-                            voice.sample_index = Some(sample_idx);
-                            voice.sample_pos = 0;
-                            voice.running = true;
-                        } else {
-                            voice.sample_index = None;
-                            voice.running = false;
-                        }
-                    } else {
-                        voice.sample_index = None;
-                        voice.running = false;
-                    }
-                } else if voice.sample_index.is_none() {
-                    voice.running = false;
-                }
-
-                voice.sample_inc = sample_inc;
-                if voice.sample_inc == 0 && voice.sample_index.is_none() {
-                    voice.running = false;
-                } else if voice.sample_index.is_some() {
-                    voice.running = true;
-                }
-            } else {
-                voice.sample_freq = 0;
-                voice.running = false;
-                voice.sample_inc = 0;
-            }
-        }
-
-        self.current_frame += 1;
-        true
-    }
-
-    fn mix_sample(&mut self) -> f32 {
-        let mut accumulator: i32 = 0;
-
-        for voice in &mut self.voices {
-            if !voice.running {
-                continue;
-            }
-
-            let sample_idx = match voice.sample_index {
-                Some(idx) => idx,
-                None => {
-                    voice.running = false;
-                    continue;
-                }
-            };
-
-            let sample = match self.samples.get(sample_idx) {
-                Some(sample) if !sample.data.is_empty() => sample,
-                _ => {
-                    voice.running = false;
-                    continue;
-                }
-            };
-
-            let sample_end = (sample.data.len() as u32) << YM_TRACKER_PRECISION;
-            let mut pos = voice.sample_pos;
-
-            if pos >= sample_end {
-                if voice.loop_enabled && sample.repeat_len > 0 {
-                    let rep = (sample.repeat_len as u32) << YM_TRACKER_PRECISION;
-                    if rep > 0 {
-                        while pos >= sample_end {
-                            pos = pos.saturating_sub(rep);
-                            if rep == 0 {
-                                break;
-                            }
-                        }
-                    } else {
-                        voice.running = false;
-                        continue;
-                    }
-                } else {
-                    voice.running = false;
-                    continue;
-                }
-            }
-
-            let index = (pos >> YM_TRACKER_PRECISION) as usize;
-            let frac = pos & ((1 << YM_TRACKER_PRECISION) - 1);
-            let table_offset = (voice.sample_volume as usize & 63) * 256;
-
-            let base_value = self.volume_table[table_offset + sample.data[index] as usize] as i32;
-            let blended = if frac != 0 && index + 1 < sample.data.len() {
-                let next_value =
-                    self.volume_table[table_offset + sample.data[index + 1] as usize] as i32;
-                base_value + (((next_value - base_value) * frac as i32) >> YM_TRACKER_PRECISION)
-            } else {
-                base_value
-            };
-
-            accumulator += blended;
-
-            let mut new_pos = pos.wrapping_add(voice.sample_inc);
-            if new_pos >= sample_end {
-                if voice.loop_enabled && sample.repeat_len > 0 {
-                    let rep = (sample.repeat_len as u32) << YM_TRACKER_PRECISION;
-                    if rep > 0 {
-                        while new_pos >= sample_end {
-                            new_pos = new_pos.saturating_sub(rep);
-                            if rep == 0 {
-                                break;
-                            }
-                        }
-                    } else {
-                        voice.running = false;
-                        voice.sample_pos = sample_end;
-                        continue;
-                    }
-                } else {
-                    voice.running = false;
-                    voice.sample_pos = sample_end;
-                    continue;
-                }
-            }
-
-            voice.sample_pos = new_pos;
-        }
-
-        (accumulator as f32 / 32768.0).clamp(-1.0, 1.0)
-    }
-}
-
 fn read_be_u16(data: &[u8], offset: &mut usize) -> Result<u16> {
     if *offset + 2 > data.len() {
         return Err("Unexpected end of data while reading u16".into());
@@ -395,21 +109,6 @@ fn read_c_string(data: &[u8], offset: &mut usize) -> Result<String> {
     let string = String::from_utf8_lossy(&data[start..*offset]).to_string();
     *offset += 1; // Skip null terminator
     Ok(string)
-}
-
-fn deinterleave_tracker_bytes(bytes: &[u8], nb_voice: usize, total_frames: usize) -> Vec<u8> {
-    let step = nb_voice * 4;
-    let mut output = vec![0u8; bytes.len()];
-    let mut src_index = 0;
-    for column in 0..step {
-        let mut dest = column;
-        for _ in 0..total_frames {
-            output[dest] = bytes[src_index];
-            src_index += 1;
-            dest += step;
-        }
-    }
-    output
 }
 
 /// YM6 File Metadata
@@ -1259,173 +958,7 @@ impl Ym6Player {
 
         // Load registers for current frame (once per frame)
         if self.samples_in_frame == 0 {
-            let frame_to_load = self.current_frame;
-            let regs = &self.frames[frame_to_load];
-
-            if self.is_ym2_mode {
-                // Reset effect state that is not used in YM2 playback
-                self.effects.sync_buzzer_stop();
-                for voice in 0..3 {
-                    if self.sid_active[voice] {
-                        self.effects.sid_stop(voice);
-                        self.sid_active[voice] = false;
-                    }
-                    if voice != 2 && self.drum_active[voice] {
-                        self.effects.digidrum_stop(voice);
-                        self.drum_active[voice] = false;
-                    }
-                }
-
-                for (reg_idx, &val) in regs.iter().enumerate().take(11) {
-                    self.chip.write_register(reg_idx as u8, val);
-                }
-
-                // YM2 (Mad Max): if R13 != 0xFF, force envelope (R11), set R12=0 and R13=0x0A
-                // Otherwise, do not touch R12/R13 (no change)
-                if regs[13] != 0xFF {
-                    self.chip.write_register(11, regs[11]);
-                    self.chip.write_register(12, 0);
-                    self.chip.write_register(13, 0x0A);
-                }
-
-                if (regs[10] & 0x80) != 0 {
-                    let mixer = self.chip.read_register(0x07) | 0x24;
-                    self.chip.write_register(0x07, mixer);
-
-                    let sample_idx = (regs[10] & 0x7F) as usize;
-                    if let Some(sample) = self.digidrums.get(sample_idx).cloned() {
-                        let timer = regs[12] as u32;
-                        if timer > 0 {
-                            let freq = (MADMAX_SAMPLE_RATE_BASE / 4) / timer;
-                            if freq > 0 {
-                                self.effects.digidrum_start(2, sample, freq);
-                                self.drum_active[2] = true;
-                                self.active_drum_index[2] = Some(sample_idx as u8);
-                                self.active_drum_freq[2] = freq;
-                            }
-                        }
-                    }
-                } else if self.drum_active[2] {
-                    self.effects.digidrum_stop(2);
-                    self.drum_active[2] = false;
-                    self.active_drum_index[2] = None;
-                    self.active_drum_freq[2] = 0;
-                }
-            } else {
-                // Write all registers; only gate R13 by sentinel 0xFF (YM3+/YM5/YM6 semantics)
-                for r in 0u8..=15u8 {
-                    if r == 13 {
-                        let shape = regs[13];
-                        if shape != 0xFF {
-                            self.chip.write_register(13, shape);
-                        }
-                    } else {
-                        self.chip.write_register(r, regs[r as usize]);
-                    }
-                }
-
-                // Decode and apply effects for this frame based on format
-                let cmds: Vec<EffectCommand> = if self.is_ym5_mode {
-                    // YM5 effect slots
-                    decode_effects_ym5(regs)
-                } else if self.is_ym6_mode {
-                    // YM6 extended effects
-                    self.fx_decoder.decode_effects(regs).to_vec()
-                } else {
-                    // YM2/YM3/YM4 have no effect encoding
-                    Vec::new()
-                };
-
-                // Aggregate per-voice intents
-                let mut sid_intent: [Option<(u32, u8)>; 3] = [None, None, None];
-                let mut sid_sin_intent: [Option<(u32, u8)>; 3] = [None, None, None];
-                let mut drum_intent: [Option<(u8, u32)>; 3] = [None, None, None];
-                let mut sync_intent: Option<(u32, u8)> = None;
-
-                for cmd in cmds.iter() {
-                    match *cmd {
-                        EffectCommand::None => {}
-                        EffectCommand::SidStart {
-                            voice,
-                            freq,
-                            volume,
-                        } => {
-                            if (voice as usize) < 3 {
-                                sid_intent[voice as usize] = Some((freq, volume));
-                            }
-                        }
-                        EffectCommand::SinusSidStart {
-                            voice,
-                            freq,
-                            volume,
-                        } => {
-                            if (voice as usize) < 3 {
-                                sid_sin_intent[voice as usize] = Some((freq, volume));
-                            }
-                        }
-                        EffectCommand::DigiDrumStart {
-                            voice,
-                            drum_num,
-                            freq,
-                        } => {
-                            if (voice as usize) < 3 {
-                                drum_intent[voice as usize] = Some((drum_num, freq));
-                            }
-                        }
-                        EffectCommand::SyncBuzzerStart { freq, env_shape } => {
-                            sync_intent = Some((freq, env_shape));
-                        }
-                    }
-                }
-
-                // Apply Sync Buzzer intent
-                if let Some((freq, env_shape)) = sync_intent {
-                    // Only start buzzer if not already enabled to avoid phase resets each frame
-                    if !self.effects.sync_buzzer_is_enabled() {
-                        // Respect YM6 sentinel: if R13==0xFF, do not change the shape
-                        if regs[13] != 0xFF {
-                            self.chip.write_register(0x0D, env_shape & 0x0F);
-                        }
-                        self.effects.sync_buzzer_start(freq);
-                    }
-                } else if self.effects.sync_buzzer_is_enabled() {
-                    // Stop only when effect is absent
-                    self.effects.sync_buzzer_stop();
-                }
-
-                // Apply per-voice SID and DigiDrum
-                for voice in 0..3 {
-                    if let Some((drum_idx, freq)) = drum_intent[voice] {
-                        if let Some(sample) = self.digidrums.get(drum_idx as usize) {
-                            let should_restart = !self.drum_active[voice]
-                                || self.active_drum_index[voice] != Some(drum_idx)
-                                || self.active_drum_freq[voice] != freq;
-                            if should_restart {
-                                self.effects.digidrum_start(voice, sample.clone(), freq);
-                                self.drum_active[voice] = true;
-                                self.active_drum_index[voice] = Some(drum_idx);
-                                self.active_drum_freq[voice] = freq;
-                            }
-                        }
-                    } else if self.drum_active[voice] {
-                        self.effects.digidrum_stop(voice);
-                        self.drum_active[voice] = false;
-                        self.active_drum_index[voice] = None;
-                        self.active_drum_freq[voice] = 0;
-                    }
-
-                    if let Some((freq, volume)) = sid_sin_intent[voice] {
-                        self.effects.sid_sin_start(voice, freq, volume);
-                        self.sid_active[voice] = true;
-                    } else if let Some((freq, volume)) = sid_intent[voice] {
-                        self.effects.sid_start(voice, freq, volume);
-                        self.sid_active[voice] = true;
-                    } else if self.sid_active[voice] {
-                        self.effects.sid_stop(voice);
-                        self.sid_active[voice] = false;
-                    }
-                }
-            }
+            self.load_frame_registers();
         }
 
         // Update effects before clocking chip
@@ -1435,9 +968,222 @@ impl Ym6Player {
         self.chip.clock();
         let sample = self.chip.get_sample();
 
+        // Advance frame counter
+        self.advance_frame();
+
+        sample
+    }
+
+    /// Load and apply register values for the current frame
+    fn load_frame_registers(&mut self) {
+        let frame_to_load = self.current_frame;
+        // Clone the frame data to avoid borrow checker issues
+        let regs = self.frames[frame_to_load].clone();
+
+        if self.is_ym2_mode {
+            self.load_ym2_frame(&regs);
+        } else {
+            self.load_ymx_frame(&regs);
+        }
+    }
+
+    /// Load YM2 (Mad Max) frame with special drum handling
+    fn load_ym2_frame(&mut self, regs: &[u8; 16]) {
+        // Reset effect state that is not used in YM2 playback
+        self.effects.sync_buzzer_stop();
+        for voice in 0..3 {
+            if self.sid_active[voice] {
+                self.effects.sid_stop(voice);
+                self.sid_active[voice] = false;
+            }
+            if voice != 2 && self.drum_active[voice] {
+                self.effects.digidrum_stop(voice);
+                self.drum_active[voice] = false;
+            }
+        }
+
+        // Write registers 0-10
+        for (reg_idx, &val) in regs.iter().enumerate().take(11) {
+            self.chip.write_register(reg_idx as u8, val);
+        }
+
+        // YM2 (Mad Max): if R13 != 0xFF, force envelope (R11), set R12=0 and R13=0x0A
+        if regs[13] != 0xFF {
+            self.chip.write_register(11, regs[11]);
+            self.chip.write_register(12, 0);
+            self.chip.write_register(13, 0x0A);
+        }
+
+        // Handle Mad Max DigiDrum on channel C
+        if (regs[10] & 0x80) != 0 {
+            let mixer = self.chip.read_register(0x07) | 0x24;
+            self.chip.write_register(0x07, mixer);
+
+            let sample_idx = (regs[10] & 0x7F) as usize;
+            if let Some(sample) = self.digidrums.get(sample_idx).cloned() {
+                let timer = regs[12] as u32;
+                if timer > 0 {
+                    let freq = (MADMAX_SAMPLE_RATE_BASE / 4) / timer;
+                    if freq > 0 {
+                        self.effects.digidrum_start(2, sample, freq);
+                        self.drum_active[2] = true;
+                        self.active_drum_index[2] = Some(sample_idx as u8);
+                        self.active_drum_freq[2] = freq;
+                    }
+                }
+            }
+        } else if self.drum_active[2] {
+            self.effects.digidrum_stop(2);
+            self.drum_active[2] = false;
+            self.active_drum_index[2] = None;
+            self.active_drum_freq[2] = 0;
+        }
+    }
+
+    /// Load YM5/YM6 frame with advanced effect support
+    fn load_ymx_frame(&mut self, regs: &[u8; 16]) {
+        // Write all registers; only gate R13 by sentinel 0xFF
+        for r in 0u8..=15u8 {
+            if r == 13 {
+                let shape = regs[13];
+                if shape != 0xFF {
+                    self.chip.write_register(13, shape);
+                }
+            } else {
+                self.chip.write_register(r, regs[r as usize]);
+            }
+        }
+
+        // Decode effects based on format
+        let cmds = self.decode_frame_effects(regs);
+
+        // Apply effect commands
+        self.apply_effect_intents(&cmds, regs);
+    }
+
+    /// Decode effect commands from frame registers
+    fn decode_frame_effects(&self, regs: &[u8; 16]) -> Vec<EffectCommand> {
+        if self.is_ym5_mode {
+            decode_effects_ym5(regs)
+        } else if self.is_ym6_mode {
+            self.fx_decoder.decode_effects(regs).to_vec()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Apply decoded effect commands to the effects manager
+    fn apply_effect_intents(&mut self, cmds: &[EffectCommand], regs: &[u8; 16]) {
+        // Aggregate per-voice intents
+        let mut sid_intent: [Option<(u32, u8)>; 3] = [None, None, None];
+        let mut sid_sin_intent: [Option<(u32, u8)>; 3] = [None, None, None];
+        let mut drum_intent: [Option<(u8, u32)>; 3] = [None, None, None];
+        let mut sync_intent: Option<(u32, u8)> = None;
+
+        for cmd in cmds.iter() {
+            match *cmd {
+                EffectCommand::None => {}
+                EffectCommand::SidStart {
+                    voice,
+                    freq,
+                    volume,
+                } => {
+                    if (voice as usize) < 3 {
+                        sid_intent[voice as usize] = Some((freq, volume));
+                    }
+                }
+                EffectCommand::SinusSidStart {
+                    voice,
+                    freq,
+                    volume,
+                } => {
+                    if (voice as usize) < 3 {
+                        sid_sin_intent[voice as usize] = Some((freq, volume));
+                    }
+                }
+                EffectCommand::DigiDrumStart {
+                    voice,
+                    drum_num,
+                    freq,
+                } => {
+                    if (voice as usize) < 3 {
+                        drum_intent[voice as usize] = Some((drum_num, freq));
+                    }
+                }
+                EffectCommand::SyncBuzzerStart { freq, env_shape } => {
+                    sync_intent = Some((freq, env_shape));
+                }
+            }
+        }
+
+        // Apply Sync Buzzer
+        self.apply_sync_buzzer_intent(sync_intent, regs);
+
+        // Apply per-voice effects
+        self.apply_voice_effects(sid_intent, sid_sin_intent, drum_intent);
+    }
+
+    /// Apply sync buzzer effect intent
+    fn apply_sync_buzzer_intent(&mut self, sync_intent: Option<(u32, u8)>, regs: &[u8; 16]) {
+        if let Some((freq, env_shape)) = sync_intent {
+            if !self.effects.sync_buzzer_is_enabled() {
+                // Respect YM6 sentinel: if R13==0xFF, do not change the shape
+                if regs[13] != 0xFF {
+                    self.chip.write_register(0x0D, env_shape & 0x0F);
+                }
+                self.effects.sync_buzzer_start(freq);
+            }
+        } else if self.effects.sync_buzzer_is_enabled() {
+            self.effects.sync_buzzer_stop();
+        }
+    }
+
+    /// Apply per-voice SID and DigiDrum effects
+    fn apply_voice_effects(
+        &mut self,
+        sid_intent: [Option<(u32, u8)>; 3],
+        sid_sin_intent: [Option<(u32, u8)>; 3],
+        drum_intent: [Option<(u8, u32)>; 3],
+    ) {
+        for voice in 0..3 {
+            // Handle DigiDrum
+            if let Some((drum_idx, freq)) = drum_intent[voice] {
+                if let Some(sample) = self.digidrums.get(drum_idx as usize) {
+                    let should_restart = !self.drum_active[voice]
+                        || self.active_drum_index[voice] != Some(drum_idx)
+                        || self.active_drum_freq[voice] != freq;
+                    if should_restart {
+                        self.effects.digidrum_start(voice, sample.clone(), freq);
+                        self.drum_active[voice] = true;
+                        self.active_drum_index[voice] = Some(drum_idx);
+                        self.active_drum_freq[voice] = freq;
+                    }
+                }
+            } else if self.drum_active[voice] {
+                self.effects.digidrum_stop(voice);
+                self.drum_active[voice] = false;
+                self.active_drum_index[voice] = None;
+                self.active_drum_freq[voice] = 0;
+            }
+
+            // Handle SID
+            if let Some((freq, volume)) = sid_sin_intent[voice] {
+                self.effects.sid_sin_start(voice, freq, volume);
+                self.sid_active[voice] = true;
+            } else if let Some((freq, volume)) = sid_intent[voice] {
+                self.effects.sid_start(voice, freq, volume);
+                self.sid_active[voice] = true;
+            } else if self.sid_active[voice] {
+                self.effects.sid_stop(voice);
+                self.sid_active[voice] = false;
+            }
+        }
+    }
+
+    /// Advance frame counter and handle looping
+    fn advance_frame(&mut self) {
         self.samples_in_frame += 1;
 
-        // Check for frame transition
         if self.samples_in_frame >= self.samples_per_frame {
             self.samples_in_frame = 0;
 
@@ -1447,14 +1193,11 @@ impl Ym6Player {
                     self.current_frame = loop_start;
                 } else {
                     self.state = PlaybackState::Stopped;
-                    return sample;
                 }
             } else {
                 self.current_frame += 1;
             }
         }
-
-        sample
     }
 
     /// Generate a block of samples

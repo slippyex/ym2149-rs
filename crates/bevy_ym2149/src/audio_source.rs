@@ -113,7 +113,7 @@ fn extract_metadata(data: &[u8]) -> Result<Ym2149Metadata> {
     // At 44.1kHz, samples_per_frame is typically 882
     let samples_per_frame = summary.samples_per_frame as f32;
     let total_samples = frame_count as f32 * samples_per_frame;
-    let duration_seconds = total_samples / 44100.0; // Standard 44.1kHz
+    let duration_seconds = total_samples / crate::playback::YM2149_SAMPLE_RATE_F32;
 
     Ok(Ym2149Metadata {
         title,

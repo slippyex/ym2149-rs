@@ -11,6 +11,17 @@ use bevy_ym2149::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 use std::array::from_fn;
 use std::f32::consts::PI;
 
+// Oscilloscope rendering constants
+const OSC_MARGIN: f32 = 6.0;
+const OSC_SMOOTH_FACTOR: f32 = 0.7;
+const OSC_NEW_SAMPLE_WEIGHT: f32 = 0.3;
+const COLOR_BRIGHT_SCALE: f32 = 1.4;
+const COLOR_DIM_LOW: f32 = 0.35;
+const COLOR_DIM_HIGH: f32 = 0.65;
+const COLOR_FADE_LOW: f32 = 0.2;
+const COLOR_FADE_MID: f32 = 0.45;
+const COLOR_FADE_HIGH: f32 = 0.55;
+
 pub fn update_song_info(
     playbacks: Query<&Ym2149Playback>,
     mut song_display: Query<&mut Text, With<SongInfoDisplay>>,
@@ -224,7 +235,7 @@ pub fn update_oscilloscope(
         .map(|node| node.size().x)
         .unwrap_or(360.0);
     let half_height = canvas_height / 2.0;
-    let margin = 6.0;
+    let margin = OSC_MARGIN;
 
     let mut channel_means = [0.0f32; 3];
     for sample in recent_samples {
@@ -247,7 +258,7 @@ pub fn update_oscilloscope(
             prev = if idx == 0 {
                 value
             } else {
-                prev * 0.7 + value * 0.3
+                prev * OSC_SMOOTH_FACTOR + value * OSC_NEW_SAMPLE_WEIGHT
             };
             smoothed_samples[ch][idx] = prev;
         }
@@ -338,9 +349,10 @@ pub fn update_oscilloscope(
 
         let age = 1.0 - ratio;
         let intensity = smoothed.abs().clamp(0.0, 1.0);
-        let fade = (age.powf(1.4) * (0.35 + intensity * 0.65)).clamp(0.0, 1.0);
-        let brightness = 0.45 + (0.55 * intensity);
-        let color_vec = base * brightness + Vec3::splat(intensity * 0.2);
+        let fade = (age.powf(COLOR_BRIGHT_SCALE) * (COLOR_DIM_LOW + intensity * COLOR_DIM_HIGH))
+            .clamp(0.0, 1.0);
+        let brightness = COLOR_FADE_MID + (COLOR_FADE_HIGH * intensity);
+        let color_vec = base * brightness + Vec3::splat(intensity * COLOR_FADE_LOW);
 
         *color = BackgroundColor(Color::srgba(
             color_vec.x.clamp(0.0, 1.0),
@@ -359,7 +371,7 @@ pub fn update_oscilloscope(
         node.left = Val::Px(x_pos);
         node.top = Val::Px(y_pos.clamp(0.0, canvas_height));
 
-        let glow = (latest.abs().clamp(0.0, 1.0) * 0.7) + 0.3;
+        let glow = (latest.abs().clamp(0.0, 1.0) * OSC_SMOOTH_FACTOR) + OSC_NEW_SAMPLE_WEIGHT;
         *color = BackgroundColor(Color::srgba(
             (base.x * (0.6 + glow * 0.4)).clamp(0.0, 1.0),
             (base.y * (0.6 + glow * 0.4)).clamp(0.0, 1.0),
@@ -380,7 +392,8 @@ pub fn update_oscilloscope(
         let bar_height = (norm.powf(0.75) * 48.0).max(4.0);
         node.height = Val::Px(bar_height);
 
-        let tint = base * (0.35 + norm * 0.65) + Vec3::splat(norm * 0.2);
+        let tint =
+            base * (COLOR_DIM_LOW + norm * COLOR_DIM_HIGH) + Vec3::splat(norm * COLOR_FADE_LOW);
         *color = BackgroundColor(Color::srgba(
             tint.x.clamp(0.0, 1.0),
             tint.y.clamp(0.0, 1.0),

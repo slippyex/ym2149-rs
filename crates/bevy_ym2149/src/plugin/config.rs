@@ -1,6 +1,17 @@
 use bevy::prelude::Resource;
 
 /// Configuration object used to enable/disable individual subsystems of the plugin.
+///
+/// All features are enabled by default. Modify fields directly to customize:
+///
+/// ```
+/// # use bevy_ym2149::Ym2149PluginConfig;
+/// let config = Ym2149PluginConfig {
+///     playlists: false,
+///     diagnostics: false,
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Resource)]
 pub struct Ym2149PluginConfig {
     pub playlists: bool,
@@ -21,37 +32,5 @@ impl Default for Ym2149PluginConfig {
             diagnostics: true,
             bevy_audio_bridge: true,
         }
-    }
-}
-
-impl Ym2149PluginConfig {
-    pub fn playlists(mut self, enabled: bool) -> Self {
-        self.playlists = enabled;
-        self
-    }
-
-    pub fn channel_events(mut self, enabled: bool) -> Self {
-        self.channel_events = enabled;
-        self
-    }
-
-    pub fn spatial_audio(mut self, enabled: bool) -> Self {
-        self.spatial_audio = enabled;
-        self
-    }
-
-    pub fn music_state(mut self, enabled: bool) -> Self {
-        self.music_state = enabled;
-        self
-    }
-
-    pub fn diagnostics(mut self, enabled: bool) -> Self {
-        self.diagnostics = enabled;
-        self
-    }
-
-    pub fn bevy_audio_bridge(mut self, enabled: bool) -> Self {
-        self.bevy_audio_bridge = enabled;
-        self
     }
 }

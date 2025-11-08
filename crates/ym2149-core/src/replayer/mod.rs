@@ -6,6 +6,7 @@
 pub mod cycle_counter;
 pub mod effects_manager;
 mod madmax_digidrums;
+mod tracker_player;
 pub mod vbl_sync;
 pub mod ym_player;
 
