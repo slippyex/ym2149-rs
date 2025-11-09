@@ -20,22 +20,14 @@ pub fn update_diagnostics(
         return;
     }
 
-    let mut fill_sum = 0.0f64;
-    let mut device_count = 0.0f64;
     let mut max_frame = 0.0f64;
 
     for playback in playbacks.iter() {
-        if let Some(device) = &playback.audio_device {
-            fill_sum += device.buffer_fill_level() as f64;
-            device_count += 1.0;
-        }
         max_frame = max_frame.max(playback.frame_position() as f64);
     }
 
-    if device_count > 0.0 {
-        let average_fill = fill_sum / device_count;
-        diagnostics.add_measurement(&BUFFER_FILL_PATH, || average_fill);
-    }
+    // TODO: Buffer fill diagnostic not available with Bevy audio
+    // Could potentially track via AudioPlayer stats if available
 
     diagnostics.add_measurement(&FRAME_POSITION_PATH, || max_frame);
 }

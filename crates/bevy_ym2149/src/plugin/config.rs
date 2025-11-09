@@ -16,7 +16,8 @@ use bevy::prelude::Resource;
 pub struct Ym2149PluginConfig {
     pub playlists: bool,
     pub channel_events: bool,
-    pub spatial_audio: bool,
+    // Spatial audio removed - use Bevy's native spatial audio instead
+    // pub spatial_audio: bool,
     pub music_state: bool,
     pub diagnostics: bool,
     pub bevy_audio_bridge: bool,
@@ -27,7 +28,7 @@ impl Default for Ym2149PluginConfig {
         Self {
             playlists: true,
             channel_events: true,
-            spatial_audio: true,
+            // spatial_audio: true, // Removed - use Bevy's native spatial audio
             music_state: true,
             diagnostics: true,
             bevy_audio_bridge: true,

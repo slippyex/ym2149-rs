@@ -1,20 +1,34 @@
 //! YM2149 audio source asset type for Bevy
 
 use bevy::asset::{Asset, AssetLoader, LoadContext};
+use bevy::audio::{Decodable, Source};
 use bevy::reflect::TypePath;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
-use ym_replayer::loader;
+use ym_replayer::{LoadSummary, PlaybackController, Ym6Player};
 
 use crate::error::{BevyYm2149Error, Result};
 
 /// A loaded YM2149 audio file ready to be played
+///
+/// This asset implements both Asset (for loading) and Decodable (for playback).
+/// The player is shared via Arc<Mutex<>> to allow both the audio thread
+/// and Bevy systems to access it.
 #[derive(Asset, TypePath, Clone)]
 pub struct Ym2149AudioSource {
     /// The raw YM file data
     pub data: Vec<u8>,
     /// Cached metadata about the YM file
     pub metadata: Ym2149Metadata,
+    /// Shared YM player instance for audio generation
+    player: Arc<Mutex<Ym6Player>>,
+    /// Sample rate for playback
+    sample_rate: u32,
+    /// Total number of samples in the track
+    total_samples: usize,
 }
 
 /// Metadata about a YM2149 audio file
@@ -33,12 +47,51 @@ pub struct Ym2149Metadata {
 }
 
 impl Ym2149AudioSource {
+    /// Create a new audio source from an existing player (for crossfade)
+    pub(crate) fn from_player(
+        player: Arc<Mutex<Ym6Player>>,
+        data: Vec<u8>,
+        metadata: Ym2149Metadata,
+        frame_count: usize,
+        samples_per_frame: usize,
+    ) -> Self {
+        Self {
+            data,
+            metadata,
+            player,
+            sample_rate: crate::playback::YM2149_SAMPLE_RATE,
+            total_samples: frame_count * samples_per_frame,
+        }
+    }
+
     /// Create a new audio source from raw YM file data
     pub fn new(data: Vec<u8>) -> Result<Self> {
-        // Extract metadata
-        let metadata = extract_metadata(&data)?;
+        // Load the song to create a player
+        let (mut player, summary) = ym_replayer::load_song(&data).map_err(|e| {
+            BevyYm2149Error::MetadataExtraction(format!("Failed to load song: {}", e))
+        })?;
 
-        Ok(Self { data, metadata })
+        // Extract metadata
+        let metadata = extract_metadata_from_player(&player, &summary);
+
+        // Start the player so it generates audio samples
+        if let Err(e) = player.play() {
+            return Err(BevyYm2149Error::Other(format!(
+                "Failed to start player: {}",
+                e
+            )));
+        }
+
+        let sample_rate = crate::playback::YM2149_SAMPLE_RATE;
+        let total_samples = summary.frame_count * summary.samples_per_frame as usize;
+
+        Ok(Self {
+            data,
+            metadata,
+            player: Arc::new(Mutex::new(player)),
+            sample_rate,
+            total_samples,
+        })
     }
 
     /// Get the duration of this audio source in seconds
@@ -49,6 +102,11 @@ impl Ym2149AudioSource {
     /// Get metadata for this audio source
     pub fn metadata(&self) -> &Ym2149Metadata {
         &self.metadata
+    }
+
+    /// Get a handle to the shared player for external control
+    pub fn player(&self) -> Arc<Mutex<Ym6Player>> {
+        Arc::clone(&self.player)
     }
 }
 
@@ -86,16 +144,8 @@ impl AssetLoader for Ym2149Loader {
     }
 }
 
-/// Extract metadata from YM file data
-fn extract_metadata(data: &[u8]) -> Result<Ym2149Metadata> {
-    let _frames = loader::load_bytes(data).map_err(|e| {
-        BevyYm2149Error::MetadataExtraction(format!("Failed to load frames: {}", e))
-    })?;
-
-    // Use load_song to get the player with metadata
-    let (player, summary) = ym_replayer::load_song(data)
-        .map_err(|e| BevyYm2149Error::MetadataExtraction(format!("Failed to load song: {}", e)))?;
-
+/// Extract metadata from a player and summary
+fn extract_metadata_from_player(player: &Ym6Player, summary: &LoadSummary) -> Ym2149Metadata {
     let frame_count = summary.frame_count;
 
     // Try to get metadata from player's info
@@ -110,16 +160,121 @@ fn extract_metadata(data: &[u8]) -> Result<Ym2149Metadata> {
     };
 
     // Calculate duration: samples = frame_count * samples_per_frame
-    // At 44.1kHz, samples_per_frame is typically 882
     let samples_per_frame = summary.samples_per_frame as f32;
     let total_samples = frame_count as f32 * samples_per_frame;
     let duration_seconds = total_samples / crate::playback::YM2149_SAMPLE_RATE_F32;
 
-    Ok(Ym2149Metadata {
+    Ym2149Metadata {
         title,
         author,
         comment,
         frame_count,
         duration_seconds,
-    })
+    }
+}
+
+/// Decoder for YM2149 audio playback
+///
+/// This decoder implements the `Source` trait from rodio, allowing it to be
+/// used directly in Bevy's audio system. It generates samples on-demand by
+/// calling the YM player.
+pub struct Ym2149Decoder {
+    /// Shared reference to the YM player
+    player: Arc<Mutex<Ym6Player>>,
+    /// Sample rate in Hz
+    sample_rate: u32,
+    /// Current sample position
+    current_sample: usize,
+    /// Total number of samples
+    total_samples: usize,
+    /// Sample buffer for batch generation
+    buffer: Vec<f32>,
+    /// Current position in buffer
+    buffer_pos: usize,
+}
+
+impl Ym2149Decoder {
+    /// Create a new decoder
+    fn new(player: Arc<Mutex<Ym6Player>>, sample_rate: u32, total_samples: usize) -> Self {
+        Self {
+            player,
+            sample_rate,
+            current_sample: 0,
+            total_samples,
+            buffer: Vec::new(),
+            buffer_pos: 0,
+        }
+    }
+
+    /// Generate a batch of samples
+    fn fill_buffer(&mut self) {
+        // Generate 882 samples (one VBL frame at 50Hz)
+        const SAMPLES_PER_FRAME: usize = 882;
+
+        let mut player = self.player.lock();
+        self.buffer = player.generate_samples(SAMPLES_PER_FRAME);
+        self.buffer_pos = 0;
+    }
+}
+
+impl Iterator for Ym2149Decoder {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Check if we've reached the end
+        if self.current_sample >= self.total_samples {
+            return None;
+        }
+
+        // Refill buffer if needed
+        if self.buffer_pos >= self.buffer.len() {
+            self.fill_buffer();
+        }
+
+        // Get sample from buffer
+        let sample = if self.buffer_pos < self.buffer.len() {
+            self.buffer[self.buffer_pos]
+        } else {
+            0.0 // Silence if buffer is empty
+        };
+
+        self.buffer_pos += 1;
+        self.current_sample += 1;
+
+        Some(sample)
+    }
+}
+
+impl Source for Ym2149Decoder {
+    fn current_frame_len(&self) -> Option<usize> {
+        Some(self.total_samples - self.current_sample)
+    }
+
+    fn channels(&self) -> u16 {
+        1 // Mono output
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        Some(Duration::from_secs_f32(
+            self.total_samples as f32 / self.sample_rate as f32,
+        ))
+    }
+}
+
+/// Implement Decodable to integrate with Bevy's audio system
+impl Decodable for Ym2149AudioSource {
+    type DecoderItem = <Ym2149Decoder as Iterator>::Item;
+    type Decoder = Ym2149Decoder;
+
+    fn decoder(&self) -> Self::Decoder {
+        Ym2149Decoder::new(
+            Arc::clone(&self.player),
+            self.sample_rate,
+            self.total_samples,
+        )
+    }
 }

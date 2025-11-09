@@ -1,13 +1,13 @@
 use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
-use crate::audio_sink;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
 use crate::events::{ChannelSnapshot, TrackFinished, TrackStarted};
 use crate::oscilloscope::OscilloscopeBuffer;
 use crate::playback::{
-    ActiveCrossfade, PlaybackMetrics, PlaybackState, TrackSource, YM2149_SAMPLE_RATE,
-    YM2149_SAMPLE_RATE_F32, Ym2149Playback, Ym2149Settings,
+    ActiveCrossfade, PlaybackMetrics, PlaybackState, TrackSource, YM2149_SAMPLE_RATE_F32,
+    Ym2149Playback, Ym2149Settings,
 };
 use crate::plugin::Ym2149PluginConfig;
+use bevy::audio::{AudioPlayer, AudioSink, PlaybackSettings};
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task, block_on, poll_once};
 use parking_lot::Mutex;
@@ -21,6 +21,7 @@ const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
 pub(super) struct PlaybackRuntimeState {
     time_since_last_frame: f32,
     last_state: PlaybackState,
+    last_volume: f32,
     frames_rendered: u64,
     emitted_finished: bool,
 }
@@ -29,6 +30,7 @@ impl Default for PlaybackRuntimeState {
     fn default() -> Self {
         Self {
             time_since_last_frame: 0.0,
+            last_volume: 1.0,
             last_state: PlaybackState::Idle,
             frames_rendered: 0,
             emitted_finished: false,
@@ -136,9 +138,10 @@ fn current_track_source(playback: &Ym2149Playback) -> Option<TrackSource> {
 }
 
 fn process_pending_crossfade(
+    commands: &mut Commands,
+    audio_assets: &mut Assets<Ym2149AudioSource>,
     entity: Entity,
     playback: &mut Ym2149Playback,
-    assets: &Assets<Ym2149AudioSource>,
     pending_reads: &mut HashMap<(Entity, PendingSlot), PendingFileRead>,
 ) {
     if playback.crossfade.is_some() {
@@ -155,7 +158,7 @@ fn process_pending_crossfade(
         PendingSlot::Crossfade,
         &request.source,
         pending_reads,
-        assets,
+        audio_assets,
     ) {
         SourceLoadResult::Pending => return,
         SourceLoadResult::Failed(err) => {
@@ -165,6 +168,10 @@ fn process_pending_crossfade(
         }
         SourceLoadResult::Ready(bytes) => bytes,
     };
+
+    // Clone data for player creation and for later AudioPlayer recreation
+    let data_for_audio = Arc::new(loaded.data.clone());
+    let data_for_crossfade_source = loaded.data.clone();
 
     let mut load = match load_player_from_bytes(loaded.data, loaded.metadata.as_ref()) {
         Ok(load) => load,
@@ -182,20 +189,53 @@ fn process_pending_crossfade(
     }
 
     let duration = request.duration.max(0.001);
+    let player_arc = Arc::new(Mutex::new(load.player));
+
+    // Create a separate AudioPlayer entity for the crossfade track
+    // This allows both tracks to play simultaneously with independent volume control
+    let crossfade_metadata = loaded.metadata.unwrap_or(Ym2149Metadata {
+        title: load.title.clone(),
+        author: load.author.clone(),
+        comment: "".to_string(),
+        frame_count: load.metrics.frame_count,
+        duration_seconds: load.metrics.duration_seconds(),
+    });
+
+    let crossfade_audio_source = Ym2149AudioSource::from_player(
+        player_arc.clone(),
+        data_for_crossfade_source,
+        crossfade_metadata,
+        load.metrics.frame_count,
+        load.metrics.samples_per_frame as usize,
+    );
+    let crossfade_handle = audio_assets.add(crossfade_audio_source);
+
+    // Spawn the crossfade entity with volume starting at 0.0 (silent)
+    // Volume will fade in during the crossfade period
+    let crossfade_entity = commands
+        .spawn((
+            AudioPlayer(crossfade_handle),
+            PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(0.0)),
+        ))
+        .id();
+
     playback.crossfade = Some(ActiveCrossfade {
-        player: Arc::new(Mutex::new(load.player)),
+        player: player_arc,
         metrics: load.metrics,
         song_title: load.title,
         song_author: load.author,
         elapsed: 0.0,
         duration,
         target_index: request.target_index,
+        data: data_for_audio,
+        crossfade_entity: Some(crossfade_entity),
     });
     playback.clear_crossfade_request();
 }
 
 #[allow(clippy::too_many_arguments)]
 fn finalize_crossfade(
+    commands: &mut Commands,
     entity: Entity,
     playback: &mut Ym2149Playback,
     runtime: &mut PlaybackRuntimeState,
@@ -206,6 +246,11 @@ fn finalize_crossfade(
     let Some(crossfade) = playback.crossfade.take() else {
         return;
     };
+
+    // Despawn the crossfade entity now that the transition is complete
+    if let Some(cf_entity) = crossfade.crossfade_entity {
+        commands.entity(cf_entity).despawn();
+    }
 
     if let Some(old_player) = playback.player.take() {
         match old_player.lock().stop() {
@@ -222,6 +267,17 @@ fn finalize_crossfade(
     playback.pending_playlist_index = Some(crossfade.target_index);
     playback.frame_position = new_player.lock().get_current_frame() as u32;
 
+    // CRITICAL: Set source_bytes and needs_reload to recreate the AudioPlayer
+    // The AudioPlayer's Decoder still references the old player, so we must
+    // create a new AudioPlayer+Decoder chain that references the new player
+    playback.source_bytes = Some(crossfade.data);
+    playback.source_path = None;
+    playback.source_asset = None;
+    playback.needs_reload = true;
+
+    // Start new track at full volume (crossfade fade-in is complete)
+    playback.volume = 1.0;
+
     runtime.time_since_last_frame = 0.0;
     runtime.frames_rendered = 0;
     runtime.emitted_finished = false;
@@ -233,8 +289,9 @@ fn finalize_crossfade(
 }
 
 pub(super) fn initialize_playback(
+    mut commands: Commands,
     mut playbacks: Query<(Entity, &mut Ym2149Playback)>,
-    assets: Res<Assets<Ym2149AudioSource>>,
+    mut audio_assets: ResMut<Assets<Ym2149AudioSource>>,
     mut pending_reads: Local<HashMap<(Entity, PendingSlot), PendingFileRead>>,
 ) {
     let mut alive = Vec::new();
@@ -256,7 +313,7 @@ pub(super) fn initialize_playback(
                 PendingSlot::Primary,
                 &source,
                 &mut pending_reads,
-                &assets,
+                &audio_assets,
             ) {
                 SourceLoadResult::Pending => continue,
                 SourceLoadResult::Failed(err) => {
@@ -265,6 +322,9 @@ pub(super) fn initialize_playback(
                 }
                 SourceLoadResult::Ready(bytes) => bytes,
             };
+
+            // Clone data for both player and audio source creation
+            let data_for_audio = loaded.data.clone();
 
             let mut load = match load_player_from_bytes(loaded.data, loaded.metadata.as_ref()) {
                 Ok(load) => load,
@@ -287,21 +347,39 @@ pub(super) fn initialize_playback(
             playback.player = Some(Arc::new(Mutex::new(load.player)));
             playback.needs_reload = false;
 
-            if playback.audio_device.is_none() {
-                match audio_sink::rodio::RodioAudioSink::new(YM2149_SAMPLE_RATE, 2) {
-                    Ok(sink) => {
-                        if let Err(e) = sink.start() {
-                            error!("Failed to start audio device: {}", e);
-                        } else {
-                            info!("Audio device started successfully!");
-                        }
-                        playback.audio_device = Some(Arc::new(sink));
-                    }
-                    Err(e) => {
-                        error!("Failed to create audio device: {}", e);
-                    }
+            // Create a Ym2149AudioSource asset from the loaded data
+            let audio_source = match Ym2149AudioSource::new(data_for_audio) {
+                Ok(source) => source,
+                Err(err) => {
+                    error!("Failed to create audio source: {}", err);
+                    continue;
                 }
-            }
+            };
+
+            // Add the asset and get a handle
+            let audio_handle = audio_assets.add(audio_source);
+
+            // Remove old AudioPlayer and AudioSink components if they exist
+            // This is critical for crossfade: we must stop the old audio before starting new
+            commands
+                .entity(entity)
+                .remove::<AudioPlayer>()
+                .remove::<bevy::audio::AudioSink>();
+
+            // Spawn AudioPlayer on the same entity to play the audio
+            // Use AudioPlayer(handle) syntax for custom Decodable types
+            // Start paused or playing based on current PlaybackState
+            let settings = if playback.state == PlaybackState::Playing {
+                PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(playback.volume))
+            } else {
+                PlaybackSettings::LOOP
+                    .paused()
+                    .with_volume(bevy::audio::Volume::Linear(playback.volume))
+            };
+
+            commands
+                .entity(entity)
+                .insert((AudioPlayer(audio_handle), settings));
 
             info!(
                 "Loaded YM song: {} frames, {} samples/frame",
@@ -309,7 +387,13 @@ pub(super) fn initialize_playback(
             );
         }
 
-        process_pending_crossfade(entity, &mut playback, &assets, &mut pending_reads);
+        process_pending_crossfade(
+            &mut commands,
+            &mut audio_assets,
+            entity,
+            &mut playback,
+            &mut pending_reads,
+        );
     }
 
     pending_reads.retain(|(entity, _), _| alive.contains(entity));
@@ -317,6 +401,7 @@ pub(super) fn initialize_playback(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn update_playback(
+    mut commands: Commands,
     mut playbacks: Query<(Entity, &mut Ym2149Playback)>,
     settings: Res<Ym2149Settings>,
     config: Res<Ym2149PluginConfig>,
@@ -329,6 +414,7 @@ pub(super) fn update_playback(
     mut bridge_buffers: Option<ResMut<AudioBridgeBuffers>>,
     mut runtime_state: Local<HashMap<Entity, PlaybackRuntimeState>>,
     mut scratch_buffers: Local<HashMap<Entity, PlaybackScratch>>,
+    mut audio_sinks: Query<&mut AudioSink>,
 ) {
     let delta = time.delta_secs();
     let master_volume = settings.master_volume.clamp(0.0, 1.0);
@@ -356,6 +442,8 @@ pub(super) fn update_playback(
                 .unwrap_or(false);
 
         let state_changed = entry.last_state != playback.state;
+        let volume_changed = (entry.last_volume - playback.volume).abs() > 0.001;
+
         if state_changed {
             match playback.state {
                 PlaybackState::Playing => {
@@ -369,8 +457,15 @@ pub(super) fn update_playback(
                     {
                         error!("Failed to resume crossfade deck: {}", err);
                     }
-                    if let Some(device) = &playback.audio_device {
-                        device.resume();
+                    // Resume audio via Bevy AudioSink
+                    if let Ok(sink) = audio_sinks.get(entity) {
+                        info!("Resuming audio for entity {:?}", entity);
+                        sink.play();
+                    } else {
+                        warn!(
+                            "No AudioSink found for entity {:?} - audio may not play",
+                            entity
+                        );
                     }
                     if config.channel_events {
                         started_events.write(TrackStarted { entity });
@@ -385,8 +480,9 @@ pub(super) fn update_playback(
                     {
                         error!("Failed to pause crossfade deck: {}", err);
                     }
-                    if let Some(device) = &playback.audio_device {
-                        device.pause();
+                    // Pause audio via Bevy AudioSink
+                    if let Ok(sink) = audio_sinks.get(entity) {
+                        sink.pause();
                     }
                 }
                 PlaybackState::Idle => {
@@ -398,15 +494,17 @@ pub(super) fn update_playback(
                     {
                         error!("Failed to stop crossfade deck: {}", err);
                     }
-                    if let Some(device) = &playback.audio_device {
-                        device.pause();
+                    // Stop audio via Bevy AudioSink
+                    if let Ok(sink) = audio_sinks.get(entity) {
+                        sink.pause();
                     }
                     entry.time_since_last_frame = 0.0;
                     entry.emitted_finished = false;
                 }
                 PlaybackState::Finished => {
-                    if let Some(device) = &playback.audio_device {
-                        device.pause();
+                    // Stop audio via Bevy AudioSink
+                    if let Ok(sink) = audio_sinks.get(entity) {
+                        sink.pause();
                     }
                     if let Some(cf) = crossfade_player.as_mut()
                         && let Err(err) = cf.pause()
@@ -420,6 +518,14 @@ pub(super) fn update_playback(
                 }
             }
             entry.last_state = playback.state;
+        }
+
+        // Update volume via AudioSink when it changes
+        if volume_changed {
+            if let Ok(mut sink) = audio_sinks.get_mut(entity) {
+                sink.set_volume(bevy::audio::Volume::Linear(playback.volume));
+            }
+            entry.last_volume = playback.volume;
         }
 
         if playback.state != PlaybackState::Playing {
@@ -439,6 +545,9 @@ pub(super) fn update_playback(
         while entry.time_since_last_frame >= frame_duration {
             entry.time_since_last_frame -= frame_duration;
             entry.frames_rendered += 1;
+
+            // Update playback frame position to match the player's current frame
+            playback.frame_position = player.get_current_frame() as u32;
 
             let scratch_entry = scratch_buffers.entry(entity).or_default();
             let mut stereo_samples = std::mem::take(&mut scratch_entry.stereo);
@@ -501,18 +610,8 @@ pub(super) fn update_playback(
                 buffers.0.insert(entity, stereo_samples.clone());
             }
 
-            if let Some(device) = &playback.audio_device {
-                if let Err(err) = device.push_samples(stereo_samples.clone()) {
-                    warn!("Failed to push samples to audio device: {}", err);
-                } else if entry.frames_rendered.is_multiple_of(60) {
-                    let fill = device.buffer_fill_level();
-                    debug!(
-                        "Playback buffer fill for {:?}: {:.1}%",
-                        entity,
-                        fill * 100.0
-                    );
-                }
-            }
+            // TODO: With Bevy audio, samples are generated on-demand by the Decoder
+            // We don't manually push samples anymore
 
             if config.channel_events {
                 let registers = player.get_chip().dump_registers();
@@ -532,6 +631,30 @@ pub(super) fn update_playback(
 
             if let Some(state) = playback.crossfade.as_mut() {
                 state.elapsed = (state.elapsed + frame_duration).min(state.duration);
+
+                // Apply crossfade volume transitions:
+                // - Old track (primary entity): fade out from 1.0 → 0.0
+                // - New track (crossfade entity): fade in from 0.0 → 1.0
+                if state.duration > f32::EPSILON {
+                    let fade_ratio = (state.elapsed / state.duration).clamp(0.0, 1.0);
+                    let fade_out_volume = 1.0 - fade_ratio;
+                    let fade_in_volume = fade_ratio;
+                    let cf_entity_opt = state.crossfade_entity;
+
+                    // Fade out the old track (this entity)
+                    if let Ok(mut sink) = audio_sinks.get_mut(entity) {
+                        sink.set_volume(bevy::audio::Volume::Linear(fade_out_volume));
+                    }
+                    playback.volume = fade_out_volume;
+                    entry.last_volume = fade_out_volume;
+
+                    // Fade in the new track (crossfade entity)
+                    if let Some(cf_entity) = cf_entity_opt {
+                        if let Ok(mut cf_sink) = audio_sinks.get_mut(cf_entity) {
+                            cf_sink.set_volume(bevy::audio::Volume::Linear(fade_in_volume));
+                        }
+                    }
+                }
             }
         }
 
@@ -546,6 +669,7 @@ pub(super) fn update_playback(
             drop(player);
             drop(crossfade_player);
             finalize_crossfade(
+                &mut commands,
                 entity,
                 &mut playback,
                 entry,

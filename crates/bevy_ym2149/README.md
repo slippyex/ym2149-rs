@@ -13,8 +13,7 @@ Bevy plugin that embeds the cycle-accurate [`ym2149`](../ym2149-core) emulator, 
 - 🎵 **Accurate playback**: YM2–YM6/YMT files rendered with the same core as the CLI/exporter
 - 🎚️ **ECS-native control**: `Ym2149Playback` component (play/pause/seek/volume/stereo gain)
 - 🧭 **Music systems**: playlists with seamless crossfades, `.ymplaylist` loader, music state graphs
-- 🔊 **Audio bridge**: mirror samples into Bevy’s audio graph or your own sinks
-- 🛰️ **Spatial audio**: per-entity listener & panning helpers
+- 🔊 **Audio bridge**: mirror samples into Bevy's audio graph or your own sinks
 - 📈 **Diagnostics & events**: buffer fill metrics + `TrackStarted/TrackFinished`/`ChannelSnapshot` messages
 - 🖥️ **Visualization**: drop in `Ym2149VizPlugin` for oscilloscope, spectrum, progress HUD (kept in a separate crate so headless builds stay lean)
 
@@ -69,19 +68,20 @@ Configure the plugin at runtime via `Ym2149PluginConfig`:
 |-------------|---------|---------|
 | `playlists` | ✅ | `.ymplaylist` loader + `Ym2149PlaylistPlayer`, crossfade driver |
 | `channel_events` | ✅ | Emits `ChannelSnapshot` + `TrackStarted/Finished` |
-| `spatial_audio` | ✅ | `Ym2149SpatialAudio` component + listener resource |
 | `music_state` | ✅ | `MusicStateGraph` + `MusicStateRequest` routing |
-| `diagnostics` | ✅ | Registers `ym2149/buffer_fill` & `ym2149/frame_position` metrics |
-| `bevy_audio_bridge` | ✅ | Mirrors samples into `AudioBridgeBuffers` + rodio bridge sinks |
+| `diagnostics` | ✅ | Registers `ym2149/frame_position` metric |
+| `bevy_audio_bridge` | ✅ | Mirrors samples into `AudioBridgeBuffers` for custom DSP chains |
 
 Disable what you don’t need to keep your app lean.
 
 ## Runtime Flow
 
-1. **Initialization** – `initialize_playback` loads YM sources (file, asset, or bytes), instantiates the emulator, and warms a rodio sink.
-2. **Playback** – `update_playback` advances frames based on elapsed time, fills ring buffers, emits diagnostics, and handles playlist/crossfade bookkeeping.
-3. **Observability** – messages & diagnostics provide current frame, buffer fill, and per-channel snapshots.
-4. **Visualization (optional)** – `bevy_ym2149_viz` systems consume the observability data to render UI.
+1. **Asset Loading** – YM files are loaded via Bevy's asset system as `Ym2149AudioSource` assets (implementing the `Decodable` trait)
+2. **Initialization** – `initialize_playback` spawns `AudioPlayer` entities with Bevy's native audio system
+3. **Playback** – Bevy's audio thread pulls samples on-demand from `Ym2149Decoder`, which generates samples via the YM2149 emulator
+4. **Control** – `update_playback` system uses `AudioSink` to control play/pause/volume based on `Ym2149Playback` component state
+5. **Observability** – messages & diagnostics provide current frame and per-channel snapshots
+6. **Visualization (optional)** – `bevy_ym2149_viz` systems consume the observability data to render UI
 
 ## Key APIs
 
@@ -175,8 +175,8 @@ fn consume(buffers: Res<AudioBridgeBuffers>) {
 
 ### Diagnostics
 
-- `DiagnosticsStore::get(&BUFFER_FILL_PATH)` exposes average sink fill level (0–1)
 - `FRAME_POSITION_PATH` tracks the furthest frame processed across playbacks
+- Use Bevy's standard `DiagnosticsStore` to access metrics
 
 ### Visualization (`bevy_ym2149_viz`)
 
@@ -198,10 +198,11 @@ Run e.g. `cargo run --example advanced_example -p bevy_ym2149_examples`.
 
 ## Troubleshooting Tips
 
-- **No audio**: ensure the YM path is valid, `Ym2149Plugin` is added, and your OS exposes an audio device
-- **Crackling / underruns**: increase ring buffer size in `AudioSink::rodio::RodioAudioSink::new`, avoid heavy work on the audio thread
-- **Playback too fast/slow**: confirm `Time` resource is advancing; the plugin uses delta-time pacing rather than Bevy’s frame rate
-- **Bridge audio silent**: make sure the entity was added to `AudioBridgeTargets` (via `AudioBridgeRequest`) and that its mix isn’t muted
+- **No audio**: ensure the YM path is valid, `Ym2149Plugin` is added with `.add_audio_source::<Ym2149AudioSource>()`, and your OS has a working audio device
+- **Crackling / underruns**: Bevy's audio system handles buffering automatically; check for heavy work blocking the audio callback thread
+- **Playback too fast/slow**: confirm `Time` resource is advancing; visualization uses frame position tracking
+- **Bridge audio silent**: make sure the entity was added to `AudioBridgeTargets` (via `AudioBridgeRequest`) and that its mix isn't muted
+- **Player not started**: ensure `PlaybackController::play()` is called on the player instance in `Ym2149AudioSource::new()`
 
 ## License
 

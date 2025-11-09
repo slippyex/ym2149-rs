@@ -54,10 +54,3 @@ pub use player::{
     CycleCounter, EffectsManager, LoadSummary, PlaybackController, PlaybackState, Player,
     TimingConfig, VblSync, Ym6Info, Ym6Player, YmFileFormat, load_song,
 };
-
-// Export module - WAV/MP3 export (optional)
-#[cfg(any(feature = "export-wav", feature = "export-mp3"))]
-pub mod export;
-
-#[cfg(any(feature = "export-wav", feature = "export-mp3"))]
-pub use export::ExportConfig;

@@ -46,7 +46,7 @@ graph TB
 |-------|-------|---------|------------|-------------------|
 | **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation | `Ym2149`, `Ym2149Backend` trait, streaming, visualization | `chip_demo` example |
 | **ym-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` (implements `Ym2149Backend`) | None (library only) |
-| **ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()`, parsers, loader, export | `ym-replayer` CLI, `export` example |
+| **ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()`, parsers, loader | `ym-replayer` CLI |
 | **bevy_ym2149** | 4 | Bevy audio plugin with playback management | `Ym2149Plugin`, `Ym2149Playback` component | None (library only) |
 | **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization components & systems | None (library only) |
 | **bevy_ym2149_examples** | 4 | Runnable demo applications | None (examples only) | 5 example applications |
@@ -73,16 +73,16 @@ sequenceDiagram
 
     loop Every frame (50Hz / 882 samples)
         Player->>Player: decode effects
-        Player->>Chip: load_registers(&[u8; 16])
+        Player->>Chip: load_registers(regs)
         Player->>Chip: apply effects (SID/DigiDrum/Buzzer)
 
         loop 882 samples
             Player->>Chip: clock()
             Chip->>Chip: update generators
-            Chip-->>Player: get_sample() -> f32
+            Chip-->>Player: get_sample() returns f32
         end
 
-        Player-->>Audio: Vec<f32> samples
+        Player-->>Audio: send samples
     end
 ```
 
@@ -189,7 +189,8 @@ Ym2149
 **Rationale:** Streaming (RingBuffer, AudioDevice, RealtimePlayer) is kept in ym2149-core because:
 1. It's generic audio infrastructure, not YM-file-specific
 2. Can be used for direct chip streaming without file parsing
-3. Provides foundation for both CLI player and potential future use cases
+3. Provides foundation for CLI player and standalone applications
+4. **Note:** `bevy_ym2149` no longer uses these modules; it uses Bevy's native audio system instead
 
 **Components:**
 - `RingBuffer` - Lock-free circular buffer for producer/consumer threading
@@ -197,23 +198,17 @@ Ym2149
 - `RealtimePlayer` - Real-time sample generation wrapper
 - `StreamConfig` - Configuration for latency, sample rate, channels
 
-**Usage:** Available via `ym2149::streaming::*` when `streaming` feature is enabled.
+**Usage:** Available via `ym2149::streaming::*` when `streaming` feature is enabled (used by CLI tools, not Bevy plugin).
 
 ### Where is Export?
 
-**Location:** `ym2149-core/src/export/`
+**Status:** Export functionality is not currently implemented.
 
-**Rationale:** Export (WAV/MP3 generation) is kept in ym2149-core because:
-1. Works with any sample source, not just YM files
-2. The `export` example in ym2149-core demonstrates full pipeline
-3. Can export from direct chip synthesis or YM playback
+**Note:** Audio export (WAV/MP3) was planned but not yet implemented in v0.6.0. For now, audio output is available through:
+1. CLI streaming playback (using `ym-replayer` binary with `--features streaming`)
+2. Bevy integration (using `bevy_ym2149` plugin)
 
-**Components:**
-- `export_to_wav_with_config()` - WAV file generation
-- `export_to_mp3_with_config()` - MP3 file generation
-- `ExportConfig` - Stereo, normalization, fade settings
-
-**Usage:** Available via `ym2149::export::*` when `export-wav` or `export-mp3` features are enabled.
+**Future Consideration:** Export functionality may be added in a future release if there is demand.
 
 ---
 
@@ -309,22 +304,24 @@ These are hardware-specific features that don't make sense in a generic backend 
 
 ### bevy_ym2149
 
-**Bevy ECS plugin** for YM2149 audio playback in games.
+**Bevy ECS plugin** for YM2149 audio playback in games using Bevy's native audio system.
 
 **Architecture:**
 ```
 Ym2149Plugin
-├── Asset Loading
-│   ├── Ym2149Loader (handles .ym files)
-│   └── Ym2149AudioSource (asset type)
+├── Asset System Integration
+│   ├── Ym2149Loader (AssetLoader for .ym files)
+│   ├── Ym2149AudioSource (Asset + Decodable)
+│   └── Ym2149Decoder (Iterator + Source for sample generation)
 ├── Playback Management
 │   ├── Ym2149Playback (component)
 │   ├── PlaybackState (Playing/Paused/Stopped)
-│   └── Audio sink integration
+│   ├── AudioPlayer (Bevy's audio entity component)
+│   └── AudioSink (play/pause/volume control)
 ├── Systems
-│   ├── asset_loading_system
-│   ├── playback_update_system
-│   ├── audio_bridge_system
+│   ├── initialize_playback (spawns AudioPlayer entities)
+│   ├── update_playback (controls AudioSink based on component state)
+│   ├── audio_bridge_system (sample mirroring for custom DSP)
 │   └── event_emission_system
 └── Events
     ├── TrackStarted
@@ -333,10 +330,12 @@ Ym2149Plugin
 ```
 
 **Key Features:**
-- Automatic asset loading via Bevy asset system
+- Native Bevy audio integration via `Decodable` trait
+- On-demand sample generation (pull-based model)
+- Automatic asset loading and caching
 - ECS component-based playback management
 - Playlist support with crossfading
-- Audio bridge for Bevy spatial audio
+- Audio bridge for custom DSP chains
 - Diagnostics and metrics
 - Event system for game logic integration
 
@@ -347,6 +346,21 @@ App::new()
     .add_systems(Startup, |mut commands: Commands| {
         commands.spawn(Ym2149Playback::new("music/song.ym"));
     })
+```
+
+**Audio Flow:**
+```
+Bevy Audio Thread (pull-based)
+    ↓
+AudioSink requests samples
+    ↓
+Ym2149Decoder::next() (Iterator trait)
+    ↓
+Ym6Player::generate_samples(882) [batch for efficiency]
+    ↓
+Ym2149::clock() × 882 [one VBL frame @ 50Hz]
+    ↓
+f32 samples returned to Bevy audio system
 ```
 
 ### bevy_ym2149_viz
@@ -398,38 +412,62 @@ Ym2149VizPlugin
 ```
 User spawns Ym2149Playback("song.ym")
     ↓
-Bevy asset system loads file
+Bevy asset system detects .ym extension
     ↓
-Ym2149Loader::load()
+Ym2149Loader::load() (async)
     ↓
-ym_replayer::loader::load_bytes()
+Read file bytes
     ↓
-Parser extracts frames
+Ym2149AudioSource::new(data)
+    ├─ ym_replayer::load_song(&data)
+    ├─ Create Ym6Player with Ym2149 chip
+    ├─ Call player.play() to start
+    └─ Return Asset
     ↓
-Ym6Player created with Ym2149 chip
-    ↓
-Component initialized with player
+Asset added to Assets<Ym2149AudioSource> store
 ```
 
-### Pattern 2: Sample Generation (Core ← Replayer ← Bevy)
+### Pattern 2: Audio Playback Initialization
 
 ```
-Bevy audio sink requests samples
+initialize_playback system runs
     ↓
-playback_update_system()
+Detects Ym2149Playback without AudioPlayer
     ↓
-Ym6Player::generate_samples()
+Load Ym2149AudioSource from asset server
     ↓
-For each frame:
-  ├─ Decode effects
-  ├─ Ym2149::load_registers()
-  └─ For each sample:
-      └─ Ym2149::clock() → f32
+Create AudioPlayer(audio_handle)
     ↓
-Samples written to audio sink
+Attach AudioPlayer + PlaybackSettings to entity
+    ↓
+Bevy audio system spawns audio thread
 ```
 
-### Pattern 3: Effect Application (Replayer → Core)
+### Pattern 3: Sample Generation (Pull-Based, On-Demand)
+
+```
+Bevy Audio Thread needs samples
+    ↓
+Calls Ym2149Decoder::next() (Iterator trait)
+    ↓
+Decoder checks if buffer needs refill
+    ↓
+Ym6Player::generate_samples(882) [one VBL frame]
+    ├─ For current frame:
+    │   ├─ Load frame registers
+    │   ├─ Decode effects
+    │   └─ Apply effects to chip
+    └─ For each of 882 samples:
+        └─ Ym2149::clock() → f32
+    ↓
+Samples buffered in decoder
+    ↓
+Return single sample to Bevy
+    ↓
+Repeat until track ends or stopped
+```
+
+### Pattern 4: Effect Application (Replayer → Core)
 
 ```
 Ym6Player decodes effect commands
@@ -470,9 +508,11 @@ bevy_ym2149_examples
 
 ---
 
-## Threading Model (Optional Streaming)
+## Threading Models
 
-When `streaming` feature is enabled:
+### CLI Streaming (Optional, Feature-Gated)
+
+When `streaming` feature is enabled in CLI tools:
 
 ```mermaid
 graph LR
@@ -501,20 +541,50 @@ graph LR
 
 **See:** [STREAMING_GUIDE.md](STREAMING_GUIDE.md)
 
+### Bevy Integration (Native Audio System)
+
+When using `bevy_ym2149`:
+
+```mermaid
+graph LR
+    subgraph "Bevy Audio Thread"
+        SINK["AudioSink<br/>Bevy Audio System"]
+    end
+
+    subgraph "Pull-Based Generation"
+        DEC["Ym2149Decoder<br/>Iterator + Source"]
+    end
+
+    subgraph "Shared State"
+        PLAYER["Shared Ym6Player<br/>YM2149 Emulator"]
+    end
+
+    SINK -->|requests samples| DEC
+    DEC -->|locks and generates| PLAYER
+    PLAYER -->|returns samples| DEC
+    DEC -->|provides samples| SINK
+```
+
+**Key Differences:**
+- **Pull-based:** Audio thread requests samples on-demand (no ring buffer needed)
+- **Bevy-managed:** Audio device lifecycle handled by Bevy
+- **Asset integration:** YM files loaded via Bevy's asset system
+- **Shared player:** `Arc<Mutex<Ym6Player>>` allows both audio and visualization to access state
+- **Lower latency:** No intermediate buffer, direct sample generation
+
 ---
 
 ## Feature Flag Matrix
 
-| Feature | ym2149-core | ym-replayer | bevy_ym2149 |
-|---------|-------------|-------------|-------------|
-| `emulator` | ✓ (default) | - | - |
-| `streaming` | ✓ | ✓ | ✓ |
-| `visualization` | ✓ | - | - |
-| `effects` | - | ✓ (default) | - |
-| `tracker` | - | ✓ (default) | - |
-| `digidrums` | - | ✓ (default) | - |
-| `export-wav` | ✓ | ✓ | - |
-| `export-mp3` | ✓ | ✓ | - |
+| Feature | ym2149-core | ym-replayer | bevy_ym2149 | Notes |
+|---------|-------------|-------------|-------------|-------|
+| `emulator` | ✓ (default) | - | - | Core chip emulation |
+| `streaming` | ✓ | ✓ | - | CLI streaming only; Bevy uses native audio |
+| `visualization` | ✓ | - | - | Terminal UI helpers |
+| `effects` | - | ✓ (default) | - | YM6 effects support |
+| `tracker` | - | ✓ (default) | - | YMT tracker support |
+| `digidrums` | - | ✓ (default) | - | Mad Max digi-drums |
+| `softsynth` | - | ✓ (optional) | - | Experimental synthesizer backend |
 
 ---
 
@@ -572,7 +642,7 @@ Old paths emit deprecation warnings with migration guidance. All deprecated code
 - **bevy_ym2149:** Asset loading, playback coordination
 
 ### Current Status
-**253 tests passing** across workspace
+**165+ tests passing** across workspace
 
 ```bash
 cargo test --workspace

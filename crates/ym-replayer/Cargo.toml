@@ -40,10 +40,6 @@ bitflags.workspace = true
 # Audio output (optional)
 rodio = { workspace = true, optional = true }
 
-# Audio export (optional)
-hound = { version = "3.5", optional = true }  # WAV file writing
-mp3lame-encoder = { version = "0.2", optional = true }  # MP3 encoding
-
 [dev-dependencies]
 approx.workspace = true
 
@@ -68,8 +64,3 @@ streaming = ["dep:rodio"]
 
 # Softsynth backend support (experimental)
 softsynth = ["dep:ym-softsynth"]
-
-# Audio export features (optional, for WAV/MP3 export)
-export = ["export-wav", "export-mp3"]
-export-wav = ["dep:hound"]
-export-mp3 = ["dep:mp3lame-encoder"]

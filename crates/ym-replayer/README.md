@@ -13,7 +13,7 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
   - YM6 SID voice effects
   - Sync buzzer effects
 - **Backend Agnostic**: Works with any `Ym2149Backend` implementation
-- **Optional Features**: Streaming audio output and WAV/MP3 export
+- **Optional Features**: Streaming audio output
 
 ## Usage
 
@@ -72,8 +72,7 @@ use ym_replayer::loader;
 - `tracker`: Enable tracker mode support
 - `digidrums`: Enable Mad Max digi-drums
 - `streaming`: Enable real-time audio output (requires `rodio`)
-- `export-wav`: Enable WAV export
-- `export-mp3`: Enable MP3 export
+- `softsynth`: Enable experimental software synthesizer backend
 
 ## License
 

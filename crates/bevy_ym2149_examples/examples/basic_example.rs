@@ -26,7 +26,7 @@ fn setup(mut commands: Commands) {
 
     // Spawn a YM2149 playback entity with a file path
     // This uses a bundled example music file; replace with your own YM file path if desired
-    commands.spawn(Ym2149Playback::new("examples/ND-Toxygene.ym"));
+    commands.spawn(Ym2149Playback::new("examples/Syntax Terror - TLB.ym"));
 
     // Display simple instructions
     commands.spawn((

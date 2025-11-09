@@ -25,7 +25,9 @@ use crate::playlist::{
     Ym2149Playlist, advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
     register_playlist_assets,
 };
-use crate::spatial::update_spatial_audio;
+// Spatial audio removed - use Bevy's native spatial audio instead
+// use crate::spatial::update_spatial_audio;
+use bevy::audio::AddAudioSource;
 use bevy::prelude::*;
 
 /// Bevy plugin responsible for YM2149 playback integration.
@@ -66,6 +68,8 @@ impl Plugin for Ym2149Plugin {
         // Register YM assets with Bevy's asset server.
         app.init_asset::<Ym2149AudioSource>();
         app.init_asset_loader::<Ym2149Loader>();
+        // Register Ym2149AudioSource as a Decodable audio source
+        app.add_audio_source::<Ym2149AudioSource>();
 
         // Event channels always exist; individual systems check configuration flags
         // before emitting to avoid unnecessary work if the user disables them.
@@ -78,11 +82,11 @@ impl Plugin for Ym2149Plugin {
 
         // Core playback lifecycle.
         app.add_systems(PreUpdate, initialize_playback);
-        if self.config.spatial_audio {
-            app.add_systems(Update, update_spatial_audio);
-        }
+        // Spatial audio removed - use Bevy's native spatial audio instead
+        // if self.config.spatial_audio {
+        //     app.add_systems(Update, update_spatial_audio);
+        // }
         app.add_systems(Update, update_playback);
-
         // Optional playlist support.
         if self.config.playlists {
             app.init_asset::<Ym2149Playlist>();

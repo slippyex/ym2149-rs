@@ -31,7 +31,6 @@
 //! }
 //! ```
 
-use crate::audio_sink::AudioSink;
 use crate::audio_source::Ym2149AudioSource;
 use bevy::prelude::*;
 use parking_lot::Mutex;
@@ -95,6 +94,10 @@ pub(crate) struct ActiveCrossfade {
     pub elapsed: f32,
     pub duration: f32,
     pub target_index: usize,
+    /// Raw YM data for recreating the AudioPlayer after crossfade completes
+    pub data: Arc<Vec<u8>>,
+    /// Entity of the separate AudioPlayer playing the incoming track during crossfade
+    pub crossfade_entity: Option<Entity>,
 }
 
 /// Component for managing YM2149 playback on an entity
@@ -152,8 +155,6 @@ pub struct Ym2149Playback {
     pub(crate) right_gain: f32,
     /// Internal YM player instance (created by plugin systems)
     pub(crate) player: Option<Arc<Mutex<Ym6Player>>>,
-    /// Audio output device (created by plugin systems)
-    pub(crate) audio_device: Option<Arc<dyn AudioSink>>,
     /// Flag to trigger reloading the player on next play
     pub(crate) needs_reload: bool,
     /// Song title extracted from YM file metadata
@@ -206,7 +207,6 @@ impl Ym2149Playback {
             left_gain: 1.0,
             right_gain: 1.0,
             player: None,
-            audio_device: None,
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
@@ -229,7 +229,6 @@ impl Ym2149Playback {
             left_gain: 1.0,
             right_gain: 1.0,
             player: None,
-            audio_device: None,
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
@@ -252,7 +251,6 @@ impl Ym2149Playback {
             left_gain: 1.0,
             right_gain: 1.0,
             player: None,
-            audio_device: None,
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
@@ -422,10 +420,11 @@ impl Ym2149Playback {
     }
 
     /// Query the current audio sink buffer fill percentage (0.0 - 1.0).
+    ///
+    /// Note: This method is deprecated with Bevy audio and always returns None.
+    /// Audio buffering is now handled internally by Bevy's audio system.
     pub fn audio_buffer_fill(&self) -> Option<f32> {
-        self.audio_device
-            .as_ref()
-            .map(|device| device.buffer_fill_level())
+        None
     }
 
     /// Access the metrics of the currently loaded track, if known.
@@ -474,7 +473,6 @@ impl Default for Ym2149Playback {
             left_gain: 1.0,
             right_gain: 1.0,
             player: None,
-            audio_device: None,
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),

@@ -18,7 +18,6 @@ All notable changes to the ym2149-rs project.
 - **Audio Bridge** - Mirror generated samples into Bevy's audio graph with per-entity gain/pan control
 - **Channel Events** - Per-frame channel snapshots and lifecycle events (TrackStarted/TrackFinished)
 - **Diagnostics Integration** - Buffer fill and frame position metrics via Bevy's diagnostics system
-- **Spatial Audio** - Experimental stereo panning based on Bevy transforms (opt-in)
 - **Plugin Configuration** - `Ym2149PluginConfig` for toggling subsystems (playlists, events, diagnostics, etc.)
 - **Enhanced Playback** - Added `from_asset()` and `from_bytes()` constructors for flexible loading
 

@@ -12,8 +12,8 @@ description = "Bevy audio plugin for YM2149 PSG emulator"
 default = []
 
 [dependencies]
-# Core YM2149 chip emulation
-ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator", "streaming"] }
+# Core YM2149 chip emulation (without streaming - we use Bevy audio instead)
+ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator"] }
 # YM file parsing and playback
 ym-replayer = { path = "../ym-replayer", version = "0.6" }
 bevy = { version = "0.17", features = ["bevy_audio"] }
@@ -23,8 +23,7 @@ serde = { workspace = true, features = ["derive"] }
 parking_lot.workspace = true
 anyhow = "1"
 ron = "0.8"
-hound = "3"
-rodio = { version = "0.17", default-features = true }
+# Note: rodio is provided by bevy_audio, no direct dependency needed
 
 [dev-dependencies]
 bevy = { version = "0.17", features = ["bevy_audio"] }

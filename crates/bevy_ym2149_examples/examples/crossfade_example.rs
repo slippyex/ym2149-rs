@@ -14,7 +14,7 @@ use bevy_ym2149::playlist::{
 use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin};
 use bevy_ym2149_examples::example_plugins;
 
-const CROSSFADE_SECONDS: f32 = 15.0;
+const CROSSFADE_SECONDS: f32 = 3.0;
 
 fn main() {
     App::new()

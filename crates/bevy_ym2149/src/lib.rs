@@ -88,12 +88,10 @@
 //!
 //! - [`playback`] - Core playback component and state management
 //! - [`plugin`] - Bevy plugin integration and systems
-//! - [`audio_sink`] - Trait-based audio output abstraction (pluggable implementations)
-//! - [`audio_source`] - YM file loading and metadata extraction
+//! - [`audio_source`] - YM file loading and Bevy audio integration via Decodable
 //! - [`bevy_ym2149_viz`](https://crates.io/crates/bevy_ym2149_viz) - Optional UI components and display helpers
 
 pub mod audio_bridge;
-pub mod audio_sink;
 pub mod audio_source;
 pub mod diagnostics;
 pub mod error;
@@ -103,14 +101,14 @@ pub mod oscilloscope;
 pub mod playback;
 pub mod playlist;
 pub mod plugin;
-pub mod spatial;
+// Spatial audio module removed - use Bevy's native spatial audio instead
+// pub mod spatial;
 
 pub use ::ym2149::*;
 pub use audio_bridge::{
     AudioBridgeBuffers, AudioBridgeMix, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice,
     BridgeAudioSinks,
 };
-pub use audio_sink::{AudioSink, BoxedAudioSink};
 pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
 pub use diagnostics::{BUFFER_FILL_PATH, FRAME_POSITION_PATH, update_diagnostics};
 pub use error::{BevyYm2149Error, Result};
@@ -127,4 +125,5 @@ pub use playlist::{
     drive_crossfade_playlists, handle_playlist_requests, register_playlist_assets,
 };
 pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
-pub use spatial::{Ym2149Listener, Ym2149SpatialAudio};
+// Spatial audio types removed - use Bevy's native spatial audio instead
+// pub use spatial::{Ym2149Listener, Ym2149SpatialAudio};

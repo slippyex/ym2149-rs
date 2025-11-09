@@ -28,10 +28,11 @@
 ## Highlights
 
 - ✅ **Hardware-faithful**: precise envelope, noise, mixer, SID, Sync Buzzer, digi-drum behaviours
-- 🧰 **CLI ready**: stream YM files in the terminal or batch-export collections to WAV/MP3
-- 🛰️ **Configurable Bevy subsystems**: playlists, crossfade decks, music state graphs, channel events, diagnostics, Bevy audio bridge, spatial audio
+- 🧰 **CLI ready**: stream YM files in the terminal with real-time visualization
+- 🎵 **Native Bevy audio**: seamless integration via `Decodable` trait with pull-based sample generation
+- 🛰️ **Configurable Bevy subsystems**: playlists, crossfade decks, music state graphs, channel events, diagnostics, audio bridge
 - 🖼️ **Visualization stack**: drop-in oscilloscope, spectrum bars, progress HUD, and demoscene showcase based on the viz crate
-- 🧪 **Well-tested**: `cargo test --workspace` (152+ tests) plus example scenes to validate runtime flows
+- 🧪 **Well-tested**: `cargo test --workspace` (165+ tests) plus example scenes to validate runtime flows
 
 ## Quick Start
 
@@ -57,7 +58,7 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
-### Run the CLI Player / Exporter
+### Run the CLI Player
 
 ```bash
 # Real-time playback with scope overlay
@@ -65,10 +66,6 @@ cargo run -p ym-replayer --features streaming -- examples/ND-Toxygene.ym
 
 # Interactive chip demo with audio output
 cargo run --example chip_demo -p ym2149 --features streaming
-
-# Export to WAV / MP3
-cargo run --example export -p ym-replayer --features export-wav -- song.ym out.wav
-cargo run --example export -p ym-replayer --features export-mp3 -- song.ym out.mp3 --bitrate 320
 ```
 
 <img src="docs/screenshots/cli.png" alt="CLI player" width="700">

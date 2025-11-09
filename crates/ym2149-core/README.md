@@ -113,7 +113,7 @@ fn play_note<B: Ym2149Backend>(chip: &mut B) {
 ## Migration from < 0.6.0
 
 Version 0.6.0 reorganized the crate structure for better separation of concerns.
-All YM file parsing, playback, and export functionality has been moved to the `ym-replayer` crate:
+All YM file parsing and playback functionality has been moved to the `ym-replayer` crate:
 
 ```rust
 // Old (< 0.6)
