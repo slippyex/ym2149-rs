@@ -8,148 +8,25 @@ use super::tracker_player::{
     TrackerFormat, TrackerLine, TrackerSample, TrackerState, deinterleave_tracker_bytes,
 };
 use super::{PlaybackController, PlaybackState, VblSync};
+use super::ym6::{LoadSummary, Ym6Info, YmFileFormat, PlaybackStateInit};
+use super::ym6::{read_be_u16, read_be_u32, read_c_string};
 use crate::parser::FormatParser;
 use crate::parser::{
     ATTR_LOOP_MODE, ATTR_STREAM_INTERLEAVED, Ym6Parser, YmParser,
     effects::{EffectCommand, Ym6EffectDecoder, decode_effects_ym5},
 };
 use crate::{Result, compression};
-use std::fmt;
-use ym2149::Ym2149;
+use ym2149::{Ym2149, Ym2149Backend};
 
-/// Supported YM file formats handled by the loader.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum YmFileFormat {
-    /// YM2 format (Mad Max).
-    Ym2,
-    /// Legacy YM3 format without embedded metadata.
-    Ym3,
-    /// YM3 variant with loop information footer.
-    Ym3b,
-    /// YM4 format (metadata, optional digidrums, 14 registers).
-    Ym4,
-    /// YM5 format (metadata, digidrums, effect attributes).
-    Ym5,
-    /// YM6 format (metadata, extended effects).
-    Ym6,
-    /// YM Tracker format version 1.
-    Ymt1,
-    /// YM Tracker format version 2.
-    Ymt2,
-}
-
-impl fmt::Display for YmFileFormat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
-            YmFileFormat::Ym2 => "YM2",
-            YmFileFormat::Ym3 => "YM3",
-            YmFileFormat::Ym3b => "YM3b",
-            YmFileFormat::Ym4 => "YM4",
-            YmFileFormat::Ym5 => "YM5",
-            YmFileFormat::Ym6 => "YM6",
-            YmFileFormat::Ymt1 => "YMT1",
-            YmFileFormat::Ymt2 => "YMT2",
-        };
-        f.write_str(name)
-    }
-}
-
-/// Summary information returned after loading file data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LoadSummary {
-    /// Detected YM file format.
-    pub format: YmFileFormat,
-    /// Number of register frames in the song.
-    pub frame_count: usize,
-    /// Samples generated per frame (derived from frame rate).
-    pub samples_per_frame: u32,
-}
-
-impl LoadSummary {
-    /// Total number of audio samples encoded in the song.
-    pub fn total_samples(&self) -> usize {
-        self.frame_count
-            .saturating_mul(self.samples_per_frame as usize)
-    }
-}
-
-fn read_be_u16(data: &[u8], offset: &mut usize) -> Result<u16> {
-    if *offset + 2 > data.len() {
-        return Err("Unexpected end of data while reading u16".into());
-    }
-    let value = u16::from_be_bytes([data[*offset], data[*offset + 1]]);
-    *offset += 2;
-    Ok(value)
-}
-
-fn read_be_u32(data: &[u8], offset: &mut usize) -> Result<u32> {
-    if *offset + 4 > data.len() {
-        return Err("Unexpected end of data while reading u32".into());
-    }
-    let value = u32::from_be_bytes([
-        data[*offset],
-        data[*offset + 1],
-        data[*offset + 2],
-        data[*offset + 3],
-    ]);
-    *offset += 4;
-    Ok(value)
-}
-
-fn read_c_string(data: &[u8], offset: &mut usize) -> Result<String> {
-    if *offset >= data.len() {
-        return Err("Unexpected end of data while reading string".into());
-    }
-    let start = *offset;
-    while *offset < data.len() && data[*offset] != 0 {
-        *offset += 1;
-    }
-    if *offset >= data.len() {
-        return Err("Unterminated string in YM tracker data".into());
-    }
-    let string = String::from_utf8_lossy(&data[start..*offset]).to_string();
-    *offset += 1; // Skip null terminator
-    Ok(string)
-}
-
-/// YM6 File Metadata
-#[derive(Debug, Clone)]
-pub struct Ym6Info {
-    /// Song name
-    pub song_name: String,
-    /// Author name
-    pub author: String,
-    /// Song comment
-    pub comment: String,
-    /// Number of frames
-    pub frame_count: u32,
-    /// Frame rate (typically 50Hz)
-    pub frame_rate: u16,
-    /// Loop frame number
-    pub loop_frame: u32,
-    /// Master clock frequency
-    pub master_clock: u32,
-}
-
-/// Parameters for initializing playback state
-struct PlaybackStateInit {
-    frames: Vec<[u8; 16]>,
-    loop_frame: Option<usize>,
-    samples_per_frame: u32,
-    digidrums: Vec<Vec<u8>>,
-    attributes: u32,
-    is_ym2_mode: bool,
-    is_ym5_mode: bool,
-    info: Option<Ym6Info>,
-}
-
-/// YM6 File Player
+/// Generic YM6 File Player
 ///
-/// Uses hardware-accurate Ym2149 emulation to support YM6 effects (SID, Sync Buzzer, DigiDrums).
-/// These effects require hardware-specific features not available in the generic backend trait.
-pub struct Ym6Player {
-    /// PSG chip (hardware-accurate Ym2149)
-    chip: Ym2149,
+/// This player is generic over any YM2149 backend implementation, allowing flexibility
+/// in choosing between hardware-accurate emulation and experimental synthesizers.
+///
+/// Type alias [`Ym6Player`] provides the default concrete type using hardware-accurate Ym2149.
+pub struct Ym6PlayerGeneric<B: Ym2149Backend> {
+    /// PSG chip backend
+    chip: B,
     /// VBL synchronization
     vbl: VblSync,
     /// Playback state
@@ -193,11 +70,17 @@ pub struct Ym6Player {
     prev_r13: Option<u8>,
 }
 
-impl Ym6Player {
+/// Concrete YM6 player using hardware-accurate Ym2149 emulation
+///
+/// This is the default player type that provides full YM6 compatibility
+/// including special effects (SID, Sync Buzzer, DigiDrums).
+pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
+
+impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     /// Create a new YM6 player with empty song
     pub fn new() -> Self {
-        Ym6Player {
-            chip: Ym2149::new(),
+        Ym6PlayerGeneric {
+            chip: B::new(),
             vbl: VblSync::default(),
             state: PlaybackState::Stopped,
             frames: Vec::new(),
@@ -1236,16 +1119,6 @@ impl Ym6Player {
         sample
     }
 
-    /// Get the chip for direct manipulation
-    pub fn get_chip_mut(&mut self) -> &mut Ym2149 {
-        &mut self.chip
-    }
-
-    /// Get the chip (read-only)
-    pub fn get_chip(&self) -> &Ym2149 {
-        &self.chip
-    }
-
     /// Mute or unmute a channel (0=A,1=B,2=C)
     pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
         self.chip.set_channel_mute(channel, mute);
@@ -1380,20 +1253,22 @@ impl Ym6Player {
     }
 }
 
-impl Default for Ym6Player {
+impl<B: Ym2149Backend> Default for Ym6PlayerGeneric<B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// Convenience helper to create and load a player from YM data.
+///
+/// Uses the default hardware-accurate Ym2149 backend.
 pub fn load_song(data: &[u8]) -> Result<(Ym6Player, LoadSummary)> {
     let mut player = Ym6Player::new();
     let summary = player.load_data(data)?;
     Ok((player, summary))
 }
 
-impl PlaybackController for Ym6Player {
+impl<B: Ym2149Backend> PlaybackController for Ym6PlayerGeneric<B> {
     fn play(&mut self) -> Result<()> {
         if self.is_tracker_mode {
             if let Some(tracker) = self.tracker.as_mut() {
@@ -1430,6 +1305,24 @@ impl PlaybackController for Ym6Player {
 
 /// Type alias preserving the legacy `Player` name.
 pub type Player = Ym6Player;
+
+// Hardware-specific methods only available for the concrete Ym2149 backend
+impl Ym6Player {
+    /// Get mutable access to the underlying Ym2149 chip
+    ///
+    /// This allows direct manipulation of chip registers for advanced use cases.
+    /// Only available when using the hardware-accurate Ym2149 backend.
+    pub fn get_chip_mut(&mut self) -> &mut Ym2149 {
+        &mut self.chip
+    }
+
+    /// Get read-only access to the underlying Ym2149 chip
+    ///
+    /// Only available when using the hardware-accurate Ym2149 backend.
+    pub fn get_chip(&self) -> &Ym2149 {
+        &self.chip
+    }
+}
 
 #[cfg(test)]
 mod tests {

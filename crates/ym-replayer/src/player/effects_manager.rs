@@ -6,7 +6,7 @@
 //! Effects are managed separately from the core PSG emulation to maintain clean separation
 //! of concerns: the chip is pure hardware emulation, effects are format-specific playback tricks.
 
-use ym2149::Ym2149;
+use ym2149::Ym2149Backend;
 
 const DRUM_PREC: u32 = 15;
 
@@ -279,7 +279,10 @@ impl EffectsManager {
     ///
     /// This must be called BEFORE `chip.clock()` so that register changes take effect
     /// in the current sample cycle.
-    pub fn tick(&mut self, chip: &mut Ym2149) {
+    ///
+    /// Note: Hardware-specific features (Sync Buzzer, DigiDrums) will only work with
+    /// backends that implement them (like Ym2149). Other backends will ignore these effects.
+    pub fn tick<B: Ym2149Backend>(&mut self, chip: &mut B) {
         // Handle Sync Buzzer effect (timer-based envelope retriggering)
         if self.sync_buzzer_enabled {
             self.sync_buzzer_phase = self.sync_buzzer_phase.wrapping_add(self.sync_buzzer_step);
@@ -321,7 +324,7 @@ impl EffectsManager {
             if self.drum[voice].active {
                 // Inject current drum sample into chip
                 if let Some(sample) = self.drum[voice].current_sample() {
-                    chip.set_drum_sample_override(voice, Some(sample));
+                    chip.set_drum_sample_override(voice, Some(sample as f32));
                 } else {
                     chip.set_drum_sample_override(voice, None);
                 }

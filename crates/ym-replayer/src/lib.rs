@@ -31,8 +31,9 @@
 
 #![warn(missing_docs)]
 
-/// Error types for YM replayer operations
-pub use ym2149::{Result, Ym2149Error};
+// Error handling
+mod error;
+pub use error::{ReplayerError, Result};
 
 // Core modules
 pub mod compression;

@@ -1,11 +1,3 @@
-#[cfg(not(feature = "streaming"))]
-fn main() {
-    eprintln!(
-        "The ym2149 CLI requires the \"streaming\" feature. Rebuild with `--features streaming` to enable playback."
-    );
-}
-
-#[cfg(feature = "streaming")]
 mod cli {
     use std::env;
     use std::fmt;
@@ -249,7 +241,7 @@ mod cli {
     #[cfg(not(unix))]
     fn restore_terminal_mode() {}
 
-    pub fn run() -> ym2149::Result<()> {
+    pub fn run() -> ym_replayer::Result<()> {
         println!("YM2149 PSG Emulator - Real-time Streaming Playback");
         println!("===================================================\n");
 
@@ -724,7 +716,6 @@ mod cli {
     }
 }
 
-#[cfg(feature = "streaming")]
-fn main() -> ym2149::Result<()> {
+fn main() -> ym_replayer::Result<()> {
     cli::run()
 }

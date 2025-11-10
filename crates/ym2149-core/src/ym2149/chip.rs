@@ -614,43 +614,6 @@ fn build_envelope_data() -> [[[u8; 32]; 2]; 16] {
     data
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tone_step_zero_period() {
-        let step = tone_step_compute(0, 0, 2_000_000, 44_100);
-        assert_eq!(step, 0);
-    }
-
-    #[test]
-    fn test_volume_table_matches_reference() {
-        assert_eq!(VOLUME_TABLE[0], 20);
-        assert_eq!(VOLUME_TABLE[15], 10922);
-    }
-
-    #[test]
-    fn test_envelope_generation() {
-        let data = build_envelope_data();
-        assert_eq!(data[0][0][0], 15);
-        assert_eq!(data[0][0][31], 0);
-    }
-
-    #[test]
-    fn test_clock_produces_output() {
-        let mut chip = Ym2149::new();
-        chip.write_register(0, 0x1C);
-        chip.write_register(1, 0x01);
-        chip.write_register(8, 0x0F);
-        for _ in 0..10 {
-            chip.clock();
-        }
-        let sample = chip.get_sample();
-        assert!(sample.abs() > 0.0);
-    }
-}
-
 // Implement the Ym2149Backend trait for the hardware-accurate chip
 impl Ym2149Backend for Ym2149 {
     fn new() -> Self {
@@ -707,5 +670,42 @@ impl Ym2149Backend for Ym2149 {
 
     fn set_color_filter(&mut self, enabled: bool) {
         self.set_color_filter(enabled);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tone_step_zero_period() {
+        let step = tone_step_compute(0, 0, 2_000_000, 44_100);
+        assert_eq!(step, 0);
+    }
+
+    #[test]
+    fn test_volume_table_matches_reference() {
+        assert_eq!(VOLUME_TABLE[0], 20);
+        assert_eq!(VOLUME_TABLE[15], 10922);
+    }
+
+    #[test]
+    fn test_envelope_generation() {
+        let data = build_envelope_data();
+        assert_eq!(data[0][0][0], 15);
+        assert_eq!(data[0][0][31], 0);
+    }
+
+    #[test]
+    fn test_clock_produces_output() {
+        let mut chip = Ym2149::new();
+        chip.write_register(0, 0x1C);
+        chip.write_register(1, 0x01);
+        chip.write_register(8, 0x0F);
+        for _ in 0..10 {
+            chip.clock();
+        }
+        let sample = chip.get_sample();
+        assert!(sample.abs() > 0.0);
     }
 }

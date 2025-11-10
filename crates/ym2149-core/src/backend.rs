@@ -150,4 +150,38 @@ pub trait Ym2149Backend: Send {
     ///
     /// * `enabled` - true to enable filter, false to disable
     fn set_color_filter(&mut self, enabled: bool);
+
+    /// Trigger envelope restart (used by YM6 Sync Buzzer effect)
+    ///
+    /// This is a hardware-specific feature. Default implementation is a no-op.
+    /// Only Ym2149 provides full implementation.
+    fn trigger_envelope(&mut self) {
+        // Default: no-op for backends that don't support this
+    }
+
+    /// Override drum sample for a channel (used by YM6 DigiDrum effect)
+    ///
+    /// This is a hardware-specific feature. Default implementation is a no-op.
+    /// Only Ym2149 provides full implementation.
+    ///
+    /// # Arguments
+    ///
+    /// * `channel` - Channel index (0=A, 1=B, 2=C)
+    /// * `sample` - Optional sample value to inject, None to disable override
+    fn set_drum_sample_override(&mut self, _channel: usize, _sample: Option<f32>) {
+        // Default: no-op for backends that don't support this
+    }
+
+    /// Set mixer tone/noise overrides (used by YM6 DigiDrum effect)
+    ///
+    /// This is a hardware-specific feature. Default implementation is a no-op.
+    /// Only Ym2149 provides full implementation.
+    ///
+    /// # Arguments
+    ///
+    /// * `force_tone` - Per-channel flags to force tone enable
+    /// * `force_noise_mute` - Per-channel flags to force noise mute
+    fn set_mixer_overrides(&mut self, _force_tone: [bool; 3], _force_noise_mute: [bool; 3]) {
+        // Default: no-op for backends that don't support this
+    }
 }

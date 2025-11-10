@@ -9,16 +9,17 @@ use crate::playback::{
 use crate::plugin::Ym2149PluginConfig;
 use bevy::audio::{AudioPlayer, AudioSink, PlaybackSettings};
 use bevy::prelude::*;
-use bevy::tasks::{IoTaskPool, Task, block_on, poll_once};
 use parking_lot::Mutex;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 use std::sync::Arc;
 use ym_replayer::PlaybackController;
 
-const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
+// Import from sibling modules
+use super::loader::{PendingFileRead, PendingSlot, SourceLoadResult, load_track_source};
+use super::audio_helpers::channel_frequencies;
 
 #[derive(Clone, Copy)]
-pub(super) struct PlaybackRuntimeState {
+pub(in crate::plugin) struct PlaybackRuntimeState {
     time_since_last_frame: f32,
     last_state: PlaybackState,
     last_volume: f32,
@@ -38,91 +39,9 @@ impl Default for PlaybackRuntimeState {
     }
 }
 
-pub(super) struct PendingFileRead {
-    path: String,
-    task: Task<Result<Vec<u8>, String>>,
-}
-
-impl PendingFileRead {
-    fn new(path: String) -> Self {
-        let task_path = path.clone();
-        let task = IoTaskPool::get().spawn(async move {
-            std::fs::read(&task_path)
-                .map_err(|err| format!("Failed to read YM file '{task_path}': {err}"))
-        });
-        Self { path, task }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub(super) enum PendingSlot {
-    Primary,
-    Crossfade,
-}
-
-struct LoadedBytes {
-    data: Vec<u8>,
-    metadata: Option<Ym2149Metadata>,
-}
-
-enum SourceLoadResult {
-    Pending,
-    Ready(LoadedBytes),
-    Failed(String),
-}
-
 #[derive(Default)]
-pub(super) struct PlaybackScratch {
+pub(in crate::plugin) struct PlaybackScratch {
     stereo: Vec<f32>,
-}
-
-fn load_track_source(
-    entity: Entity,
-    slot: PendingSlot,
-    source: &TrackSource,
-    pending_reads: &mut HashMap<(Entity, PendingSlot), PendingFileRead>,
-    assets: &Assets<Ym2149AudioSource>,
-) -> SourceLoadResult {
-    match source {
-        TrackSource::Bytes(bytes) => SourceLoadResult::Ready(LoadedBytes {
-            data: bytes.as_ref().clone(),
-            metadata: None,
-        }),
-        TrackSource::File(path) => match pending_reads.entry((entity, slot)) {
-            Entry::Occupied(mut entry) => {
-                if entry.get().path != *path {
-                    entry.insert(PendingFileRead::new(path.clone()));
-                    return SourceLoadResult::Pending;
-                }
-
-                match block_on(poll_once(&mut entry.get_mut().task)) {
-                    Some(Ok(bytes)) => {
-                        pending_reads.remove(&(entity, slot));
-                        SourceLoadResult::Ready(LoadedBytes {
-                            data: bytes,
-                            metadata: None,
-                        })
-                    }
-                    Some(Err(err)) => {
-                        pending_reads.remove(&(entity, slot));
-                        SourceLoadResult::Failed(err)
-                    }
-                    None => SourceLoadResult::Pending,
-                }
-            }
-            Entry::Vacant(vacant) => {
-                vacant.insert(PendingFileRead::new(path.clone()));
-                SourceLoadResult::Pending
-            }
-        },
-        TrackSource::Asset(handle) => match assets.get(handle) {
-            Some(asset) => SourceLoadResult::Ready(LoadedBytes {
-                data: asset.data.clone(),
-                metadata: Some(asset.metadata.clone()),
-            }),
-            None => SourceLoadResult::Pending,
-        },
-    }
 }
 
 fn current_track_source(playback: &Ym2149Playback) -> Option<TrackSource> {
@@ -288,7 +207,7 @@ fn finalize_crossfade(
     }
 }
 
-pub(super) fn initialize_playback(
+pub(in crate::plugin) fn initialize_playback(
     mut commands: Commands,
     mut playbacks: Query<(Entity, &mut Ym2149Playback)>,
     mut audio_assets: ResMut<Assets<Ym2149AudioSource>>,
@@ -400,7 +319,7 @@ pub(super) fn initialize_playback(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn update_playback(
+pub(in crate::plugin) fn update_playback(
     mut commands: Commands,
     mut playbacks: Query<(Entity, &mut Ym2149Playback)>,
     settings: Res<Ym2149Settings>,
@@ -649,10 +568,10 @@ pub(super) fn update_playback(
                     entry.last_volume = fade_out_volume;
 
                     // Fade in the new track (crossfade entity)
-                    if let Some(cf_entity) = cf_entity_opt {
-                        if let Ok(mut cf_sink) = audio_sinks.get_mut(cf_entity) {
-                            cf_sink.set_volume(bevy::audio::Volume::Linear(fade_in_volume));
-                        }
+                    if let Some(cf_entity) = cf_entity_opt
+                        && let Ok(mut cf_sink) = audio_sinks.get_mut(cf_entity)
+                    {
+                        cf_sink.set_volume(bevy::audio::Volume::Linear(fade_in_volume));
                     }
                 }
             }
@@ -718,23 +637,6 @@ pub(super) fn update_playback(
 
     runtime_state.retain(|entity, _| alive.contains(entity));
     scratch_buffers.retain(|entity, _| alive.contains(entity));
-}
-
-fn channel_period(lo: u8, hi: u8) -> Option<u16> {
-    let period = (((hi as u16) & 0x0F) << 8) | lo as u16;
-    if period == 0 { None } else { Some(period) }
-}
-
-fn period_to_frequency(period: u16) -> f32 {
-    PSG_MASTER_CLOCK_HZ / (16.0 * period as f32)
-}
-
-fn channel_frequencies(registers: &[u8; 16]) -> [Option<f32>; 3] {
-    [
-        channel_period(registers[0], registers[1]).map(period_to_frequency),
-        channel_period(registers[2], registers[3]).map(period_to_frequency),
-        channel_period(registers[4], registers[5]).map(period_to_frequency),
-    ]
 }
 
 struct LoadResult {

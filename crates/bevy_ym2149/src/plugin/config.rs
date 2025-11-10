@@ -2,7 +2,8 @@ use bevy::prelude::Resource;
 
 /// Configuration object used to enable/disable individual subsystems of the plugin.
 ///
-/// All features are enabled by default. Modify fields directly to customize:
+/// All features except `bevy_audio_bridge` (experimental) are enabled by default.
+/// Modify fields directly to customize:
 ///
 /// ```
 /// # use bevy_ym2149::Ym2149PluginConfig;
@@ -31,7 +32,7 @@ impl Default for Ym2149PluginConfig {
             // spatial_audio: true, // Removed - use Bevy's native spatial audio
             music_state: true,
             diagnostics: true,
-            bevy_audio_bridge: true,
+            bevy_audio_bridge: false, // Experimental - enable explicitly if needed
         }
     }
 }

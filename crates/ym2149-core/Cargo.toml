@@ -34,7 +34,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["emulator", "streaming", "visualization"]
+# Default: Only the core emulator (zero non-essential dependencies)
+default = ["emulator"]
 
 # Core YM2149 emulator
 emulator = []

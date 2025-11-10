@@ -596,8 +596,8 @@ mod tests {
         assert_eq!(frames.len(), 1);
 
         // Check that registers 0-13 were loaded correctly
-        for i in 0..14 {
-            assert_eq!(frames[0][i], i as u8);
+        for (i, frame_byte) in frames[0].iter().enumerate().take(14) {
+            assert_eq!(*frame_byte, i as u8);
         }
 
         // Check that registers 14-15 are zero-padded
@@ -677,10 +677,10 @@ mod tests {
         assert_eq!(frames.len(), frame_count);
 
         // Verify frame 1 has correct values
-        for reg in 0..14 {
+        for (reg, frame_byte) in frames[1].iter().enumerate().take(14) {
             let expected = ((reg as u8) << 4) | 1;
             assert_eq!(
-                frames[1][reg], expected,
+                *frame_byte, expected,
                 "Frame 1 register {} mismatch",
                 reg
             );
@@ -713,9 +713,9 @@ mod tests {
         assert_eq!(frames.len(), 3);
 
         // Verify frame 1 has correct sequential values
-        for reg in 0..14 {
+        for (reg, frame_byte) in frames[1].iter().enumerate().take(14) {
             assert_eq!(
-                frames[1][reg],
+                *frame_byte,
                 (14 + reg) as u8,
                 "Frame 1 register {} mismatch",
                 reg

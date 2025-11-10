@@ -9,11 +9,13 @@ mod madmax_digidrums;
 mod tracker_player;
 pub mod vbl_sync;
 pub mod ym_player;
+mod ym6;
 
 pub use cycle_counter::CycleCounter;
 pub use effects_manager::EffectsManager;
 pub use vbl_sync::VblSync;
-pub use ym_player::{LoadSummary, Player, Ym6Info, Ym6Player, YmFileFormat, load_song};
+pub use ym_player::{Player, Ym6Player, load_song};
+pub use ym6::{LoadSummary, Ym6Info, YmFileFormat};
 
 use crate::Result;
 

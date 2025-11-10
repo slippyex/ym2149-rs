@@ -79,19 +79,19 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
 
     // Create a temporary file with automatic cleanup via Drop
     let mut temp_file = NamedTempFile::new().map_err(|e| {
-        crate::Ym2149Error::DecompressionError(format!("Failed to create temporary file: {}", e))
+        crate::ReplayerError::DecompressionError(format!("Failed to create temporary file: {}", e))
     })?;
 
     // Write compressed data to the temporary file
     temp_file.write_all(data).map_err(|e| {
-        crate::Ym2149Error::DecompressionError(format!(
+        crate::ReplayerError::DecompressionError(format!(
             "Failed to write compressed data to temporary file: {} bytes - {}",
             data.len(),
             e
         ))
     })?;
     temp_file.flush().map_err(|e| {
-        crate::Ym2149Error::DecompressionError(format!("Failed to flush temporary file: {}", e))
+        crate::ReplayerError::DecompressionError(format!("Failed to flush temporary file: {}", e))
     })?;
 
     // Get the path while keeping the file handle alive (prevents deletion)
@@ -99,7 +99,7 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
 
     // Parse the LHA archive from the temporary file
     let reader = delharc::parse_file(&temp_path).map_err(|e| {
-        crate::Ym2149Error::DecompressionError(format!(
+        crate::ReplayerError::DecompressionError(format!(
             "Failed to parse LHA archive from '{}': {}",
             temp_path.display(),
             e

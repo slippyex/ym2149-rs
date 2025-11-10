@@ -21,14 +21,14 @@ impl MadMaxSampleBank {
     /// Get a sample by index (used in tests)
     #[cfg(test)]
     pub fn get(&self, index: usize) -> Option<&Vec<u8>> {
-        let samples = MADMAX_SAMPLES_LAZY.get_or_init(|| parse_madmax_samples());
+        let samples = MADMAX_SAMPLES_LAZY.get_or_init(parse_madmax_samples);
         samples.get(index)
     }
 
     /// Get the number of samples (used in tests)
     #[cfg(test)]
     pub fn len(&self) -> usize {
-        let samples = MADMAX_SAMPLES_LAZY.get_or_init(|| parse_madmax_samples());
+        let samples = MADMAX_SAMPLES_LAZY.get_or_init(parse_madmax_samples);
         samples.len()
     }
 
@@ -90,7 +90,9 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::const_is_empty)]
     fn test_madmax_samples_not_empty() {
+        // MADMAX_SAMPLES is a compile-time constant, always has samples
         assert!(!MADMAX_SAMPLES.is_empty());
     }
 

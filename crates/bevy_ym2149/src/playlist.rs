@@ -422,13 +422,15 @@ mod tests {
             })
         };
 
-        let mut playback = Ym2149Playback::default();
-        playback.metrics = Some(PlaybackMetrics {
-            frame_count: 1_000,
-            samples_per_frame: 882,
-        });
-        playback.frame_position = 950;
-        playback.state = PlaybackState::Playing;
+        let playback = Ym2149Playback {
+            metrics: Some(PlaybackMetrics {
+                frame_count: 1_000,
+                samples_per_frame: 882,
+            }),
+            frame_position: 950,
+            state: PlaybackState::Playing,
+            ..Default::default()
+        };
 
         let controller = Ym2149PlaylistPlayer {
             playlist: playlist_handle,
@@ -478,13 +480,15 @@ mod tests {
             })
         };
 
-        let mut playback = Ym2149Playback::default();
-        playback.metrics = Some(PlaybackMetrics {
-            frame_count: 1_000,
-            samples_per_frame: 882,
-        });
-        playback.frame_position = 0;
-        playback.state = PlaybackState::Playing;
+        let playback = Ym2149Playback {
+            metrics: Some(PlaybackMetrics {
+                frame_count: 1_000,
+                samples_per_frame: 882,
+            }),
+            frame_position: 0,
+            state: PlaybackState::Playing,
+            ..Default::default()
+        };
 
         let controller = Ym2149PlaylistPlayer {
             playlist: playlist_handle,
@@ -528,12 +532,14 @@ mod tests {
             })
         };
 
-        let mut playback = Ym2149Playback::default();
-        playback.metrics = Some(PlaybackMetrics {
-            frame_count: 1_000,
-            samples_per_frame: 882,
-        });
-        playback.pending_playlist_index = Some(1);
+        let playback = Ym2149Playback {
+            metrics: Some(PlaybackMetrics {
+                frame_count: 1_000,
+                samples_per_frame: 882,
+            }),
+            pending_playlist_index: Some(1),
+            ..Default::default()
+        };
 
         let controller = Ym2149PlaylistPlayer {
             playlist: playlist_handle,
@@ -577,16 +583,18 @@ mod tests {
             })
         };
 
-        let mut playback = Ym2149Playback::default();
-        playback.metrics = Some(PlaybackMetrics {
-            frame_count: 1_000,
-            samples_per_frame: 882,
-        });
-        playback.pending_crossfade = Some(CrossfadeRequest {
-            source: TrackSource::Bytes(Arc::new(vec![2; 16])),
-            duration: 1.0,
-            target_index: 1,
-        });
+        let playback = Ym2149Playback {
+            metrics: Some(PlaybackMetrics {
+                frame_count: 1_000,
+                samples_per_frame: 882,
+            }),
+            pending_crossfade: Some(CrossfadeRequest {
+                source: TrackSource::Bytes(Arc::new(vec![2; 16])),
+                duration: 1.0,
+                target_index: 1,
+            }),
+            ..Default::default()
+        };
 
         let controller = Ym2149PlaylistPlayer {
             playlist: playlist_handle,

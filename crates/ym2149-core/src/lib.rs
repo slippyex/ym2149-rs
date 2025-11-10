@@ -70,24 +70,15 @@ pub mod streaming; // Audio Output & Streaming
 #[cfg(feature = "visualization")]
 pub mod visualization; // Terminal UI Helpers
 
-/// Error types for YM2149 emulator operations
+/// Error types for YM2149 chip emulator operations
+///
+/// This enum only contains errors that can occur in the core chip emulation.
+/// File parsing and decompression errors are handled by the `ym-replayer` crate.
 #[derive(thiserror::Error, Debug)]
 pub enum Ym2149Error {
-    /// Error while parsing file format
-    #[error("Parse error: {0}")]
-    ParseError(String),
-
-    /// Error writing audio file
-    #[error("Audio file write error: {0}")]
-    AudioFileError(String),
-
     /// IO error from filesystem or device
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-
-    /// Decompression error
-    #[error("Decompression error: {0}")]
-    DecompressionError(String),
 
     /// Audio device error
     #[error("Audio device error: {0}")]
