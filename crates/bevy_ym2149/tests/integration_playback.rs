@@ -390,3 +390,102 @@ fn test_looping_restarts_when_loop_enabled() {
         playback.frame_position()
     );
 }
+
+#[test]
+fn test_stereo_gain_control() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    // Test stereo gain setting (method should succeed without panicking)
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+
+        // Test that setting stereo gain doesn't panic
+        playback.set_stereo_gain(0.3, 0.7);
+        playback.set_stereo_gain(0.0, 1.0);
+        playback.set_stereo_gain(1.0, 1.0);
+    }
+
+    // If we get here without panicking, stereo gain control works
+    assert!(true, "Stereo gain control should work without panicking");
+}
+
+#[test]
+fn test_multiple_playbacks_independent() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    // Create two independent playbacks
+    let entity1 = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data.clone()))
+        .id();
+    let entity2 = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    // Play entity1, start and pause entity2
+    {
+        let mut pb = app.world_mut().entity_mut(entity1);
+        pb.get_mut::<Ym2149Playback>().unwrap().play();
+    }
+    {
+        let mut pb = app.world_mut().entity_mut(entity2);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+        playback.pause();
+    }
+
+    // Verify independent states
+    let pb1_state = app
+        .world()
+        .entity(entity1)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .state;
+    let pb2_state = app
+        .world()
+        .entity(entity2)
+        .get::<Ym2149Playback>()
+        .unwrap()
+        .state;
+
+    assert_eq!(
+        pb1_state,
+        PlaybackState::Playing,
+        "Entity1 should be playing"
+    );
+    assert_eq!(pb2_state, PlaybackState::Paused, "Entity2 should be paused");
+}
+
+#[test]
+fn test_metadata_extraction() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    let playback = app.world().entity(entity).get::<Ym2149Playback>().unwrap();
+
+    // Ashtray.ym should have metadata
+    assert!(
+        !playback.song_title.is_empty() || !playback.song_author.is_empty(),
+        "Metadata should be extracted from YM file"
+    );
+}

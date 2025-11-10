@@ -16,17 +16,16 @@
 //! # Example
 //!
 //! ```no_run
-//! # // Temporarily disabled during migration
-//! # /*
 //! use ym_replayer::{load_song, PlaybackController};
-//! use ym2149::Ym2149;
 //!
-//! let data = std::fs::read("song.ym").unwrap();
-//! let (mut player, summary) = load_song::<Ym2149>(&data).unwrap();
-//! player.play().unwrap();
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = std::fs::read("song.ym")?;
+//! let (mut player, summary) = load_song(&data)?;
+//! player.play()?;
 //!
 //! let samples = player.generate_samples(44100);
-//! # */
+//! # Ok(())
+//! # }
 //! ```
 
 #![warn(missing_docs)]

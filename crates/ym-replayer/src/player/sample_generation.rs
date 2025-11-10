@@ -258,7 +258,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
 
     /// Generate a block of samples (allocates new Vec)
     ///
-    /// For performance-critical code, prefer [`generate_samples_into`] to avoid allocations.
+    /// For performance-critical code, prefer [`Self::generate_samples_into`] to avoid allocations.
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
         let mut samples = Vec::with_capacity(count);
         for _ in 0..count {

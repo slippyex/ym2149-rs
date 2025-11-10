@@ -11,17 +11,54 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
     - name: Install Linux dependencies
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
         sudo apt-get install -y libasound2-dev libudev-dev libssl-dev libwayland-dev
-    - name: Build
-      run: cargo build --verbose --lib
-    - name: Run tests
-      run: cargo test --verbose --lib
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo index
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache target directory
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+    - name: Build workspace
+      run: cargo build --workspace --all-features --verbose
+
+    - name: Run clippy
+      run: cargo clippy --workspace --all-features -- -D warnings
+
+    - name: Run all tests
+      run: cargo test --workspace --all-features --verbose
+
+    - name: Check documentation
+      run: cargo doc --workspace --no-deps --all-features
+
+    - name: Build benchmarks (smoke test)
+      run: cargo bench --no-run -p ym2149

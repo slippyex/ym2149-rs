@@ -28,6 +28,7 @@ bitflags.workspace = true
 [dev-dependencies]
 # Testing utilities
 approx.workspace = true
+criterion = { version = "0.7.0", features = ["html_reports"] }
 
 [package.metadata.docs.rs]
 all-features = true
@@ -45,3 +46,7 @@ streaming = ["dep:rodio"]
 
 # Terminal visualization helpers
 visualization = []
+
+[[bench]]
+name = "chip"
+harness = false

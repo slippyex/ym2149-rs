@@ -164,7 +164,7 @@ pub struct Ym2149Playback {
     pub(crate) right_gain: f32,
     /// Internal YM player instance (created by plugin systems)
     ///
-    /// Uses Arc<RwLock<Ym6Player>> for shared ownership with the audio decoder.
+    /// Uses `Arc<RwLock<Ym6Player>>` for shared ownership with the audio decoder.
     /// See [`ActiveCrossfade`] documentation for rationale.
     pub(crate) player: Option<Arc<RwLock<Ym6Player>>>,
     /// Flag to trigger reloading the player on next play
