@@ -20,7 +20,9 @@
 //! - **Robustness**: Errors provide clear guidance for troubleshooting
 
 use crate::Result;
-use std::io::{Read, Write};
+use std::io::Read;
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::Write;
 
 /// Search limit for LHA signature pattern (bytes)
 ///
@@ -73,56 +75,89 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
         return Ok(data.to_vec());
     }
 
-    // Decompress using delharc with safe temporary file handling
-    // Use tempfile crate for guaranteed cleanup (even on panic) and unique naming
-    use tempfile::NamedTempFile;
+    // WASM-compatible in-memory decompression
+    #[cfg(target_arch = "wasm32")]
+    {
+        use delharc::LhaDecodeReader;
 
-    // Create a temporary file with automatic cleanup via Drop
-    let mut temp_file = NamedTempFile::new().map_err(|e| {
-        crate::ReplayerError::DecompressionError(format!("Failed to create temporary file: {}", e))
-    })?;
+        // Create LHA reader directly from byte slice (no filesystem needed)
+        let reader = LhaDecodeReader::new(data).map_err(|e| {
+            crate::ReplayerError::DecompressionError(format!(
+                "Failed to parse LHA archive from memory: {}",
+                e
+            ))
+        })?;
 
-    // Write compressed data to the temporary file
-    temp_file.write_all(data).map_err(|e| {
-        crate::ReplayerError::DecompressionError(format!(
-            "Failed to write compressed data to temporary file: {} bytes - {}",
-            data.len(),
-            e
-        ))
-    })?;
-    temp_file.flush().map_err(|e| {
-        crate::ReplayerError::DecompressionError(format!("Failed to flush temporary file: {}", e))
-    })?;
+        let mut decompressed = Vec::new();
 
-    // Get the path while keeping the file handle alive (prevents deletion)
-    let temp_path = temp_file.path().to_path_buf();
+        // Use take() to enforce hard limit and prevent decompression bombs
+        let mut limited_reader = reader.take(MAX_DECOMPRESSED_SIZE as u64);
+        limited_reader
+            .read_to_end(&mut decompressed)
+            .map_err(|e| format!("LHA decompression failed: {}", e))?;
 
-    // Parse the LHA archive from the temporary file
-    let reader = delharc::parse_file(&temp_path).map_err(|e| {
-        crate::ReplayerError::DecompressionError(format!(
-            "Failed to parse LHA archive from '{}': {}",
-            temp_path.display(),
-            e
-        ))
-    })?;
+        // Verify we didn't hit the limit (would indicate truncation/attack)
+        if decompressed.len() >= MAX_DECOMPRESSED_SIZE {
+            return Err("Decompressed data exceeded maximum safe size (100MB). \
+                The file may be corrupted or an attempted decompression bomb."
+                .into());
+        }
 
-    let mut decompressed = Vec::new();
-
-    // Use take() to enforce hard limit and prevent decompression bombs
-    let mut limited_reader = reader.take(MAX_DECOMPRESSED_SIZE as u64);
-    limited_reader
-        .read_to_end(&mut decompressed)
-        .map_err(|e| format!("LHA decompression failed: {}", e))?;
-
-    // Verify we didn't hit the limit (would indicate truncation/attack)
-    if decompressed.len() >= MAX_DECOMPRESSED_SIZE {
-        return Err("Decompressed data exceeded maximum safe size (100MB). \
-            The file may be corrupted or an attempted decompression bomb."
-            .into());
+        Ok(decompressed)
     }
 
-    // temp_file Drop runs here - automatic cleanup guaranteed even on panic
-    Ok(decompressed)
+    // Native platform: use file-based decompression
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use tempfile::NamedTempFile;
+
+        // Create a temporary file with automatic cleanup via Drop
+        let mut temp_file = NamedTempFile::new().map_err(|e| {
+            crate::ReplayerError::DecompressionError(format!("Failed to create temporary file: {}", e))
+        })?;
+
+        // Write compressed data to the temporary file
+        temp_file.write_all(data).map_err(|e| {
+            crate::ReplayerError::DecompressionError(format!(
+                "Failed to write compressed data to temporary file: {} bytes - {}",
+                data.len(),
+                e
+            ))
+        })?;
+        temp_file.flush().map_err(|e| {
+            crate::ReplayerError::DecompressionError(format!("Failed to flush temporary file: {}", e))
+        })?;
+
+        // Get the path while keeping the file handle alive (prevents deletion)
+        let temp_path = temp_file.path().to_path_buf();
+
+        // Parse the LHA archive from the temporary file
+        let reader = delharc::parse_file(&temp_path).map_err(|e| {
+            crate::ReplayerError::DecompressionError(format!(
+                "Failed to parse LHA archive from '{}': {}",
+                temp_path.display(),
+                e
+            ))
+        })?;
+
+        let mut decompressed = Vec::new();
+
+        // Use take() to enforce hard limit and prevent decompression bombs
+        let mut limited_reader = reader.take(MAX_DECOMPRESSED_SIZE as u64);
+        limited_reader
+            .read_to_end(&mut decompressed)
+            .map_err(|e| format!("LHA decompression failed: {}", e))?;
+
+        // Verify we didn't hit the limit (would indicate truncation/attack)
+        if decompressed.len() >= MAX_DECOMPRESSED_SIZE {
+            return Err("Decompressed data exceeded maximum safe size (100MB). \
+                The file may be corrupted or an attempted decompression bomb."
+                .into());
+        }
+
+        // temp_file Drop runs here - automatic cleanup guaranteed even on panic
+        Ok(decompressed)
+    }
 }
 
 /// Find the offset of LHA signature in data, if present

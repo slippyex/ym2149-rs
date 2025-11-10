@@ -9,7 +9,28 @@
 - 🧠 **Core emulator**: integer-accurate PSG with YM1-YM6 (final format) + YMT1/YMT2 tracker support
 - 🪕 **Audio workflows**: real-time streaming, WAV/MP3 export, playlist & music-state automation
 - 🕹️ **Game-ready**: Bevy plugins with spatial audio, diagnostics, visual components, and full example scenes
+- 🌐 **Browser-ready**: WebAssembly player with full LHA decompression support
 - 📦 **Monorepo cohesion**: shared workspace versioning, consistent docs, cross-crate testing (`cargo test --workspace`)
+
+## 🎵 Try it in Your Browser
+
+**[► Launch Web Player](https://markusvelten.github.io/ym2149-rs/)**
+
+Experience authentic Atari ST chiptune music directly in your browser! The WebAssembly player features:
+- ✨ Full YM2-YM6 format support with LHA decompression
+- 🎮 Play/Pause/Stop controls with progress bar
+- 🔊 Volume control and channel muting (A/B/C)
+- 📊 Real-time metadata display
+- 📦 Only 147KB WASM module
+- 🎯 Cycle-accurate YM2149 emulation
+
+<details>
+<summary>📸 Web Player Screenshot</summary>
+
+![Web Player](docs/screenshots/web-player.png)
+
+*Retro CRT-style interface with drag & drop file loading*
+</details>
 
 ## Workspace Packages
 
@@ -22,6 +43,7 @@
 | [`bevy_ym2149`](crates/bevy_ym2149) | Bevy audio plugin (playback, playlists, diagnostics, audio bridge) | [crates.io/crates/bevy_ym2149](https://crates.io/crates/bevy_ym2149) | [docs.rs/bevy_ym2149](https://docs.rs/bevy_ym2149) |
 | [`bevy_ym2149_viz`](crates/bevy_ym2149_viz) | Optional visualization systems & UI builders | [crates.io/crates/bevy_ym2149_viz](https://crates.io/crates/bevy_ym2149_viz) | [docs.rs/bevy_ym2149_viz](https://docs.rs/bevy_ym2149_viz) |
 | [`bevy_ym2149_examples`](crates/bevy_ym2149_examples) | Runnable Bevy demos (basic, advanced, crossfade, feature showcase, demoscene) | Workspace-only | [crates/bevy_ym2149_examples/README.md](crates/bevy_ym2149_examples/README.md) |
+| [`ym2149-wasm`](crates/ym2149-wasm) | WebAssembly bindings for browser playback ([web demo](https://markusvelten.github.io/ym2149-rs/)) | Workspace-only | [crates/ym2149-wasm/README.md](crates/ym2149-wasm/README.md) |
 | [`ym2149-bevy`](crates/ym2149-bevy) | Legacy re-export (shim to `bevy_ym2149`) | [crates.io/crates/ym2149-bevy](https://crates.io/crates/ym2149-bevy) | – |
 
 <img src="docs/screenshots/advanced_example.png" alt="Advanced Bevy example" width="780">
@@ -154,15 +176,36 @@ ym2149-rs/
 │   ├── ym2149-core/          # Core YM2149 chip emulator (published as `ym2149`)
 │   ├── ym-replayer/          # YM file parsing and playback
 │   ├── ym-softsynth/         # Experimental synthesizer backend
+│   ├── ym2149-wasm/          # WebAssembly bindings
 │   ├── bevy_ym2149/          # Bevy audio plugin
 │   ├── bevy_ym2149_viz/      # Visualization helpers
 │   ├── bevy_ym2149_examples/ # Runnable Bevy demos
 │   └── ym2149-bevy/          # Legacy shim
 ├── examples/                 # YM sample files
-├── docs/                     # Guides + screenshots
+├── docs/                     # Web player (GitHub Pages)
 ├── Cargo.toml                # Workspace configuration
 └── README.md                 # You are here
 ```
+
+### Deploying the Web Player
+
+The web player is automatically deployed to GitHub Pages via CI/CD:
+
+1. **Enable GitHub Pages** in your repository settings:
+   - Go to Settings → Pages
+   - Source: "GitHub Actions"
+
+2. **Push to main/master** - the workflow will:
+   - Build WASM with `wasm-pack`
+   - Copy files to `docs/`
+   - Deploy to GitHub Pages
+
+3. **Local testing**:
+   ```bash
+   cd crates/ym2149-wasm/examples
+   ./start-server.sh
+   # Open http://localhost:8000/
+   ```
 
 ## Contributing
 

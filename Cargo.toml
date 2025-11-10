@@ -8,6 +8,7 @@ members = [
     "crates/bevy_ym2149_examples",
     "crates/ym2149-bevy",
     "crates/bevy_ym2149_viz",
+    "crates/ym2149-wasm",
 ]
 resolver = "2"
 
