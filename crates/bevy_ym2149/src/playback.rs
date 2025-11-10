@@ -33,7 +33,7 @@
 
 use crate::audio_source::Ym2149AudioSource;
 use bevy::prelude::*;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::sync::Arc;
 use ym_replayer::Ym6Player;
 
@@ -87,16 +87,16 @@ pub(crate) struct CrossfadeRequest {
 
 /// Active crossfade layer being mixed alongside the primary player.
 ///
-/// Note: Uses Arc<Mutex<Ym6Player>> to enable shared ownership between the crossfade
+/// Note: Uses Arc<RwLock<Ym6Player>> to enable shared ownership between the crossfade
 /// state and the audio source decoder. This is necessary because:
 /// 1. Crossfade needs simultaneous access to both primary and secondary players
 /// 2. The audio decoder holds a reference that must outlive individual system calls
 /// 3. Bevy's audio system requires thread-safe shared access
 ///
-/// The Mutex provides interior mutability for the player's generate_samples() calls.
-/// Lock contention is minimal as locks are held only during sample generation.
+/// RwLock allows multiple concurrent readers while ensuring exclusive write access
+/// during sample generation. This reduces lock contention compared to Mutex.
 pub(crate) struct ActiveCrossfade {
-    pub player: Arc<Mutex<Ym6Player>>,
+    pub player: Arc<RwLock<Ym6Player>>,
     pub metrics: PlaybackMetrics,
     pub song_title: String,
     pub song_author: String,
@@ -164,9 +164,9 @@ pub struct Ym2149Playback {
     pub(crate) right_gain: f32,
     /// Internal YM player instance (created by plugin systems)
     ///
-    /// Uses Arc<Mutex<Ym6Player>> for shared ownership with the audio decoder.
+    /// Uses Arc<RwLock<Ym6Player>> for shared ownership with the audio decoder.
     /// See [`ActiveCrossfade`] documentation for rationale.
-    pub(crate) player: Option<Arc<Mutex<Ym6Player>>>,
+    pub(crate) player: Option<Arc<RwLock<Ym6Player>>>,
     /// Flag to trigger reloading the player on next play
     pub(crate) needs_reload: bool,
     /// Song title extracted from YM file metadata
@@ -428,18 +428,18 @@ impl Ym2149Playback {
 
     /// Clone the internal YM player handle for read-only inspection.
     ///
-    /// Returns a shared reference to the player wrapped in Arc<Mutex<>>.
+    /// Returns a shared reference to the player wrapped in Arc<RwLock<>>.
     /// This is primarily useful for debugging or advanced use cases that need
     /// direct access to the player state.
     ///
-    /// Note: The Mutex ensures thread-safe access. Lock the returned Arc to access player methods:
+    /// Note: Use read() for concurrent read access or write() for exclusive access:
     /// ```ignore
     /// if let Some(player_arc) = playback.player_handle() {
-    ///     let player = player_arc.lock();
+    ///     let player = player_arc.read();  // Concurrent reads allowed
     ///     let frame = player.get_current_frame();
     /// }
     /// ```
-    pub fn player_handle(&self) -> Option<Arc<Mutex<Ym6Player>>> {
+    pub fn player_handle(&self) -> Option<Arc<RwLock<Ym6Player>>> {
         self.player.as_ref().map(Arc::clone)
     }
 

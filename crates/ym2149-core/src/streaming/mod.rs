@@ -8,7 +8,7 @@ pub mod realtime;
 pub mod ring_buffer;
 
 pub use audio_device::AudioDevice;
-pub use realtime::RealtimePlayer;
+pub use realtime::{PlaybackStats, RealtimePlayer};
 pub use ring_buffer::RingBuffer;
 
 /// Default sample rate (44.1 kHz)

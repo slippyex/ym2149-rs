@@ -15,8 +15,8 @@
 //!
 //! # Crate feature flags
 //! - `emulator` (default): Core YM2149 cycle-accurate emulator
-//! - `streaming` (default): Real-time audio output via rodio
-//! - `visualization` (default): Terminal visualization helpers
+//! - `streaming` (optional): Real-time audio output via rodio (for CLI tools)
+//! - `visualization` (optional): Terminal visualization helpers (for CLI tools)
 //!
 //! # Backend Trait
 //! The `Ym2149Backend` trait allows alternative implementations (e.g., `ym-softsynth` crate)

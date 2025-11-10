@@ -91,7 +91,7 @@ pub fn update_detailed_channel_display(
     if let Some(playback) = playbacks.iter().next()
         && let Some(player) = playback.player_handle()
     {
-        let player_locked = player.lock();
+        let player_locked = player.read();
         let chip = player_locked.get_chip();
         let regs = chip.dump_registers();
 
@@ -165,7 +165,7 @@ pub fn update_song_progress(
     if let Some(playback) = playbacks.iter().next()
         && let Some(player) = playback.player_handle()
     {
-        let player_locked = player.lock();
+        let player_locked = player.read();
         let total_frames = player_locked.frame_count().max(1);
         let current = playback.frame_position().min(total_frames as u32) as f32;
         ratio = (current / total_frames as f32).clamp(0.0, 1.0);

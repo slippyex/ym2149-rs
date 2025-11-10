@@ -67,7 +67,7 @@ sequenceDiagram
     File->>Loader: read bytes
     Loader->>Loader: detect LHA compression
     Loader-->>Parser: decompressed bytes
-    Parser->>Parser: detect format (YM2-YM6)
+    Parser->>Parser: detect format (YM1-YM6 final, YMT1/YMT2)
     Parser->>Parser: parse frames & metadata
     Parser-->>Player: frames + LoadSummary
 
@@ -200,15 +200,57 @@ Ym2149
 
 **Usage:** Available via `ym2149::streaming::*` when `streaming` feature is enabled (used by CLI tools, not Bevy plugin).
 
-### Where is Export?
+### Audio Export
 
-**Status:** Export functionality is not currently implemented.
+**Status:** ✅ **Implemented** - Available via feature flags
 
-**Note:** Audio export (WAV/MP3) was planned but not yet implemented in v0.6.0. For now, audio output is available through:
-1. CLI streaming playback (using `ym-replayer` binary with `--features streaming`)
-2. Bevy integration (using `bevy_ym2149` plugin)
+**Location:** `ym-replayer/src/export/`
 
-**Future Consideration:** Export functionality may be added in a future release if there is demand.
+**Supported Formats:**
+- **WAV** - Uncompressed PCM audio (feature: `export-wav`)
+- **MP3** - LAME-encoded compressed audio (feature: `export-mp3`)
+
+**Features:**
+- Configurable sample rate (default: 44,100 Hz)
+- Mono/stereo output
+- Optional audio normalization to prevent clipping
+- Fade-out support with configurable duration
+- Batch export capabilities
+
+**Usage:**
+
+Enable export features in `Cargo.toml`:
+```toml
+ym-replayer = { version = "0.6", features = ["export-wav"] }
+# or
+ym-replayer = { version = "0.6", features = ["export-mp3"] }
+```
+
+Example code:
+```rust
+use ym_replayer::{load_song, export::export_to_wav_default};
+
+let data = std::fs::read("song.ym")?;
+let (mut player, info) = load_song(&data)?;
+export_to_wav_default(&mut player, info, "output.wav")?;
+```
+
+**Advanced Configuration:**
+```rust
+use ym_replayer::export::{export_to_mp3_with_config, ExportConfig};
+
+let config = ExportConfig::stereo()
+    .normalize(true)
+    .fade_out(2.0); // 2-second fade out
+
+export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
+```
+
+**Implementation Notes:**
+- WAV export uses pure Rust `hound` crate
+- MP3 export uses `mp3lame-encoder` (requires LAME library)
+- Both formats support custom `ExportConfig` for fine-grained control
+- Export is synchronous - blocks until rendering completes
 
 ---
 
@@ -217,7 +259,7 @@ Ym2149
 ### Responsibilities
 
 1. **YM File Parsing**
-   - Format detection (YM2/3/3b/4/5/6, YMT1/YMT2)
+   - Format detection (YM1/2/3/3b/4/5/6 final, YMT1/YMT2 tracker)
    - LHA decompression (automatic)
    - Frame extraction and de-interleaving
    - Metadata parsing
@@ -239,8 +281,8 @@ Ym2149
 ```
 ym-replayer/src/
 ├── parser/
-│   ├── ym.rs              # YM2-YM5 parser
-│   ├── ym6.rs             # YM6 format parser
+│   ├── ym.rs              # YM1-YM5 parser
+│   ├── ym6.rs             # YM6 (final format) parser
 │   ├── effects.rs         # Effect command decoder
 │   └── mod.rs             # FormatParser trait
 ├── compression/
@@ -248,11 +290,19 @@ ym-replayer/src/
 ├── loader/
 │   └── mod.rs             # High-level file loading API
 ├── player/
-│   ├── ym_player.rs       # Ym6Player implementation
+│   ├── ym_player.rs       # Ym6PlayerGeneric<B> implementation
 │   ├── effects_manager.rs # Effect state management
+│   ├── ym6/               # YM6 format types and helpers
+│   │   ├── types.rs       # YmFileFormat, LoadSummary, Ym6Info
+│   │   ├── helpers.rs     # Binary reading utilities
+│   │   └── mod.rs
 │   ├── vbl_sync.rs        # VBL timing helpers
 │   ├── cycle_counter.rs   # Cycle-accurate counting
 │   └── tracker_player.rs  # YMT tracker support
+├── export/                # Audio export (feature-gated)
+│   ├── wav.rs             # WAV export (feature: export-wav)
+│   ├── mp3.rs             # MP3 export (feature: export-mp3)
+│   └── mod.rs             # ExportConfig, normalize_samples, apply_fade_out
 └── lib.rs                 # Public exports
 ```
 
@@ -260,7 +310,7 @@ ym-replayer/src/
 
 ```
 initialize(ym_file):
-  ├─ detect_format() → YM2/3/4/5/6
+  ├─ detect_format() → YM1/2/3/3b/4/5/6 (final), YMT1/YMT2
   ├─ decompress_if_needed() → raw bytes
   ├─ parse_frames() → Vec<[u8; 16]>
   ├─ parse_metadata() → title, author, etc.
@@ -287,16 +337,26 @@ generate_samples(count):
           stop()
 ```
 
-### Why Not Generic Over Backend?
+### Generic Backend with Hardware-Specific Effects
 
-**Decision:** `Ym6Player` uses concrete `Ym2149` type, not generic `B: Ym2149Backend`
+**Implementation:** `Ym6Player` is implemented as a generic struct `Ym6PlayerGeneric<B: Ym2149Backend>`, allowing it to work with any backend that implements the `Ym2149Backend` trait.
 
-**Reason:** YM6 hardware effects require methods not in the trait:
-- `set_mixer_overrides()` (SID voice, Sync Buzzer)
-- `set_drum_sample_override()` (DigiDrums)
-- `trigger_envelope()` (Sync Buzzer)
+**Type Alias:** The commonly-used `Ym6Player` is a type alias for the concrete hardware-accurate implementation:
+```rust
+pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
+```
 
-These are hardware-specific features that don't make sense in a generic backend interface. SoftSynth cannot play YM6 files with effects.
+**Hardware Effects Support:** YM6 format includes special Atari ST hardware effects that require methods beyond the standard `Ym2149Backend` trait:
+- `set_mixer_overrides()` - Used by SID voice and Sync Buzzer effects
+- `set_drum_sample_override()` - Used by DigiDrum sample playback
+- `trigger_envelope()` - Used by Sync Buzzer envelope restart
+
+**Backend Compatibility:**
+- `Ym2149` backend: ✅ Full YM6 effect support (hardware-accurate)
+- `SoftSynth` backend: ⚠️ Can load YM6 files but effects are ignored (tone/noise/envelope only)
+- Custom backends: Implement trait default methods (no-ops) to compile
+
+**Design Rationale:** The trait provides default no-op implementations for hardware-specific methods, allowing generic code to compile while preserving effect functionality when using the concrete `Ym2149` type. This approach provides both flexibility (generic) and accuracy (hardware-specific features when needed).
 
 ---
 
@@ -498,6 +558,8 @@ bevy_ym2149_examples
                                             └──→ ym-softsynth (optional)
                                                         │
                                                         └──→ ym2149-core
+
+ym-replayer-cli ──→ ym-replayer  # Standalone CLI binary with streaming/export
 ```
 
 **Key Principles:**
@@ -569,8 +631,32 @@ graph LR
 - **Pull-based:** Audio thread requests samples on-demand (no ring buffer needed)
 - **Bevy-managed:** Audio device lifecycle handled by Bevy
 - **Asset integration:** YM files loaded via Bevy's asset system
-- **Shared player:** `Arc<Mutex<Ym6Player>>` allows both audio and visualization to access state
+- **Shared player:** `Arc<RwLock<Ym6Player>>` (using `parking_lot::RwLock`) allows concurrent read access for audio thread and visualization systems with reduced lock contention
 - **Lower latency:** No intermediate buffer, direct sample generation
+
+### Why RwLock Instead of Mutex?
+
+**Decision:** Use `parking_lot::RwLock<Ym6Player>` instead of `Mutex<Ym6Player>`
+
+**Rationale:**
+- **Multiple readers:** RwLock allows many concurrent readers (diagnostics, visualization, UI systems)
+- **Single writer:** Only audio decoder needs write access via `.write()` for `generate_samples()`
+- **Reduced contention:** Visualization systems can query player state without blocking audio thread
+- **Explicit intent:** `.read()` vs `.write()` makes access patterns clear in code
+
+**Usage Pattern:**
+```rust
+// Concurrent reads (visualization, diagnostics)
+let player = player_arc.read();
+let frame = player.get_current_frame();
+let title = player.info().map(|i| &i.song_name);
+
+// Exclusive write (audio generation only)
+let mut player = player_arc.write();
+let samples = player.generate_samples(882);
+```
+
+**Performance Benefit:** In crossfade scenarios with two simultaneous players plus visualization, RwLock prevents unnecessary blocking when multiple systems need read-only access.
 
 ---
 
@@ -585,6 +671,8 @@ graph LR
 | `tracker` | - | ✓ (default) | - | YMT tracker support |
 | `digidrums` | - | ✓ (default) | - | Mad Max digi-drums |
 | `softsynth` | - | ✓ (optional) | - | Experimental synthesizer backend |
+| `export-wav` | - | ✓ (optional) | - | WAV file export (uses `hound`) |
+| `export-mp3` | - | ✓ (optional) | - | MP3 file export (requires LAME) |
 
 ---
 

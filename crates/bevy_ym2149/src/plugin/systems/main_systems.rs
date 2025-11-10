@@ -9,14 +9,14 @@ use crate::playback::{
 use crate::plugin::Ym2149PluginConfig;
 use bevy::audio::{AudioPlayer, AudioSink, PlaybackSettings};
 use bevy::prelude::*;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use ym_replayer::PlaybackController;
 
 // Import from sibling modules
-use super::loader::{PendingFileRead, PendingSlot, SourceLoadResult, load_track_source};
 use super::audio_helpers::channel_frequencies;
+use super::loader::{PendingFileRead, PendingSlot, SourceLoadResult, load_track_source};
 
 #[derive(Clone, Copy)]
 pub(in crate::plugin) struct PlaybackRuntimeState {
@@ -108,7 +108,7 @@ fn process_pending_crossfade(
     }
 
     let duration = request.duration.max(0.001);
-    let player_arc = Arc::new(Mutex::new(load.player));
+    let player_arc = Arc::new(RwLock::new(load.player));
 
     // Create a separate AudioPlayer entity for the crossfade track
     // This allows both tracks to play simultaneously with independent volume control
@@ -172,7 +172,7 @@ fn finalize_crossfade(
     }
 
     if let Some(old_player) = playback.player.take() {
-        match old_player.lock().stop() {
+        match old_player.write().stop() {
             Ok(()) => {}
             Err(err) => error!("Failed to stop outgoing deck: {}", err),
         }
@@ -184,7 +184,7 @@ fn finalize_crossfade(
     playback.song_author = crossfade.song_author;
     playback.metrics = Some(crossfade.metrics);
     playback.pending_playlist_index = Some(crossfade.target_index);
-    playback.frame_position = new_player.lock().get_current_frame() as u32;
+    playback.frame_position = new_player.read().get_current_frame() as u32;
 
     // CRITICAL: Set source_bytes and needs_reload to recreate the AudioPlayer
     // The AudioPlayer's Decoder still references the old player, so we must
@@ -263,7 +263,7 @@ pub(in crate::plugin) fn initialize_playback(
                 error!("Failed to start player: {}", e);
             }
 
-            playback.player = Some(Arc::new(Mutex::new(load.player)));
+            playback.player = Some(Arc::new(RwLock::new(load.player)));
             playback.needs_reload = false;
 
             // Create a Ym2149AudioSource asset from the loaded data
@@ -347,12 +347,12 @@ pub(in crate::plugin) fn update_playback(
         };
 
         let entry = runtime_state.entry(entity).or_default();
-        let mut player = player_arc.lock();
+        let mut player = player_arc.write();
         let crossfade_arc = playback
             .crossfade
             .as_ref()
             .map(|state| state.player.clone());
-        let mut crossfade_player = crossfade_arc.as_ref().map(|arc| arc.lock());
+        let mut crossfade_player = crossfade_arc.as_ref().map(|arc| arc.write());
 
         let bridging_active = config.bevy_audio_bridge
             && bridge_targets

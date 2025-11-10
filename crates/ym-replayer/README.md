@@ -71,7 +71,9 @@ use ym_replayer::loader;
 - `effects`: Enable YM6 effect processing
 - `tracker`: Enable tracker mode support
 - `digidrums`: Enable Mad Max digi-drums
-- `streaming`: Enable real-time audio output (requires `rodio`)
+- `streaming`: Enable real-time audio output (requires `rodio`) - for CLI/standalone use; Bevy integration uses native audio
+- `export-wav`: Enable WAV file export (requires `hound`)
+- `export-mp3`: Enable MP3 file export (requires `mp3lame-encoder`)
 - `softsynth`: Enable experimental software synthesizer backend
 
 ## License

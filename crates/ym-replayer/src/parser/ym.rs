@@ -679,11 +679,7 @@ mod tests {
         // Verify frame 1 has correct values
         for (reg, frame_byte) in frames[1].iter().enumerate().take(14) {
             let expected = ((reg as u8) << 4) | 1;
-            assert_eq!(
-                *frame_byte, expected,
-                "Frame 1 register {} mismatch",
-                reg
-            );
+            assert_eq!(*frame_byte, expected, "Frame 1 register {} mismatch", reg);
         }
     }
 

@@ -6,7 +6,7 @@
 
 ## At a Glance
 
-- 🧠 **Core emulator**: integer-accurate PSG with YM2–YM6 + YMT tracker support
+- 🧠 **Core emulator**: integer-accurate PSG with YM1-YM6 (final format) + YMT1/YMT2 tracker support
 - 🪕 **Audio workflows**: real-time streaming, WAV/MP3 export, playlist & music-state automation
 - 🕹️ **Game-ready**: Bevy plugins with spatial audio, diagnostics, visual components, and full example scenes
 - 📦 **Monorepo cohesion**: shared workspace versioning, consistent docs, cross-crate testing (`cargo test --workspace`)
@@ -16,8 +16,9 @@
 | Crate | Purpose | Crates.io | Docs |
 |-------|---------|-----------|------|
 | [`ym2149`](crates/ym2149-core) | Core YM2149 chip emulator (cycle-accurate) | [crates.io/crates/ym2149](https://crates.io/crates/ym2149) | [docs.rs/ym2149](https://docs.rs/ym2149) |
-| [`ym-replayer`](crates/ym-replayer) | YM file parsing and music playback (YM2–YM6, tracker support) | [crates.io/crates/ym-replayer](https://crates.io/crates/ym-replayer) | [docs.rs/ym-replayer](https://docs.rs/ym-replayer) |
-| [`ym-softsynth`](crates/ym-softsynth) | Experimental software synthesizer backend | [crates.io/crates/ym-softsynth](https://crates.io/crates/ym-softsynth) | [docs.rs/ym-softsynth](https://docs.rs/ym-softsynth) |
+| [`ym-replayer`](crates/ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | [crates.io/crates/ym-replayer](https://crates.io/crates/ym-replayer) | [docs.rs/ym-replayer](https://docs.rs/ym-replayer) |
+| [`ym-replayer-cli`](crates/ym-replayer-cli) | Standalone CLI player with streaming and export | Workspace-only | [crates/ym-replayer-cli/README.md](crates/ym-replayer-cli/README.md) |
+| [`ym-softsynth`](crates/ym-softsynth) | Experimental software synthesizer backend (proof-of-concept) | Workspace-only | [crates/ym-softsynth/README.md](crates/ym-softsynth/README.md) |
 | [`bevy_ym2149`](crates/bevy_ym2149) | Bevy audio plugin (playback, playlists, diagnostics, audio bridge) | [crates.io/crates/bevy_ym2149](https://crates.io/crates/bevy_ym2149) | [docs.rs/bevy_ym2149](https://docs.rs/bevy_ym2149) |
 | [`bevy_ym2149_viz`](crates/bevy_ym2149_viz) | Optional visualization systems & UI builders | [crates.io/crates/bevy_ym2149_viz](https://crates.io/crates/bevy_ym2149_viz) | [docs.rs/bevy_ym2149_viz](https://docs.rs/bevy_ym2149_viz) |
 | [`bevy_ym2149_examples`](crates/bevy_ym2149_examples) | Runnable Bevy demos (basic, advanced, crossfade, feature showcase, demoscene) | Workspace-only | [crates/bevy_ym2149_examples/README.md](crates/bevy_ym2149_examples/README.md) |
@@ -40,7 +41,13 @@
 
 ```toml
 [dependencies]
-ym2149 = { version = "0.6", features = ["emulator", "streaming"] }
+# Core emulator only (minimal dependencies)
+ym2149 = "0.6"
+
+# With streaming audio output
+ym2149 = { version = "0.6", features = ["streaming"] }
+
+# YM file parsing and playback
 ym-replayer = "0.6"
 ```
 
@@ -62,13 +69,33 @@ fn main() -> anyhow::Result<()> {
 
 ```bash
 # Real-time playback with scope overlay
-cargo run -p ym-replayer --features streaming -- examples/ND-Toxygene.ym
+cargo run -p ym-replayer-cli -- examples/ND-Toxygene.ym
 
 # Interactive chip demo with audio output
 cargo run --example chip_demo -p ym2149 --features streaming
 ```
 
 <img src="docs/screenshots/cli.png" alt="CLI player" width="700">
+
+### Export to Audio Files
+
+```rust
+use ym_replayer::{load_song, export::export_to_wav_default, export::export_to_mp3_with_config, export::ExportConfig};
+
+fn main() -> anyhow::Result<()> {
+    let data = std::fs::read("song.ym")?;
+    let (mut player, info) = load_song(&data)?;
+
+    // Export to WAV (feature: export-wav)
+    export_to_wav_default(&mut player, info.clone(), "output.wav")?;
+
+    // Export to MP3 with normalization and fade-out (feature: export-mp3)
+    let config = ExportConfig::stereo().normalize(true).fade_out(2.0);
+    export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
+
+    Ok(())
+}
+```
 
 ### Add the Bevy Plugin
 
@@ -97,7 +124,7 @@ Need a reference scene? `cargo run --example advanced_example -p bevy_ym2149_exa
 - `crates/bevy_ym2149_viz/README.md` – visualization builders and systems
 - `crates/bevy_ym2149_examples/README.md` – example matrix + screenshot gallery
 - [ARCHITECTURE.md](ARCHITECTURE.md) – deeper dive into the emulator internals
-- [STREAMING_GUIDE.md](STREAMING_GUIDE.md) – low-latency streaming details
+- [crates/ym2149-core/STREAMING_GUIDE.md](crates/ym2149-core/STREAMING_GUIDE.md) – low-latency streaming details
 
 ## Testing
 
@@ -110,7 +137,7 @@ cargo test -p ym2149
 cargo test -p bevy_ym2149
 
 # Feature-specific tests
-cargo test -p ym2149 --features export-wav
+cargo test -p ym2149 --features streaming
 ```
 
 ## Development Prerequisites

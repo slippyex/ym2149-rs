@@ -150,7 +150,7 @@ See [ARCHITECTURE.md](../../ARCHITECTURE.md) for implementation details.
 
 - API reference: [docs.rs/ym2149](https://docs.rs/ym2149)
 - Emulator internals: [`ARCHITECTURE.md`](../../ARCHITECTURE.md)
-- Streaming guide: [`STREAMING_GUIDE.md`](../../STREAMING_GUIDE.md)
+- Streaming guide: [`STREAMING_GUIDE.md`](STREAMING_GUIDE.md)
 
 ## Related Crates
 

@@ -3,7 +3,7 @@
 use bevy::asset::{Asset, AssetLoader, LoadContext};
 use bevy::audio::{Decodable, Source};
 use bevy::reflect::TypePath;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,8 +15,8 @@ use crate::error::{BevyYm2149Error, Result};
 /// A loaded YM2149 audio file ready to be played
 ///
 /// This asset implements both Asset (for loading) and Decodable (for playback).
-/// The player is shared via Arc<Mutex<>> to allow both the audio thread
-/// and Bevy systems to access it.
+/// The player is shared via Arc<RwLock<>> to allow both the audio thread
+/// and Bevy systems to access it with reduced lock contention.
 #[derive(Asset, TypePath, Clone)]
 pub struct Ym2149AudioSource {
     /// The raw YM file data
@@ -24,7 +24,7 @@ pub struct Ym2149AudioSource {
     /// Cached metadata about the YM file
     pub metadata: Ym2149Metadata,
     /// Shared YM player instance for audio generation
-    player: Arc<Mutex<Ym6Player>>,
+    player: Arc<RwLock<Ym6Player>>,
     /// Sample rate for playback
     sample_rate: u32,
     /// Total number of samples in the track
@@ -49,7 +49,7 @@ pub struct Ym2149Metadata {
 impl Ym2149AudioSource {
     /// Create a new audio source from an existing player (for crossfade)
     pub(crate) fn from_player(
-        player: Arc<Mutex<Ym6Player>>,
+        player: Arc<RwLock<Ym6Player>>,
         data: Vec<u8>,
         metadata: Ym2149Metadata,
         frame_count: usize,
@@ -88,7 +88,7 @@ impl Ym2149AudioSource {
         Ok(Self {
             data,
             metadata,
-            player: Arc::new(Mutex::new(player)),
+            player: Arc::new(RwLock::new(player)),
             sample_rate,
             total_samples,
         })
@@ -105,7 +105,7 @@ impl Ym2149AudioSource {
     }
 
     /// Get a handle to the shared player for external control
-    pub fn player(&self) -> Arc<Mutex<Ym6Player>> {
+    pub fn player(&self) -> Arc<RwLock<Ym6Player>> {
         Arc::clone(&self.player)
     }
 }
@@ -180,7 +180,7 @@ fn extract_metadata_from_player(player: &Ym6Player, summary: &LoadSummary) -> Ym
 /// calling the YM player.
 pub struct Ym2149Decoder {
     /// Shared reference to the YM player
-    player: Arc<Mutex<Ym6Player>>,
+    player: Arc<RwLock<Ym6Player>>,
     /// Sample rate in Hz
     sample_rate: u32,
     /// Current sample position
@@ -195,7 +195,7 @@ pub struct Ym2149Decoder {
 
 impl Ym2149Decoder {
     /// Create a new decoder
-    fn new(player: Arc<Mutex<Ym6Player>>, sample_rate: u32, total_samples: usize) -> Self {
+    fn new(player: Arc<RwLock<Ym6Player>>, sample_rate: u32, total_samples: usize) -> Self {
         Self {
             player,
             sample_rate,
@@ -206,13 +206,19 @@ impl Ym2149Decoder {
         }
     }
 
-    /// Generate a batch of samples
+    /// Generate a batch of samples (zero-allocation reuse of internal buffer)
     fn fill_buffer(&mut self) {
         // Generate 882 samples (one VBL frame at 50Hz)
         const SAMPLES_PER_FRAME: usize = 882;
 
-        let mut player = self.player.lock();
-        self.buffer = player.generate_samples(SAMPLES_PER_FRAME);
+        // Resize buffer if needed (only allocates on first call or size change)
+        if self.buffer.len() != SAMPLES_PER_FRAME {
+            self.buffer.resize(SAMPLES_PER_FRAME, 0.0);
+        }
+
+        // Reuse existing buffer - no allocation in hot path
+        let mut player = self.player.write();
+        player.generate_samples_into(&mut self.buffer);
         self.buffer_pos = 0;
     }
 }

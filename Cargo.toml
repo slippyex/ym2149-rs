@@ -2,6 +2,7 @@
 members = [
     "crates/ym2149-core",
     "crates/ym-replayer",
+    "crates/ym-replayer-cli",
     "crates/ym-softsynth",
     "crates/bevy_ym2149",
     "crates/bevy_ym2149_examples",

@@ -1,12 +1,16 @@
 # ym-softsynth
 
-Experimental software synthesizer backend for YM2149 emulation.
+⚠️ **Workspace-only proof-of-concept** - Not published to crates.io
+
+Experimental software synthesizer backend for YM2149 emulation, demonstrating the `Ym2149Backend` trait abstraction.
 
 This crate provides a lightweight, non-cycle-accurate alternative to the hardware-accurate YM2149 emulator. It implements the same `Ym2149Backend` trait, allowing it to be used as a drop-in replacement where accuracy is less critical than performance or simplicity.
 
 ## Status
 
-**Experimental**: This backend is a work in progress and not suitable for production use. It provides basic tone generation but lacks many features of the hardware-accurate emulator.
+**Experimental / Proof-of-Concept**: This backend demonstrates trait-based abstraction but is not suitable for production use. It provides basic tone generation but lacks many features of the hardware-accurate emulator.
+
+**Not Published**: This crate is workspace-only and not available on crates.io. It serves as a reference implementation for custom backends.
 
 ## Features
 
@@ -45,7 +49,7 @@ let sample = synth.get_sample();
 
 ## When NOT to Use
 
-- Accurate YM file playback (use ym2149-core instead)
+- Accurate YM file playback (use `ym2149` crate instead - published as `ym2149`, developed in `ym2149-core`)
 - YM6 effects processing (requires hardware features)
 - Production applications requiring accuracy
 

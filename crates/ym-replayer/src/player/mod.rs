@@ -5,11 +5,16 @@
 
 pub mod cycle_counter;
 pub mod effects_manager;
+mod loader;
 mod madmax_digidrums;
+mod metadata;
+mod sample_generation;
+mod state;
+mod timing;
 mod tracker_player;
 pub mod vbl_sync;
-pub mod ym_player;
 mod ym6;
+pub mod ym_player;
 
 pub use cycle_counter::CycleCounter;
 pub use effects_manager::EffectsManager;

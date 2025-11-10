@@ -113,6 +113,7 @@ The `Ym2149Backend` trait provides a common interface for all chip implementatio
 
 ```rust
 pub trait Ym2149Backend: Send {
+    // Core methods (required)
     fn new() -> Self where Self: Sized;
     fn with_clocks(master_clock: u32, sample_rate: u32) -> Self where Self: Sized;
     fn reset(&mut self);
@@ -127,12 +128,20 @@ pub trait Ym2149Backend: Send {
     fn set_channel_mute(&mut self, channel: usize, mute: bool);
     fn is_channel_muted(&self, channel: usize) -> bool;
     fn set_color_filter(&mut self, enabled: bool);
+
+    // Hardware-specific methods (default no-ops for compatibility)
+    fn trigger_envelope(&mut self) { /* no-op */ }
+    fn set_drum_sample_override(&mut self, _channel: usize, _sample: Option<f32>) { /* no-op */ }
+    fn set_mixer_overrides(&mut self, _force_tone: [bool; 3], _force_noise_mute: [bool; 3]) { /* no-op */ }
 }
 ```
 
 **Implementations:**
-- `Ym2149` (this crate): Hardware-accurate emulation
-- `SoftSynth` (ym-softsynth crate): Experimental synthesizer
+- `Ym2149` (this crate): Hardware-accurate emulation with full YM6 effect support
+- `SoftSynth` (ym-softsynth crate): Experimental synthesizer (effects ignored via default trait methods)
+
+**Generic Player:**
+The `Ym6PlayerGeneric<B: Ym2149Backend>` in ym-replayer uses this trait, allowing any backend. The type alias `Ym6Player = Ym6PlayerGeneric<Ym2149>` provides the common hardware-accurate default.
 
 ---
 
@@ -158,7 +167,7 @@ pub fn trigger_envelope(&mut self, shape: u8)
 ```
 Immediate envelope restart, used by Sync Buzzer effect.
 
-**Note**: These methods are hardware-specific and not part of the `Ym2149Backend` trait, which is why YM6 effects require the concrete `Ym2149` type.
+**Note**: These methods are hardware-specific and provided as trait default methods (no-ops) in the `Ym2149Backend` trait. The `Ym6PlayerGeneric<B: Ym2149Backend>` player is generic over backends, but YM6 hardware effects are only available when using the concrete `Ym2149` implementation (via the `Ym6Player` type alias or explicitly as `Ym6PlayerGeneric<Ym2149>`). Alternative backends like `SoftSynth` will compile but ignore these hardware-specific features.
 
 ---
 

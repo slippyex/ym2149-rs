@@ -74,41 +74,53 @@ pub fn export_to_wav_with_config<P: AsRef<Path>>(
     // Calculate total samples needed
     let total_samples = info.total_samples();
 
-    // Generate all samples
     println!(
-        "Rendering {} frames ({:.1}s)...",
+        "Rendering {} frames ({:.1}s) to WAV...",
         info.frame_count,
         total_samples as f32 / config.sample_rate as f32
     );
-    let mut samples = player.generate_samples(total_samples);
 
-    // Apply post-processing
-    if config.normalize {
-        println!("Normalizing audio...");
-        normalize_samples(&mut samples);
-    }
+    // If we need post-processing (normalize/fade-out), collect all samples
+    if config.normalize || config.fade_out_duration > 0.0 {
+        let mut samples = player.generate_samples(total_samples);
 
-    if config.fade_out_duration > 0.0 {
-        println!("Applying {:.1}s fade out...", config.fade_out_duration);
-        apply_fade_out(&mut samples, config.fade_out_duration, config.sample_rate);
-    }
+        if config.normalize {
+            println!("Normalizing audio...");
+            normalize_samples(&mut samples);
+        }
 
-    // Convert to stereo if needed
-    let final_samples = if config.channels == 2 {
-        println!("Converting to stereo...");
-        mono_to_stereo(&samples)
+        if config.fade_out_duration > 0.0 {
+            println!("Applying {:.1}s fade out...", config.fade_out_duration);
+            apply_fade_out(&mut samples, config.fade_out_duration, config.sample_rate);
+        }
+
+        // Convert to stereo if needed
+        let final_samples = if config.channels == 2 {
+            println!("Converting to stereo...");
+            mono_to_stereo(&samples)
+        } else {
+            samples
+        };
+
+        // Write WAV file
+        println!("Writing WAV file to {}...", output_path.as_ref().display());
+        write_wav_file(
+            output_path.as_ref(),
+            &final_samples,
+            config.sample_rate,
+            config.channels,
+        )?;
     } else {
-        samples
-    };
-
-    // Write WAV file
-    println!("Writing WAV file to {}...", output_path.as_ref().display());
-    write_wav_file(
-        output_path.as_ref(),
-        &final_samples,
-        config.sample_rate,
-        config.channels,
-    )?;
+        // Streaming path: generate and write in chunks (memory-efficient)
+        println!("Writing WAV file to {}...", output_path.as_ref().display());
+        write_wav_file_streaming(
+            player,
+            output_path.as_ref(),
+            total_samples,
+            config.sample_rate,
+            config.channels,
+        )?;
+    }
 
     println!("Export complete!");
     Ok(())
@@ -142,6 +154,58 @@ fn write_wav_file(path: &Path, samples: &[f32], sample_rate: u32, channels: u16)
         writer
             .write_sample(sample_i16)
             .map_err(|e| format!("Failed to write sample: {}", e))?;
+    }
+
+    writer
+        .finalize()
+        .map_err(|e| format!("Failed to finalize WAV file: {}", e))?;
+
+    Ok(())
+}
+
+/// Write samples to WAV file using streaming (memory-efficient for large files)
+fn write_wav_file_streaming(
+    player: &mut Ym6Player,
+    path: &Path,
+    total_samples: usize,
+    sample_rate: u32,
+    channels: u16,
+) -> Result<()> {
+    let spec = hound::WavSpec {
+        channels,
+        sample_rate,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let mut writer = hound::WavWriter::create(path, spec)
+        .map_err(|e| format!("Failed to create WAV file: {}", e))?;
+
+    // Generate and write samples in chunks (zero-allocation hot path)
+    const SAMPLES_PER_CHUNK: usize = 4096;
+    let mut sample_buffer = vec![0.0f32; SAMPLES_PER_CHUNK];
+    let mut samples_written = 0;
+
+    while samples_written < total_samples {
+        let samples_to_generate = (total_samples - samples_written).min(SAMPLES_PER_CHUNK);
+        let buffer_slice = &mut sample_buffer[..samples_to_generate];
+
+        // Generate samples using zero-allocation API
+        player.generate_samples_into(buffer_slice);
+
+        // Convert f32 to i16 and write
+        for &sample in buffer_slice.iter() {
+            let sample_i16 = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+
+            // Write for each channel
+            for _ in 0..channels {
+                writer
+                    .write_sample(sample_i16)
+                    .map_err(|e| format!("Failed to write sample: {}", e))?;
+            }
+        }
+
+        samples_written += samples_to_generate;
     }
 
     writer
