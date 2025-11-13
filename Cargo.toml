@@ -4,6 +4,7 @@ members = [
     "crates/ym-replayer",
     "crates/ym-replayer-cli",
     "crates/ym-softsynth",
+    "crates/arkos-replayer",
     "crates/bevy_ym2149",
     "crates/bevy_ym2149_examples",
     "crates/ym2149-bevy",
@@ -22,6 +23,7 @@ homepage = "https://github.com/slippyex/ym2149-rs"
 
 [workspace.dependencies]
 thiserror = "1.0"
+anyhow = "1.0"
 rodio = "0.17"
 parking_lot = "0.12"
 delharc = "0.6"
@@ -29,3 +31,4 @@ tempfile = "3.8"
 serde = { version = "1.0", features = ["derive"] }
 bitflags = "2.0"
 approx = "0.5"
+base64 = "0.22"

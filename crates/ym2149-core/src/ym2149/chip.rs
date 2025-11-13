@@ -113,6 +113,7 @@ pub struct Ym2149 {
     current_sample: f32,
     cycle_counter: u32,
     trace: Option<TraceState>,
+    debug_sample_counter: u32, // DEBUG: for periodic output
 }
 
 impl Ym2149 {
@@ -158,6 +159,7 @@ impl Ym2149 {
             current_sample: 0.0,
             cycle_counter: 0,
             trace: None,
+            debug_sample_counter: 0,
         };
         chip.recompute_all_steps();
         chip.update_mixer_masks();
@@ -204,6 +206,7 @@ impl Ym2149 {
         self.last_channel_output = [0; 3];
         self.current_sample = 0.0;
         self.cycle_counter = 0;
+        self.debug_sample_counter = 0;
         self.update_mixer_masks();
         self.recompute_all_steps();
     }
@@ -357,6 +360,7 @@ impl Ym2149 {
 
         let clamped = out_value.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
         self.current_sample = (clamped as f32) * (1.0 / i16::MAX as f32);
+
         if let Some(trace) = self.trace.as_mut() {
             let _ = writeln!(
                 trace.writer,

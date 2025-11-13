@@ -11,6 +11,7 @@ mod player_factory;
 mod streaming;
 mod visualization;
 
+use arkos_replayer::ArkosPlayer;
 use std::time::Instant;
 use ym_replayer::{PlaybackController, Ym6Player};
 use ym2149::streaming::{DEFAULT_SAMPLE_RATE, StreamConfig};
@@ -95,6 +96,84 @@ impl RealtimeChip for Ym6Player {
 
     fn get_playback_position(&self) -> f32 {
         Ym6Player::get_playback_position(self)
+    }
+}
+
+// ArkosPlayer wrapper for CLI integration
+pub struct ArkosPlayerWrapper {
+    player: ArkosPlayer,
+}
+
+impl ArkosPlayerWrapper {
+    pub fn new(player: ArkosPlayer) -> Self {
+        Self { player }
+    }
+}
+
+impl PlaybackController for ArkosPlayerWrapper {
+    fn play(&mut self) -> ym_replayer::Result<()> {
+        self.player
+            .play()
+            .map_err(|e| format!("Arkos play error: {}", e).into())
+    }
+
+    fn pause(&mut self) -> ym_replayer::Result<()> {
+        self.player
+            .pause()
+            .map_err(|e| format!("Arkos pause error: {}", e).into())
+    }
+
+    fn stop(&mut self) -> ym_replayer::Result<()> {
+        self.player
+            .stop()
+            .map_err(|e| format!("Arkos stop error: {}", e).into())
+    }
+
+    fn state(&self) -> ym_replayer::PlaybackState {
+        if self.player.is_playing() {
+            ym_replayer::PlaybackState::Playing
+        } else {
+            ym_replayer::PlaybackState::Paused
+        }
+    }
+}
+
+impl RealtimeChip for ArkosPlayerWrapper {
+    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
+        self.player.generate_samples(count)
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        let samples = self.player.generate_samples(buffer.len());
+        buffer.copy_from_slice(&samples);
+    }
+
+    fn visual_snapshot(&self) -> VisualSnapshot {
+        // For Arkos, create a basic snapshot with zeros
+        // TODO: Extract actual PSG state from PsgBank
+        VisualSnapshot {
+            registers: [0u8; 16],
+            sync_buzzer: false,
+            sid_active: [false; 3],
+            drum_active: [false; 3],
+        }
+    }
+
+    fn set_color_filter(&mut self, _enabled: bool) {
+        // Not applicable for Arkos
+    }
+
+    fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {
+        // TODO: Implement channel muting in PsgBank
+    }
+
+    fn is_channel_muted(&self, _channel: usize) -> bool {
+        false
+    }
+
+    fn get_playback_position(&self) -> f32 {
+        // TODO: Calculate based on current_position / end_position
+        0.0
     }
 }
 

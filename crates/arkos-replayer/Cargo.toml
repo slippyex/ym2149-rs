@@ -1,0 +1,45 @@
+[package]
+name = "arkos-replayer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Arkos Tracker 3 (AKS) file parser and multi-PSG player for YM2149"
+readme = "README.md"
+keywords = ["ym2149", "arkos", "tracker", "chiptune", "atari"]
+categories = ["multimedia::audio", "parsing"]
+
+[dependencies]
+# Core YM2149 emulation
+ym2149 = { path = "../ym2149-core", version = "0.6", default-features = false }
+
+# XML parsing for AKS format
+quick-xml = "0.36"
+serde = { workspace = true, features = ["derive"] }
+
+# ZIP decompression for packaged AKS files
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
+# Error handling
+thiserror.workspace = true
+anyhow = { workspace = true, optional = true }
+
+# Utilities
+bitflags.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+# For tests
+anyhow.workspace = true
+ym-replayer = { path = "../ym-replayer", version = "0.6" }
+
+[features]
+default = []
+# Enable all Arkos features (effects, digidrums, etc.)
+full = ["effects", "digidrums"]
+# Enable YM6 effects support
+effects = []
+# Enable digi-drums support
+digidrums = []

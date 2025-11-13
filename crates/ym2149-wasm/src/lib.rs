@@ -31,7 +31,7 @@
 #![warn(missing_docs)]
 
 use wasm_bindgen::prelude::*;
-use ym_replayer::{load_song, PlaybackController, PlaybackState};
+use ym_replayer::{PlaybackController, PlaybackState, load_song};
 
 /// Set panic hook for better error messages in the browser console
 #[wasm_bindgen(start)]
@@ -145,7 +145,12 @@ impl Ym2149Player {
                 info.frame_rate as u32,
             )
         } else {
-            ("Unknown".to_string(), "Unknown".to_string(), String::new(), 50u32)
+            (
+                "Unknown".to_string(),
+                "Unknown".to_string(),
+                String::new(),
+                50u32,
+            )
         };
 
         console_log!("  Title: {}", title);

@@ -113,7 +113,10 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
 
         // Create a temporary file with automatic cleanup via Drop
         let mut temp_file = NamedTempFile::new().map_err(|e| {
-            crate::ReplayerError::DecompressionError(format!("Failed to create temporary file: {}", e))
+            crate::ReplayerError::DecompressionError(format!(
+                "Failed to create temporary file: {}",
+                e
+            ))
         })?;
 
         // Write compressed data to the temporary file
@@ -125,7 +128,10 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
             ))
         })?;
         temp_file.flush().map_err(|e| {
-            crate::ReplayerError::DecompressionError(format!("Failed to flush temporary file: {}", e))
+            crate::ReplayerError::DecompressionError(format!(
+                "Failed to flush temporary file: {}",
+                e
+            ))
         })?;
 
         // Get the path while keeping the file handle alive (prevents deletion)
