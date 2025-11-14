@@ -198,6 +198,8 @@ pub struct Cell {
     pub note: Note,
     /// Instrument number
     pub instrument: usize,
+    /// Whether an instrument was explicitly set on this cell
+    pub instrument_present: bool,
     /// Effects in this cell
     pub effects: Vec<Effect>,
 }

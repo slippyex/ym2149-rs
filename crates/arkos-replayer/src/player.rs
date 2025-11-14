@@ -121,7 +121,6 @@ impl ArkosPlayer {
         let sample_voices = vec![SampleVoiceMixer::default(); channel_count];
 
         let hardware_envelope_state = vec![HardwareEnvelopeState::default(); psg_bank.psg_count()];
-
         let mut player = Self {
             song,
             effect_context,
@@ -282,21 +281,29 @@ impl ArkosPlayer {
     /// Vector of f32 samples in range -1.0..1.0
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
         let mut buffer = vec![0.0f32; count];
+        self.generate_samples_into(&mut buffer);
+        buffer
+    }
 
-        if !self.is_playing {
-            return buffer;
+    /// Generate audio directly into provided buffer (avoids reallocations on hot path)
+    pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        if buffer.is_empty() {
+            return;
         }
 
-        // Process samples in chunks, updating pattern state as needed
+        buffer.fill(0.0);
+
+        if !self.is_playing {
+            return;
+        }
+
         let mut sample_pos = 0;
+        let total_samples = buffer.len();
 
-        while sample_pos < count {
-            // How many samples until next tick?
+        while sample_pos < total_samples {
             let samples_until_tick = (self.samples_per_tick - self.sample_counter).ceil() as usize;
-            let samples_to_generate = samples_until_tick.min(count - sample_pos);
+            let samples_to_generate = samples_until_tick.min(total_samples - sample_pos);
 
-            // Generate PSG samples for this chunk (mix all PSGs)
-            // First, collect samples from each PSG
             let mut psg_buffers = Vec::with_capacity(self.psg_bank.psg_count());
             for psg_idx in 0..self.psg_bank.psg_count() {
                 let samples = self
@@ -306,29 +313,24 @@ impl ArkosPlayer {
                 psg_buffers.push(samples);
             }
 
-            // Mix all PSG samples together
             for sample_idx in 0..samples_to_generate {
                 let mut mixed_sample = 0.0;
                 for psg_buffer in &psg_buffers {
                     mixed_sample += psg_buffer[sample_idx];
                 }
-                // Average to avoid clipping
                 buffer[sample_pos + sample_idx] = mixed_sample / self.psg_bank.psg_count() as f32;
             }
 
-            self.mix_active_samples(sample_pos, samples_to_generate, &mut buffer);
+            self.mix_active_samples(sample_pos, samples_to_generate, buffer);
 
             sample_pos += samples_to_generate;
             self.sample_counter += samples_to_generate as f32;
 
-            // Time for a new tick?
             if self.sample_counter >= self.samples_per_tick {
                 self.sample_counter -= self.samples_per_tick;
                 self.process_tick();
             }
         }
-
-        buffer
     }
 
     fn mix_active_samples(&mut self, start: usize, len: usize, buffer: &mut [f32]) {
@@ -376,12 +378,7 @@ impl ArkosPlayer {
             self.current_line = 0;
         }
 
-        let frames = self.build_frames(
-            subsong_index,
-            position_count,
-            is_first_tick,
-            still_within_line,
-        );
+        let frames = self.build_frames(subsong_index, position_count, is_first_tick, still_within_line);
 
         self.apply_frame_samples(&frames);
         observer(&frames);
@@ -397,31 +394,6 @@ impl ArkosPlayer {
         self.write_frames_to_psg(&frames);
 
         self.advance_song(loop_start, past_end_position);
-    }
-
-    fn resolve_cell<'a>(
-        subsong: &'a crate::format::Subsong,
-        position_idx: usize,
-        line_idx: usize,
-        channel_idx: usize,
-    ) -> (Option<&'a crate::format::Cell>, i8) {
-        let mut transposition = 0;
-        if let Some(position) = subsong.positions.get(position_idx) {
-            if let Some(value) = position.transpositions.get(channel_idx) {
-                transposition = *value;
-            }
-
-            if let Some(pattern) = subsong.patterns.get(position.pattern_index) {
-                if let Some(track_index) = pattern.track_indexes.get(channel_idx) {
-                    if let Some(track) = subsong.tracks.get(track_index) {
-                        let cell = track.cells.iter().find(|c| c.index == line_idx);
-                        return (cell, transposition);
-                    }
-                }
-            }
-        }
-
-        (None, transposition)
     }
 
     /// Get pattern height for current position (internal version)
@@ -661,6 +633,31 @@ impl ArkosPlayer {
         track.latest_value(line)
     }
 
+    fn resolve_cell<'a>(
+        subsong: &'a crate::format::Subsong,
+        position_idx: usize,
+        line_idx: usize,
+        channel_idx: usize,
+    ) -> (Option<&'a crate::format::Cell>, i8) {
+        let mut transposition = 0;
+        if let Some(position) = subsong.positions.get(position_idx) {
+            if let Some(value) = position.transpositions.get(channel_idx) {
+                transposition = *value;
+            }
+
+            if let Some(pattern) = subsong.patterns.get(position.pattern_index) {
+                if let Some(track_index) = pattern.track_indexes.get(channel_idx) {
+                    if let Some(track) = subsong.tracks.get(track_index) {
+                        let cell = track.cells.iter().find(|c| c.index == line_idx);
+                        return (cell, transposition);
+                    }
+                }
+            }
+        }
+
+        (None, transposition)
+    }
+
     fn trigger_event_sample(&mut self, instrument_index: usize) {
         let subsong = &self.song.subsongs[self.subsong_index];
         if subsong.digi_channel >= self.sample_voices.len() {
@@ -817,13 +814,12 @@ impl SampleVoiceMixer {
 
 #[cfg(test)]
 fn frames_to_registers(psg_idx: usize, frames: &[ChannelFrame], prev: &mut [u8; 16]) -> [u8; 16] {
-    const CHANNELS_PER_PSG: usize = 3;
-    let base_channel = psg_idx * CHANNELS_PER_PSG;
+    let base_channel = psg_idx * 3;
     let mut regs = *prev;
     let mut mixer: u8 = 0x3F;
     let mut noise_value: Option<u8> = None;
 
-    for offset in 0..CHANNELS_PER_PSG {
+    for offset in 0..3 {
         let channel_idx = base_channel + offset;
         if let Some(frame) = frames.get(channel_idx) {
             let output = &frame.psg;
@@ -960,6 +956,13 @@ mod tests {
             let expected = normalize_ym_registers(frame, &mut prev_expected);
             let frames = player.capture_tick_frames();
             let actual = frames_to_registers(0, &frames, &mut prev_actual);
+            if idx < 8 {
+                println!(
+                    "Frame {idx}: expected {:?} actual {:?}",
+                    &expected[..14],
+                    &actual[..14]
+                );
+            }
             if expected[..14] != actual[..14] {
                 println!(
                     "Context at position {} line {}:",
@@ -1168,8 +1171,18 @@ mod tests {
                     if !instrument.cells.is_empty() {
                         let inst_cell = &instrument.cells[0];
                         println!(
-                            "  instrument cell volume {} noise {} link {:?}",
-                            inst_cell.volume, inst_cell.noise, inst_cell.link
+                            "  instrument cell volume {} noise {} link {:?} prim_arp_note {} prim_arp_oct {} prim_pitch {} sec_arp_note {} sec_arp_oct {} sec_pitch {} forced_sw {} forced_hw {}",
+                            inst_cell.volume,
+                            inst_cell.noise,
+                            inst_cell.link,
+                            inst_cell.primary_arpeggio_note_in_octave,
+                            inst_cell.primary_arpeggio_octave,
+                            inst_cell.primary_pitch,
+                            inst_cell.secondary_arpeggio_note_in_octave,
+                            inst_cell.secondary_arpeggio_octave,
+                            inst_cell.secondary_pitch,
+                            inst_cell.primary_period,
+                            inst_cell.secondary_period
                         );
                     }
                 }
@@ -1202,6 +1215,32 @@ mod tests {
                 "Position {pos_idx}: pattern {} height {}",
                 position.pattern_index, position.height
             );
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn debug_doclands_track_cells() {
+        let aks_path = data_path(&[
+            "..",
+            "..",
+            "arkostracker3",
+            "packageFiles",
+            "songs",
+            "ArkosTracker3",
+            "Doclands - Pong Cracktro (YM).aks",
+        ]);
+        let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
+        let song = load_aks(&song_data).expect("parse Doclands AKS");
+        let subsong = &song.subsongs[0];
+        for (track_idx, track) in subsong.tracks.iter() {
+            println!("Track {track_idx}");
+            for cell in track.cells.iter().take(8) {
+                println!(
+                    "  line {:>2}: note {:>3} instrument {} effects {:?}",
+                    cell.index, cell.note, cell.instrument, cell.effects
+                );
+            }
         }
     }
 

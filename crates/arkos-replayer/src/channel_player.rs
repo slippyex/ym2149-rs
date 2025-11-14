@@ -360,7 +360,7 @@ impl ChannelPlayer {
                 self.glide.stop();
 
                 // If there's an instrument, start it
-                if cell.instrument > 0 {
+                if cell.instrument_present {
                     self.start_instrument(cell.instrument);
                 }
             }
@@ -999,6 +999,16 @@ pub(crate) struct ChannelDebugState {
     pub noise: u8,
     pub volume: u8,
     pub sound_open: bool,
+    pub base_note: Note,
+    pub track_note: Note,
+    pub pitch_from_pitch_table: i16,
+    pub track_pitch: i16,
+    pub volume_slide: u8,
+    pub use_inline_arpeggio: bool,
+    pub table_arpeggio_id: Option<usize>,
+    pub inline_arpeggio_len: usize,
+    pub arpeggio_index: usize,
+    pub pitch_table_id: Option<usize>,
 }
 
 #[cfg(test)]
@@ -1011,6 +1021,16 @@ impl ChannelPlayer {
             noise: self.noise,
             volume: self.instrument_cell_volume,
             sound_open: self.sound_open,
+            base_note: self.base_note,
+            track_note: self.track_note,
+            pitch_from_pitch_table: self.pitch_from_pitch_table,
+            track_pitch: self.pitch_slide.get(),
+            volume_slide: self.volume_slide.get(),
+            use_inline_arpeggio: self.use_inline_arpeggio,
+            table_arpeggio_id: self.table_arpeggio_id,
+            inline_arpeggio_len: self.inline_arpeggio.len(),
+            arpeggio_index: self.arpeggio_reader.current_index(),
+            pitch_table_id: self.pitch_table_id,
         }
     }
 }

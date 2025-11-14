@@ -406,6 +406,26 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         }
                         current_state = ParseState::Subsong;
                     }
+                    "speedTracks" if current_state == ParseState::Subsong => {
+                        current_state = ParseState::SpeedTracks;
+                    }
+                    "eventTracks" if current_state == ParseState::Subsong => {
+                        current_state = ParseState::EventTracks;
+                    }
+                    "speedTrack" if current_state == ParseState::SpeedTracks => {
+                        current_state = ParseState::SpeedTrack;
+                        current_speed_track = Some(SpecialTrack {
+                            index: 0,
+                            cells: Vec::new(),
+                        });
+                    }
+                    "eventTrack" if current_state == ParseState::EventTracks => {
+                        current_state = ParseState::EventTrack;
+                        current_event_track = Some(SpecialTrack {
+                            index: 0,
+                            cells: Vec::new(),
+                        });
+                    }
                     "patterns" if current_state == ParseState::Subsong => {
                         current_state = ParseState::SubsongPatterns
                     }
@@ -445,8 +465,17 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             index: 0,
                             note: 255, // No note
                             instrument: 0,
+                            instrument_present: false,
                             effects: Vec::new(),
                         });
+                    }
+                    "cell" if current_state == ParseState::SpeedTrack => {
+                        current_state = ParseState::SpeedCell;
+                        current_special_cell = Some(SpecialCell { index: 0, value: 0 });
+                    }
+                    "cell" if current_state == ParseState::EventTrack => {
+                        current_state = ParseState::EventCell;
+                        current_special_cell = Some(SpecialCell { index: 0, value: 0 });
                     }
                     "effect" if current_state == ParseState::Cell => {
                         current_state = ParseState::Effect;
@@ -921,6 +950,7 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     (ParseState::Cell, "instrument") => {
                         if let Some(ref mut c) = current_cell {
                             c.instrument = current_text.parse().unwrap_or(0);
+                            c.instrument_present = true;
                         }
                     }
 
@@ -973,34 +1003,6 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     }
                     "position" => {}
                     "positions" => {}
-                    "speedTracks" if current_state == ParseState::Subsong => {
-                        current_state = ParseState::SpeedTracks;
-                    }
-                    "eventTracks" if current_state == ParseState::Subsong => {
-                        current_state = ParseState::EventTracks;
-                    }
-                    "speedTrack" if current_state == ParseState::SpeedTracks => {
-                        current_state = ParseState::SpeedTrack;
-                        current_speed_track = Some(SpecialTrack {
-                            index: 0,
-                            cells: Vec::new(),
-                        });
-                    }
-                    "eventTrack" if current_state == ParseState::EventTracks => {
-                        current_state = ParseState::EventTrack;
-                        current_event_track = Some(SpecialTrack {
-                            index: 0,
-                            cells: Vec::new(),
-                        });
-                    }
-                    "speedCell" if current_state == ParseState::SpeedTrack => {
-                        current_state = ParseState::SpeedCell;
-                        current_special_cell = Some(SpecialCell { index: 0, value: 0 });
-                    }
-                    "eventCell" if current_state == ParseState::EventTrack => {
-                        current_state = ParseState::EventCell;
-                        current_special_cell = Some(SpecialCell { index: 0, value: 0 });
-                    }
                     "cell" | "fmInstrumentCell" if current_state == ParseState::InstrumentCell => {
                         if let (Some(cell), Some(ref mut instr)) =
                             (current_instrument_cell.take(), current_instrument.as_mut())
@@ -1084,7 +1086,7 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         }
                         current_state = ParseState::SubsongTracks;
                     }
-                    "speedCell" if current_state == ParseState::SpeedCell => {
+                    "cell" if current_state == ParseState::SpeedCell => {
                         if let (Some(cell), Some(ref mut track)) =
                             (current_special_cell.take(), current_speed_track.as_mut())
                         {
@@ -1092,7 +1094,7 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         }
                         current_state = ParseState::SpeedTrack;
                     }
-                    "eventCell" if current_state == ParseState::EventCell => {
+                    "cell" if current_state == ParseState::EventCell => {
                         if let (Some(cell), Some(ref mut track)) =
                             (current_special_cell.take(), current_event_track.as_mut())
                         {

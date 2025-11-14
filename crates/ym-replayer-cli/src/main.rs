@@ -144,8 +144,7 @@ impl RealtimeChip for ArkosPlayerWrapper {
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        let samples = self.player.generate_samples(buffer.len());
-        buffer.copy_from_slice(&samples);
+        self.player.generate_samples_into(buffer);
     }
 
     fn visual_snapshot(&self) -> VisualSnapshot {

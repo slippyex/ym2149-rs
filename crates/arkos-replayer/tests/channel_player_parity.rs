@@ -184,10 +184,21 @@ fn build_song_with_data(instruments: Vec<Instrument>, extra_arps: Vec<Arpeggio>)
         event_tracks: HashMap::new(),
     };
 
+    let mut arpeggios = vec![Arpeggio {
+        index: 0,
+        name: "Empty".into(),
+        values: vec![0],
+        speed: 0,
+        loop_start: 0,
+        end_index: 0,
+        shift: 0,
+    }];
+    arpeggios.extend(extra_arps);
+
     Arc::new(AksSong {
         metadata: arkos_replayer::format::SongMetadata::default(),
         instruments,
-        arpeggios: extra_arps,
+        arpeggios,
         pitch_tables: Vec::new(),
         subsongs: vec![subsong],
     })
@@ -319,6 +330,7 @@ fn test_cell(note: Note, instrument_index: usize) -> Cell {
         index: 0,
         note,
         instrument: instrument_index,
+        instrument_present: true,
         effects: Vec::new(),
     }
 }
@@ -338,6 +350,7 @@ fn effect_only_cell(name: &str, value: i32) -> Cell {
         index: 0,
         note: 255,
         instrument: 0,
+        instrument_present: false,
         effects: vec![Effect {
             index: 0,
             name: name.into(),
