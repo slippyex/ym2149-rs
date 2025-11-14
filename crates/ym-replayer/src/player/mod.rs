@@ -5,6 +5,7 @@
 
 pub mod cycle_counter;
 pub mod effects_manager;
+mod frame_sequencer;
 mod loader;
 mod madmax_digidrums;
 mod metadata;
@@ -18,6 +19,7 @@ pub mod ym_player;
 
 pub use cycle_counter::CycleCounter;
 pub use effects_manager::EffectsManager;
+pub use frame_sequencer::{AdvanceResult, FrameSequencer};
 pub use vbl_sync::VblSync;
 pub use ym_player::{Player, Ym6Player, load_song};
 pub use ym6::{LoadSummary, Ym6Info, YmFileFormat};

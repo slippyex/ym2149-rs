@@ -13,12 +13,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use ym_replayer::PlaybackState;
 use ym2149::streaming::VISUALIZATION_UPDATE_MS;
+use ym2149::util::{channel_period, period_to_frequency};
 use ym2149::visualization::{create_channel_status, create_volume_bar};
 
 use crate::streaming::StreamingContext;
 use crate::{RealtimeChip, VisualSnapshot};
 
-const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
 const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
@@ -40,17 +40,6 @@ fn get_envelope_shape_name(shape_val: u8) -> &'static str {
         0x0E => "SAWDN1x",
         _ => "",
     }
-}
-
-/// Extract channel period from lo/hi register bytes.
-fn channel_period(lo: u8, hi: u8) -> Option<u16> {
-    let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
-    if period == 0 { None } else { Some(period) }
-}
-
-/// Convert period to frequency in Hz.
-fn period_to_frequency(period: u16) -> f32 {
-    PSG_MASTER_CLOCK_HZ / (16.0 * period as f32)
 }
 
 /// Convert frequency to musical note label (e.g., "A4").

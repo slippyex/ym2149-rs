@@ -1,16 +1,9 @@
-pub(crate) const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
+pub(crate) use ym2149::util::channel_period as get_channel_period;
+pub(crate) use ym2149::util::period_to_frequency;
+
 pub(crate) const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
-
-pub(crate) fn get_channel_period(lo: u8, hi: u8) -> Option<u16> {
-    let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
-    if period == 0 { None } else { Some(period) }
-}
-
-pub(crate) fn period_to_frequency(period: u16) -> f32 {
-    PSG_MASTER_CLOCK_HZ / (16.0 * period as f32)
-}
 
 pub(crate) fn frequency_to_note(freq: f32) -> Option<String> {
     if !freq.is_finite() || freq <= 0.0 {

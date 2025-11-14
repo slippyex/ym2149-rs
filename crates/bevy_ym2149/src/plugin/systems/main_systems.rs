@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 // Import from sibling modules
-use super::audio_helpers::channel_frequencies;
 use super::loader::{PendingFileRead, PendingSlot, SourceLoadResult, load_track_source};
+use ym2149::util::channel_frequencies;
 
 #[derive(Clone, Copy)]
 pub(in crate::plugin) struct PlaybackRuntimeState {

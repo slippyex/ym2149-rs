@@ -71,7 +71,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         Ok(LoadSummary {
             format,
             frame_count: self.frame_count(),
-            samples_per_frame: self.samples_per_frame.max(1),
+            samples_per_frame: self.sequencer.samples_per_frame().max(1),
         })
     }
 
@@ -404,16 +404,16 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
 
         self.tracker = Some(tracker_state);
         self.is_tracker_mode = true;
-        self.frames.clear();
+        self.sequencer.clear();
         self.digidrums.clear();
-        self.current_frame = 0;
-        self.samples_in_frame = 0;
-        self.loop_point = None;
-        self.samples_per_frame = if player_rate > 0 {
+        self.sequencer.set_loop_point(None);
+        let tracker_samples_per_frame = if player_rate > 0 {
             (44_100 / u32::from(player_rate)).max(1)
         } else {
-            0
+            1
         };
+        self.sequencer
+            .set_samples_per_frame(tracker_samples_per_frame);
         self.attributes = attributes;
         self.is_ym2_mode = false;
         self.is_ym5_mode = false;
@@ -463,7 +463,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     /// player.set_samples_per_frame(735); // 44100 / 60
     /// ```
     pub fn load_frames(&mut self, frames: Vec<[u8; 16]>) {
-        let samples_per_frame = self.samples_per_frame;
+        let samples_per_frame = self.sequencer.samples_per_frame();
         let info = self.info.clone();
 
         self.initialize_playback_state(PlaybackStateInit {
@@ -495,19 +495,15 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         } = params;
 
         // Set frame data and reset playback position
-        self.frames = frames;
-        self.current_frame = 0;
-        self.samples_in_frame = 0;
+        self.sequencer.load_frames(frames);
 
         // Reset effect state
         self.sid_active = [false; 3];
         self.drum_active = [false; 3];
 
         // Set playback parameters
-        let frame_len = self.frames.len();
-        self.loop_point =
-            loop_frame.and_then(|frame| if frame < frame_len { Some(frame) } else { None });
-        self.samples_per_frame = samples_per_frame;
+        self.sequencer.set_loop_point(loop_frame);
+        self.sequencer.set_samples_per_frame(samples_per_frame);
         self.digidrums = digidrums;
         self.attributes = attributes;
         self.is_ym2_mode = is_ym2_mode;

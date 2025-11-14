@@ -1,4 +1,5 @@
 use std::f32::consts::PI;
+use ym2149::util::{channel_period, period_to_frequency};
 use ym2149::ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
 
 const SAMPLE_RATE: f32 = 44_100.0;
@@ -474,19 +475,6 @@ impl SoftSynth {
 impl Default for SoftSynth {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn channel_period(lo: u8, hi: u8) -> Option<u16> {
-    let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
-    if period == 0 { None } else { Some(period) }
-}
-
-fn period_to_frequency(period: u16) -> f32 {
-    if period == 0 {
-        0.0
-    } else {
-        2_000_000.0 / (16.0 * period as f32)
     }
 }
 

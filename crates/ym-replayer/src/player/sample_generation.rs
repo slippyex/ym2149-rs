@@ -20,12 +20,12 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             return self.generate_tracker_sample();
         }
 
-        if self.frames.is_empty() {
+        if self.sequencer.is_empty() {
             return 0.0;
         }
 
         // Load registers for current frame (once per frame)
-        if self.samples_in_frame == 0 {
+        if self.sequencer.samples_into_frame() == 0 {
             self.load_frame_registers();
         }
 
@@ -44,9 +44,13 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
 
     /// Load and apply register values for the current frame
     pub(in crate::player) fn load_frame_registers(&mut self) {
-        let frame_to_load = self.current_frame;
+        let frame_to_load = self.sequencer.current_frame();
         // Clone the frame data to avoid borrow checker issues
-        let regs = self.frames[frame_to_load];
+        let regs = self
+            .sequencer
+            .frame_at(frame_to_load)
+            .copied()
+            .unwrap_or([0u8; 16]);
 
         if self.is_ym2_mode {
             self.load_ym2_frame(&regs);

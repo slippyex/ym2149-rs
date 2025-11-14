@@ -3,7 +3,7 @@
 //! This module handles frame position tracking, loop point management,
 //! and state transitions during YM file playback.
 
-use super::{PlaybackController, PlaybackState, ym_player::Ym6PlayerGeneric};
+use super::{AdvanceResult, PlaybackController, PlaybackState, ym_player::Ym6PlayerGeneric};
 use crate::Result;
 use ym2149::Ym2149Backend;
 
@@ -33,13 +33,13 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
                     info.loop_frame = 0;
                 }
             }
-        } else if frame < self.frames.len() {
-            self.loop_point = Some(frame);
+        } else if frame < self.sequencer.frame_count() {
+            self.sequencer.set_loop_point(Some(frame));
             if let Some(info) = self.info.as_mut() {
                 info.loop_frame = frame as u32;
             }
         } else {
-            self.loop_point = None;
+            self.sequencer.set_loop_point(None);
             if let Some(info) = self.info.as_mut() {
                 info.loop_frame = 0;
             }
@@ -51,13 +51,13 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         if let Some(tracker) = &self.tracker {
             tracker.total_frames
         } else {
-            self.frames.len()
+            self.sequencer.frame_count()
         }
     }
 
     #[allow(missing_docs)]
     pub fn samples_per_frame_value(&self) -> u32 {
-        self.samples_per_frame
+        self.sequencer.samples_per_frame()
     }
 
     #[allow(missing_docs)]
@@ -71,27 +71,17 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
                 }
             })
         } else {
-            self.loop_point
+            self.sequencer.loop_point()
         }
     }
 
     /// Advance frame counter and handle looping
     pub(in crate::player) fn advance_frame(&mut self) {
-        self.samples_in_frame += 1;
-
-        if self.samples_in_frame >= self.samples_per_frame {
-            self.samples_in_frame = 0;
-
-            // Handle looping
-            if self.current_frame + 1 >= self.frames.len() {
-                if let Some(loop_start) = self.loop_point {
-                    self.current_frame = loop_start;
-                } else {
-                    self.state = PlaybackState::Stopped;
-                }
-            } else {
-                self.current_frame += 1;
+        match self.sequencer.advance_sample() {
+            AdvanceResult::Completed => {
+                self.state = PlaybackState::Stopped;
             }
+            _ => {}
         }
     }
 
@@ -106,7 +96,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
                     .min(tracker.total_frames.saturating_sub(1))
             }
         } else {
-            self.current_frame
+            self.sequencer.current_frame()
         }
     }
 
@@ -123,10 +113,10 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             } else {
                 0.0
             }
-        } else if self.frames.is_empty() {
+        } else if self.sequencer.is_empty() {
             0.0
         } else {
-            (self.current_frame as f32) / (self.frames.len() as f32)
+            (self.sequencer.current_frame() as f32) / (self.sequencer.frame_count() as f32)
         }
     }
 }
@@ -139,7 +129,7 @@ impl<B: Ym2149Backend> PlaybackController for Ym6PlayerGeneric<B> {
                 tracker.current_frame = tracker.current_frame.min(tracker.total_frames);
             }
             self.state = PlaybackState::Playing;
-        } else if !self.frames.is_empty() {
+        } else if !self.sequencer.is_empty() {
             self.state = PlaybackState::Playing;
         }
         Ok(())
@@ -152,8 +142,7 @@ impl<B: Ym2149Backend> PlaybackController for Ym6PlayerGeneric<B> {
 
     fn stop(&mut self) -> Result<()> {
         self.state = PlaybackState::Stopped;
-        self.current_frame = 0;
-        self.samples_in_frame = 0;
+        self.sequencer.reset_position();
         self.vbl.reset();
         if let Some(tracker) = self.tracker.as_mut() {
             tracker.reset();

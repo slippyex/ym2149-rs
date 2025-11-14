@@ -62,7 +62,8 @@
 // Domain modules (feature-gated for modular use)
 pub mod backend; // Backend trait abstraction
 pub mod mfp;
-pub mod ym2149; // YM2149 PSG Emulation (core) // MFP Timer Effects (helpers)
+pub mod util;
+pub mod ym2149; // YM2149 PSG Emulation (core) // MFP Timer Effects (helpers) // Shared helper utilities
 
 #[cfg(feature = "streaming")]
 pub mod streaming; // Audio Output & Streaming

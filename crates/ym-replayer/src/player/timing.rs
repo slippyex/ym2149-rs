@@ -32,7 +32,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
                 samples
             ).into());
         }
-        self.samples_per_frame = samples;
+        self.sequencer.set_samples_per_frame(samples);
         // Reconfigure VBL with new timing
         self.vbl.reset();
         Ok(())
@@ -52,7 +52,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             return tracker.total_frames as f32 / f32::from(tracker.player_rate);
         }
 
-        if self.frames.is_empty() {
+        if self.sequencer.is_empty() {
             return 0.0;
         }
 
@@ -62,7 +62,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             .map(|info| info.frame_rate as u32)
             .unwrap_or(50);
 
-        let total_frames = self.frames.len() as u32;
+        let total_frames = self.sequencer.frame_count() as u32;
         total_frames as f32 / frame_rate as f32
     }
 

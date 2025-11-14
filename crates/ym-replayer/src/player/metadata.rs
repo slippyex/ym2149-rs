@@ -24,7 +24,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         if self.is_tracker_mode {
             None
         } else {
-            Some(self.frames.clone())
+            Some(self.sequencer.frames().to_vec())
         }
     }
 
@@ -39,8 +39,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     /// Returns tuple of (sync_buzzer_active, sid_active_per_voice, drum_active_per_voice)
     pub fn get_active_effects(&self) -> (bool, [bool; 3], [bool; 3]) {
         // Check if sync buzzer is active by looking for effect in current frame
-        let sync_buzzer_active = if self.current_frame < self.frames.len() {
-            let regs = &self.frames[self.current_frame];
+        let sync_buzzer_active = if let Some(regs) = self.sequencer.current_frame_regs() {
             let cmds = self.fx_decoder.decode_effects(regs);
             cmds.iter()
                 .any(|cmd| matches!(cmd, EffectCommand::SyncBuzzerStart { .. }))

@@ -1,6 +1,5 @@
 //! Bevy systems for YM2149 playback - split into logical modules
 
-pub(super) mod audio_helpers;
 pub(super) mod loader;
 
 // Main systems module - re-export all public functions

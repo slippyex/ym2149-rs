@@ -3,6 +3,7 @@
 //! Plays back YM2-YM6 format chiptune files with proper VBL synchronization.
 
 use super::effects_manager::EffectsManager;
+use super::frame_sequencer::FrameSequencer;
 use super::tracker_player::TrackerState;
 use super::ym6::{LoadSummary, Ym6Info};
 use super::{PlaybackState, VblSync};
@@ -23,16 +24,8 @@ pub struct Ym6PlayerGeneric<B: Ym2149Backend> {
     pub(in crate::player) vbl: VblSync,
     /// Playback state
     pub(in crate::player) state: PlaybackState,
-    /// Register frames (each frame contains 16 bytes of registers)
-    pub(in crate::player) frames: Vec<[u8; 16]>,
-    /// Current frame index
-    pub(in crate::player) current_frame: usize,
-    /// Samples generated so far in current frame
-    pub(in crate::player) samples_in_frame: u32,
-    /// Samples per frame (calculated from frame rate)
-    pub(in crate::player) samples_per_frame: u32,
-    /// Loop frame for looping playback (None = no loop)
-    pub(in crate::player) loop_point: Option<usize>,
+    /// Frame sequencer handling register frames and timing
+    pub(in crate::player) sequencer: FrameSequencer,
     /// Song metadata
     pub(in crate::player) info: Option<Ym6Info>,
     /// Digidrum sample bank (raw bytes from file)
@@ -75,11 +68,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             chip: B::new(),
             vbl: VblSync::default(),
             state: PlaybackState::Stopped,
-            frames: Vec::new(),
-            current_frame: 0,
-            samples_in_frame: 0,
-            samples_per_frame: 882, // Default for 44.1kHz at 50Hz
-            loop_point: None,
+            sequencer: FrameSequencer::new(),
             info: None,
             digidrums: Vec::new(),
             attributes: 0,
