@@ -4,9 +4,10 @@
 //! including frame register loading, effect application, and sample generation.
 
 use super::PlaybackState;
+use super::format_profile::FormatMode;
 use super::madmax_digidrums::MADMAX_SAMPLE_RATE_BASE;
 use super::ym_player::Ym6PlayerGeneric;
-use crate::parser::effects::{EffectCommand, decode_effects_ym5};
+use crate::parser::effects::EffectCommand;
 use ym2149::Ym2149Backend;
 
 impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
@@ -46,13 +47,15 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     pub(in crate::player) fn load_frame_registers(&mut self) {
         let frame_to_load = self.sequencer.current_frame();
         // Clone the frame data to avoid borrow checker issues
-        let regs = self
+        let mut regs = self
             .sequencer
             .frame_at(frame_to_load)
             .copied()
             .unwrap_or([0u8; 16]);
 
-        if self.is_ym2_mode {
+        self.format_profile.preprocess_frame(&mut regs);
+
+        if matches!(self.format_profile.mode(), FormatMode::Ym2) {
             self.load_ym2_frame(&regs);
         } else {
             self.load_ymx_frame(&regs);
@@ -64,13 +67,11 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         // Reset effect state that is not used in YM2 playback
         self.effects.sync_buzzer_stop();
         for voice in 0..3 {
-            if self.sid_active[voice] {
+            if self.effects.is_sid_active(voice) {
                 self.effects.sid_stop(voice);
-                self.sid_active[voice] = false;
             }
-            if voice != 2 && self.drum_active[voice] {
+            if voice != 2 && self.effects.is_drum_active(voice) {
                 self.effects.digidrum_stop(voice);
-                self.drum_active[voice] = false;
             }
         }
 
@@ -97,18 +98,13 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
                 if timer > 0 {
                     let freq = (MADMAX_SAMPLE_RATE_BASE / 4) / timer;
                     if freq > 0 {
-                        self.effects.digidrum_start(2, sample, freq);
-                        self.drum_active[2] = true;
-                        self.active_drum_index[2] = Some(sample_idx as u8);
-                        self.active_drum_freq[2] = freq;
+                        self.effects
+                            .digidrum_start(2, Some(sample_idx as u8), freq, sample);
                     }
                 }
             }
-        } else if self.drum_active[2] {
+        } else if self.effects.is_drum_active(2) {
             self.effects.digidrum_stop(2);
-            self.drum_active[2] = false;
-            self.active_drum_index[2] = None;
-            self.active_drum_freq[2] = 0;
         }
     }
 
@@ -127,21 +123,10 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         }
 
         // Decode effects based on format
-        let cmds = self.decode_frame_effects(regs);
+        let cmds = self.format_profile.decode_effects(regs);
 
         // Apply effect commands
         self.apply_effect_intents(&cmds, regs);
-    }
-
-    /// Decode effect commands from frame registers
-    pub(in crate::player) fn decode_frame_effects(&self, regs: &[u8; 16]) -> Vec<EffectCommand> {
-        if self.is_ym5_mode {
-            decode_effects_ym5(regs)
-        } else if self.is_ym6_mode {
-            self.fx_decoder.decode_effects(regs).to_vec()
-        } else {
-            Vec::new()
-        }
     }
 
     /// Apply decoded effect commands to the effects manager
@@ -229,33 +214,27 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             // Handle DigiDrum
             if let Some((drum_idx, freq)) = drum_intent[voice] {
                 if let Some(sample) = self.digidrums.get(drum_idx as usize) {
-                    let should_restart = !self.drum_active[voice]
-                        || self.active_drum_index[voice] != Some(drum_idx)
-                        || self.active_drum_freq[voice] != freq;
+                    let should_restart = self
+                        .effects
+                        .drum_signature(voice)
+                        .map(|(idx, f)| idx != drum_idx || f != freq)
+                        .unwrap_or(true);
                     if should_restart {
-                        self.effects.digidrum_start(voice, sample.clone(), freq);
-                        self.drum_active[voice] = true;
-                        self.active_drum_index[voice] = Some(drum_idx);
-                        self.active_drum_freq[voice] = freq;
+                        self.effects
+                            .digidrum_start(voice, Some(drum_idx), freq, sample.clone());
                     }
                 }
-            } else if self.drum_active[voice] {
+            } else if self.effects.is_drum_active(voice) {
                 self.effects.digidrum_stop(voice);
-                self.drum_active[voice] = false;
-                self.active_drum_index[voice] = None;
-                self.active_drum_freq[voice] = 0;
             }
 
             // Handle SID
             if let Some((freq, volume)) = sid_sin_intent[voice] {
                 self.effects.sid_sin_start(voice, freq, volume);
-                self.sid_active[voice] = true;
             } else if let Some((freq, volume)) = sid_intent[voice] {
                 self.effects.sid_start(voice, freq, volume);
-                self.sid_active[voice] = true;
-            } else if self.sid_active[voice] {
+            } else if self.effects.is_sid_active(voice) {
                 self.effects.sid_stop(voice);
-                self.sid_active[voice] = false;
             }
         }
     }

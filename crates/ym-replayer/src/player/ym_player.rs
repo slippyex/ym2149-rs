@@ -2,13 +2,13 @@
 //!
 //! Plays back YM2-YM6 format chiptune files with proper VBL synchronization.
 
-use super::effects_manager::EffectsManager;
+use super::effects_pipeline::EffectsPipeline;
+use super::format_profile::{FormatMode, FormatProfile, create_profile};
 use super::frame_sequencer::FrameSequencer;
 use super::tracker_player::TrackerState;
 use super::ym6::{LoadSummary, Ym6Info};
 use super::{PlaybackState, VblSync};
 use crate::Result;
-use crate::parser::effects::Ym6EffectDecoder;
 use ym2149::{Ym2149, Ym2149Backend};
 
 /// Generic YM6 File Player
@@ -32,19 +32,10 @@ pub struct Ym6PlayerGeneric<B: Ym2149Backend> {
     pub(in crate::player) digidrums: Vec<Vec<u8>>,
     /// YM6 attributes bitfield (A_* flags)
     pub(in crate::player) attributes: u32,
-    /// Effect decoder for YM6 frames
-    pub(in crate::player) fx_decoder: Ym6EffectDecoder,
-    pub(in crate::player) is_ym2_mode: bool,
-    pub(in crate::player) is_ym5_mode: bool,
-    pub(in crate::player) is_ym6_mode: bool,
-    /// Per-voice SID active flags
-    pub(in crate::player) sid_active: [bool; 3],
-    /// Per-voice DigiDrum active flags
-    pub(in crate::player) drum_active: [bool; 3],
-    pub(in crate::player) active_drum_index: [Option<u8>; 3],
-    pub(in crate::player) active_drum_freq: [u32; 3],
+    /// Format-specific behavior adapter
+    pub(in crate::player) format_profile: Box<dyn FormatProfile>,
     /// Effects manager for YM6 special effects
-    pub(in crate::player) effects: EffectsManager,
+    pub(in crate::player) effects: EffectsPipeline,
     /// Tracker playback state (for YMT1/YMT2 formats)
     pub(in crate::player) tracker: Option<TrackerState>,
     /// Indicates if current song uses tracker mixing path
@@ -72,15 +63,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             info: None,
             digidrums: Vec::new(),
             attributes: 0,
-            fx_decoder: Ym6EffectDecoder::new(),
-            is_ym2_mode: false,
-            is_ym5_mode: false,
-            is_ym6_mode: false,
-            sid_active: [false; 3],
-            drum_active: [false; 3],
-            active_drum_index: [None; 3],
-            active_drum_freq: [0; 3],
-            effects: EffectsManager::new(44_100),
+            format_profile: create_profile(FormatMode::Basic),
+            effects: EffectsPipeline::new(44_100),
             tracker: None,
             is_tracker_mode: false,
             first_frame_pre_loaded: false,

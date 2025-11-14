@@ -225,7 +225,7 @@ pub(in crate::plugin) fn initialize_playback(
                 PendingSlot::Primary,
                 &source,
                 &mut pending_reads,
-                &audio_assets,
+                audio_assets.as_ref(),
             ) {
                 SourceLoadResult::Pending => continue,
                 SourceLoadResult::Failed(err) => {
@@ -301,7 +301,7 @@ pub(in crate::plugin) fn initialize_playback(
 
         process_pending_crossfade(
             &mut commands,
-            &mut audio_assets,
+            audio_assets.as_mut(),
             entity,
             &mut playback,
             &mut pending_reads,

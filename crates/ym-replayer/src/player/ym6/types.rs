@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use super::super::format_profile::FormatMode;
+
 /// Supported YM file formats handled by the loader.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum YmFileFormat {
@@ -84,7 +86,6 @@ pub(in crate::player) struct PlaybackStateInit {
     pub samples_per_frame: u32,
     pub digidrums: Vec<Vec<u8>>,
     pub attributes: u32,
-    pub is_ym2_mode: bool,
-    pub is_ym5_mode: bool,
+    pub format_mode: FormatMode,
     pub info: Option<Ym6Info>,
 }

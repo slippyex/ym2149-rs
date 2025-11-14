@@ -3,7 +3,7 @@
 //! This module handles loading of all YM file formats (YM2-YM6, YMT1/YMT2),
 //! format detection, decompression, and initialization of playback state.
 
-use super::effects_manager::EffectsManager;
+use super::format_profile::{FormatMode, create_profile};
 use super::madmax_digidrums::MADMAX_SAMPLES;
 use super::tracker_player::{
     TrackerFormat, TrackerLine, TrackerSample, TrackerState, deinterleave_tracker_bytes,
@@ -12,9 +12,7 @@ use super::ym_player::Ym6PlayerGeneric;
 use super::ym6::{LoadSummary, PlaybackStateInit, Ym6Info, YmFileFormat};
 use super::ym6::{read_be_u16, read_be_u32, read_c_string};
 use crate::parser::FormatParser;
-use crate::parser::{
-    ATTR_LOOP_MODE, ATTR_STREAM_INTERLEAVED, Ym6Parser, YmParser, effects::Ym6EffectDecoder,
-};
+use crate::parser::{ATTR_LOOP_MODE, ATTR_STREAM_INTERLEAVED, Ym6Parser, YmParser};
 use crate::{Result, compression};
 use ym2149::Ym2149Backend;
 
@@ -99,11 +97,9 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             samples_per_frame,
             digidrums,
             attributes: header.attributes,
-            is_ym2_mode: false,
-            is_ym5_mode: false,
+            format_mode: FormatMode::Ym6,
             info: Some(info),
         });
-        self.is_ym6_mode = true;
 
         Ok(())
     }
@@ -135,8 +131,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             samples_per_frame,
             digidrums,
             attributes: header.attributes,
-            is_ym2_mode: false,
-            is_ym5_mode: true,
+            format_mode: FormatMode::Ym5,
             info: Some(info),
         });
 
@@ -170,11 +165,9 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             samples_per_frame,
             digidrums: Vec::new(),
             attributes: 0,
-            is_ym2_mode: false,
-            is_ym5_mode: false,
+            format_mode: FormatMode::Basic,
             info: Some(info),
         });
-        self.is_ym6_mode = false;
 
         Ok(())
     }
@@ -219,11 +212,9 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             samples_per_frame: self.calculate_samples_per_frame(50),
             digidrums: Vec::new(),
             attributes: 0,
-            is_ym2_mode: false,
-            is_ym5_mode: false,
+            format_mode: FormatMode::Basic,
             info: Some(info),
         });
-        self.is_ym6_mode = false;
 
         Ok(())
     }
@@ -275,8 +266,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             samples_per_frame: self.calculate_samples_per_frame(50),
             digidrums,
             attributes: 0,
-            is_ym2_mode: true,
-            is_ym5_mode: false,
+            format_mode: FormatMode::Ym2,
             info: Some(info),
         });
 
@@ -405,6 +395,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         self.tracker = Some(tracker_state);
         self.is_tracker_mode = true;
         self.sequencer.clear();
+        self.format_profile = create_profile(FormatMode::Basic);
         self.digidrums.clear();
         self.sequencer.set_loop_point(None);
         let tracker_samples_per_frame = if player_rate > 0 {
@@ -415,14 +406,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         self.sequencer
             .set_samples_per_frame(tracker_samples_per_frame);
         self.attributes = attributes;
-        self.is_ym2_mode = false;
-        self.is_ym5_mode = false;
-        self.sid_active = [false; 3];
-        self.drum_active = [false; 3];
-        self.active_drum_index = [None; 3];
-        self.active_drum_freq = [0; 3];
-        self.fx_decoder = Ym6EffectDecoder::new();
-        self.effects = EffectsManager::new(44_100);
+        self.effects.reset();
+        self.effects.set_sample_rate(44_100);
 
         let info = Ym6Info {
             song_name,
@@ -472,8 +457,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             samples_per_frame,
             digidrums: Vec::new(),
             attributes: 0,
-            is_ym2_mode: false,
-            is_ym5_mode: false,
+            format_mode: FormatMode::Basic,
             info,
         });
     }
@@ -489,25 +473,22 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             samples_per_frame,
             digidrums,
             attributes,
-            is_ym2_mode,
-            is_ym5_mode,
+            format_mode,
             info,
         } = params;
 
         // Set frame data and reset playback position
         self.sequencer.load_frames(frames);
+        self.format_profile = create_profile(format_mode);
 
         // Reset effect state
-        self.sid_active = [false; 3];
-        self.drum_active = [false; 3];
+        self.effects.reset();
 
         // Set playback parameters
         self.sequencer.set_loop_point(loop_frame);
         self.sequencer.set_samples_per_frame(samples_per_frame);
         self.digidrums = digidrums;
         self.attributes = attributes;
-        self.is_ym2_mode = is_ym2_mode;
-        self.is_ym5_mode = is_ym5_mode;
 
         // Set metadata
         self.info = info;
@@ -518,11 +499,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         // Enable ST-style color filter for authentic tone
         self.chip.set_color_filter(true);
 
-        // Reset effect decoder to clear any previous state
-        self.fx_decoder = Ym6EffectDecoder::new();
-
         // Reset effects manager with correct sample rate (44.1kHz)
-        self.effects = EffectsManager::new(44_100);
+        self.effects.set_sample_rate(44_100);
 
         // Reset first frame pre-load flag
         self.first_frame_pre_loaded = false;

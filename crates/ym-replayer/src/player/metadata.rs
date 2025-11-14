@@ -4,7 +4,6 @@
 
 use super::ym_player::Ym6PlayerGeneric;
 use super::ym6::Ym6Info;
-use crate::parser::effects::EffectCommand;
 use ym2149::Ym2149Backend;
 
 impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
@@ -38,16 +37,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     ///
     /// Returns tuple of (sync_buzzer_active, sid_active_per_voice, drum_active_per_voice)
     pub fn get_active_effects(&self) -> (bool, [bool; 3], [bool; 3]) {
-        // Check if sync buzzer is active by looking for effect in current frame
-        let sync_buzzer_active = if let Some(regs) = self.sequencer.current_frame_regs() {
-            let cmds = self.fx_decoder.decode_effects(regs);
-            cmds.iter()
-                .any(|cmd| matches!(cmd, EffectCommand::SyncBuzzerStart { .. }))
-        } else {
-            false
-        };
-
-        (sync_buzzer_active, self.sid_active, self.drum_active)
+        self.effects.effect_flags()
     }
 
     /// Format playback information as human-readable string

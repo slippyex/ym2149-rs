@@ -5,6 +5,9 @@
 
 pub mod cycle_counter;
 pub mod effects_manager;
+/// High-level wrapper around [`EffectsManager`] that tracks active effect state.
+pub mod effects_pipeline;
+pub mod format_profile;
 mod frame_sequencer;
 mod loader;
 mod madmax_digidrums;
@@ -19,6 +22,8 @@ pub mod ym_player;
 
 pub use cycle_counter::CycleCounter;
 pub use effects_manager::EffectsManager;
+pub use effects_pipeline::EffectsPipeline;
+pub use format_profile::{FormatMode, FormatProfile, create_profile};
 pub use frame_sequencer::{AdvanceResult, FrameSequencer};
 pub use vbl_sync::VblSync;
 pub use ym_player::{Player, Ym6Player, load_song};
