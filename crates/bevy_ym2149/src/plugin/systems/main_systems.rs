@@ -7,12 +7,12 @@ use crate::playback::{
     Ym2149Playback, Ym2149Settings,
 };
 use crate::plugin::Ym2149PluginConfig;
+use crate::song_player::{YmSongPlayer, load_song_from_bytes};
 use bevy::audio::{AudioPlayer, AudioSink, PlaybackSettings};
 use bevy::prelude::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use ym_replayer::PlaybackController;
 
 // Import from sibling modules
 use super::audio_helpers::channel_frequencies;
@@ -112,20 +112,13 @@ fn process_pending_crossfade(
 
     // Create a separate AudioPlayer entity for the crossfade track
     // This allows both tracks to play simultaneously with independent volume control
-    let crossfade_metadata = loaded.metadata.unwrap_or(Ym2149Metadata {
-        title: load.title.clone(),
-        author: load.author.clone(),
-        comment: "".to_string(),
-        frame_count: load.metrics.frame_count,
-        duration_seconds: load.metrics.duration_seconds(),
-    });
+    let crossfade_metadata = loaded.metadata.unwrap_or(load.metadata.clone());
 
     let crossfade_audio_source = Ym2149AudioSource::from_player(
         player_arc.clone(),
         data_for_crossfade_source,
         crossfade_metadata,
-        load.metrics.frame_count,
-        load.metrics.samples_per_frame as usize,
+        load.metrics,
     );
     let crossfade_handle = audio_assets.add(crossfade_audio_source);
 
@@ -141,8 +134,8 @@ fn process_pending_crossfade(
     playback.crossfade = Some(ActiveCrossfade {
         player: player_arc,
         metrics: load.metrics,
-        song_title: load.title,
-        song_author: load.author,
+        song_title: load.metadata.title.clone(),
+        song_author: load.metadata.author.clone(),
         elapsed: 0.0,
         duration,
         target_index: request.target_index,
@@ -253,8 +246,8 @@ pub(in crate::plugin) fn initialize_playback(
                 }
             };
 
-            playback.song_title = load.title;
-            playback.song_author = load.author;
+            playback.song_title = load.metadata.title.clone();
+            playback.song_author = load.metadata.author.clone();
             playback.metrics = Some(load.metrics);
 
             if playback.state == PlaybackState::Playing
@@ -492,7 +485,10 @@ pub(in crate::plugin) fn update_playback(
 
             for _ in 0..samples_per_frame {
                 let sample = player.generate_sample();
-                let (mut ch_a, mut ch_b, mut ch_c) = player.get_chip().get_channel_outputs();
+                let (mut ch_a, mut ch_b, mut ch_c) = player
+                    .chip()
+                    .map(|chip| chip.get_channel_outputs())
+                    .unwrap_or((0.0, 0.0, 0.0));
 
                 if playback.volume != 1.0 {
                     ch_a *= playback.volume;
@@ -533,16 +529,18 @@ pub(in crate::plugin) fn update_playback(
             // We don't manually push samples anymore
 
             if config.channel_events {
-                let registers = player.get_chip().dump_registers();
-                let frequencies = channel_frequencies(&registers);
-                let inv_len = 1.0 / samples_per_frame.max(1) as f32;
-                for channel in 0..3 {
-                    snapshot_events.write(ChannelSnapshot {
-                        entity,
-                        channel,
-                        amplitude: (channel_energy[channel] * inv_len).clamp(0.0, 1.0),
-                        frequency: frequencies[channel],
-                    });
+                if let Some(chip) = player.chip() {
+                    let registers = chip.dump_registers();
+                    let frequencies = channel_frequencies(&registers);
+                    let inv_len = 1.0 / samples_per_frame.max(1) as f32;
+                    for channel in 0..3 {
+                        snapshot_events.write(ChannelSnapshot {
+                            entity,
+                            channel,
+                            amplitude: (channel_energy[channel] * inv_len).clamp(0.0, 1.0),
+                            frequency: frequencies[channel],
+                        });
+                    }
                 }
             }
 
@@ -640,32 +638,24 @@ pub(in crate::plugin) fn update_playback(
 }
 
 struct LoadResult {
-    player: ym_replayer::Ym6Player,
+    player: YmSongPlayer,
     metrics: PlaybackMetrics,
-    title: String,
-    author: String,
+    metadata: Ym2149Metadata,
 }
 
 fn load_player_from_bytes(
     data: Vec<u8>,
-    metadata: Option<&Ym2149Metadata>,
+    override_metadata: Option<&Ym2149Metadata>,
 ) -> Result<LoadResult, String> {
-    let (player, summary) =
-        ym_replayer::load_song(&data).map_err(|e| format!("Failed to load song: {}", e))?;
-    let metrics = PlaybackMetrics::from(&summary);
-
-    let (title, author) = if let Some(meta) = metadata {
-        (meta.title.clone(), meta.author.clone())
-    } else if let Some(info) = player.info() {
-        (info.song_name.clone(), info.author.clone())
-    } else {
-        (String::new(), String::new())
-    };
-
+    let (player, metrics, mut metadata) = load_song_from_bytes(&data)?;
+    if let Some(meta) = override_metadata {
+        metadata.title = meta.title.clone();
+        metadata.author = meta.author.clone();
+        metadata.comment = meta.comment.clone();
+    }
     Ok(LoadResult {
         player,
         metrics,
-        title,
-        author,
+        metadata,
     })
 }

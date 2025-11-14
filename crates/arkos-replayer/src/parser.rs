@@ -5,11 +5,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::effects::EffectType;
 use crate::error::{ArkosError, Result};
 use crate::format::*;
+use crate::psg::split_note;
 use base64::{Engine as _, engine::general_purpose};
 use quick_xml::Reader;
 use quick_xml::events::Event;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FormatVersion {
+    Legacy,
+    Modern,
+}
 
 /// Load an AKS file from bytes
 ///
@@ -70,6 +78,7 @@ enum ParseState {
     InstrumentCell,
     Arpeggios,
     Arpeggio,
+    LegacyArpeggioCell,
     PitchTables,
     PitchTable,
     Subsongs,
@@ -78,6 +87,7 @@ enum ParseState {
     SubsongPsg,
     SubsongPatterns,
     Pattern,
+    PatternCell,
     PatternTrackIndexes,
     PatternSpeedTrackIndex,
     PatternEventTrackIndex,
@@ -91,6 +101,12 @@ enum ParseState {
     Track,
     Cell,
     Effect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EffectContainer {
+    Modern,
+    Legacy,
 }
 
 #[derive(Debug, Clone)]
@@ -191,7 +207,8 @@ fn parse_positions_block<R: std::io::BufRead>(
                 }
             }
             Event::Text(e) => {
-                if let (Some(field), Some(pos)) = (current_field.as_deref(), current_position.as_mut())
+                if let (Some(field), Some(pos)) =
+                    (current_field.as_deref(), current_position.as_mut())
                 {
                     let text = e.unescape()?.to_string();
                     match field {
@@ -222,7 +239,7 @@ fn parse_positions_block<R: std::io::BufRead>(
             Event::Eof => {
                 return Err(ArkosError::InvalidFormat(
                     "Unexpected EOF while parsing positions".to_string(),
-                ))
+                ));
             }
             _ => {}
         }
@@ -257,14 +274,13 @@ fn skip_block<R: std::io::BufRead>(
                 return Err(ArkosError::InvalidFormat(format!(
                     "Unexpected EOF while skipping {} block",
                     tag
-                )))
+                )));
             }
             _ => {}
         }
     }
     Ok(())
 }
-
 
 /// Load a plain XML AKS file (Format 3.0)
 fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
@@ -276,6 +292,8 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
     let mut arpeggios = Vec::new();
     let mut pitch_tables = Vec::new();
     let mut subsongs = Vec::new();
+    let mut format_version = FormatVersion::Modern;
+    let mut legacy_defaults_inserted = false;
 
     let mut current_state = ParseState::Root;
     let mut current_text = String::new();
@@ -285,17 +303,26 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
     let mut current_instrument_cell: Option<InstrumentCell> = None;
     let mut current_sample_builder: Option<SampleInstrumentBuilder> = None;
     let mut current_arpeggio: Option<Arpeggio> = None;
+    let mut legacy_arpeggio_note: i32 = 0;
+    let mut legacy_arpeggio_octave: i32 = 0;
     let mut current_pitch_table: Option<PitchTable> = None;
     let mut current_subsong: Option<Subsong> = None;
     let mut current_psg: Option<PsgConfig> = None;
     let mut current_pattern: Option<Pattern> = None;
     let mut current_pattern_track_indexes: Vec<usize> = Vec::new();
+    let mut current_pattern_transpositions: Vec<i8> = Vec::new();
+    let mut current_pattern_cell_track_number: Option<usize> = None;
+    let mut current_pattern_cell_transposition: i8 = 0;
+    let mut current_pattern_height: usize = 64;
     let mut current_track: Option<Track> = None;
     let mut current_cell: Option<Cell> = None;
     let mut current_effect: Option<Effect> = None;
+    let mut current_effect_container: Option<EffectContainer> = None;
     let mut current_speed_track: Option<SpecialTrack> = None;
     let mut current_event_track: Option<SpecialTrack> = None;
     let mut current_special_cell: Option<SpecialCell> = None;
+    let mut legacy_arpeggio_map: HashMap<usize, usize> = HashMap::new();
+    let mut legacy_pitch_map: HashMap<usize, usize> = HashMap::new();
 
     let mut buf = Vec::new();
 
@@ -332,7 +359,11 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     "autoSpread" if current_state == ParseState::Instrument => {
                         current_state = ParseState::InstrumentAutoSpread;
                     }
-                    "cell" | "fmInstrumentCell" if current_state == ParseState::InstrumentCells => {
+                    "cell" | "fmInstrumentCell"
+                        if current_state == ParseState::InstrumentCells
+                            || (current_state == ParseState::Instrument
+                                && format_version == FormatVersion::Legacy) =>
+                    {
                         current_state = ParseState::InstrumentCell;
                         current_instrument_cell = Some(InstrumentCell {
                             volume: 0,
@@ -363,7 +394,36 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             shift: 0,
                         });
                     }
+                    "arpeggio" if current_state == ParseState::Arpeggios => {
+                        current_state = ParseState::Arpeggio;
+                        current_arpeggio = Some(Arpeggio {
+                            index: 0,
+                            name: String::new(),
+                            values: Vec::new(),
+                            speed: 0,
+                            loop_start: 0,
+                            end_index: 0,
+                            shift: 0,
+                        });
+                    }
+                    "arpeggioCell" if current_state == ParseState::Arpeggio => {
+                        current_state = ParseState::LegacyArpeggioCell;
+                        legacy_arpeggio_note = 0;
+                        legacy_arpeggio_octave = 0;
+                    }
                     "expression" if current_state == ParseState::PitchTables => {
+                        current_state = ParseState::PitchTable;
+                        current_pitch_table = Some(PitchTable {
+                            index: 0,
+                            name: String::new(),
+                            values: Vec::new(),
+                            speed: 0,
+                            loop_start: 0,
+                            end_index: 0,
+                            shift: 0,
+                        });
+                    }
+                    "pitch" if current_state == ParseState::PitchTables => {
                         current_state = ParseState::PitchTable;
                         current_pitch_table = Some(PitchTable {
                             index: 0,
@@ -399,6 +459,10 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         current_state = ParseState::SubsongPsgs
                     }
                     "psg" if current_state == ParseState::SubsongPsgs => {
+                        current_state = ParseState::SubsongPsg;
+                        current_psg = Some(PsgConfig::default());
+                    }
+                    "psgMetadata" if current_state == ParseState::Subsong => {
                         current_state = ParseState::SubsongPsg;
                         current_psg = Some(PsgConfig::default());
                     }
@@ -443,6 +507,13 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             color_argb: 0,
                         });
                         current_pattern_track_indexes.clear();
+                        current_pattern_transpositions.clear();
+                        current_pattern_height = 64;
+                    }
+                    "patternCell" if current_state == ParseState::Pattern => {
+                        current_state = ParseState::PatternCell;
+                        current_pattern_cell_track_number = None;
+                        current_pattern_cell_transposition = 0;
                     }
                     "trackIndexes" if current_state == ParseState::Pattern => {
                         current_state = ParseState::PatternTrackIndexes
@@ -473,16 +544,21 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             effects: Vec::new(),
                         });
                     }
-                    "cell" if current_state == ParseState::SpeedTrack => {
+                    "cell" | "speedCell" if current_state == ParseState::SpeedTrack => {
                         current_state = ParseState::SpeedCell;
                         current_special_cell = Some(SpecialCell { index: 0, value: 0 });
                     }
-                    "cell" if current_state == ParseState::EventTrack => {
+                    "cell" | "eventCell" if current_state == ParseState::EventTrack => {
                         current_state = ParseState::EventCell;
                         current_special_cell = Some(SpecialCell { index: 0, value: 0 });
                     }
-                    "effect" if current_state == ParseState::Cell => {
+                    "effect" | "effectAndValue" if current_state == ParseState::Cell => {
                         current_state = ParseState::Effect;
+                        current_effect_container = Some(if name == "effectAndValue" {
+                            EffectContainer::Legacy
+                        } else {
+                            EffectContainer::Modern
+                        });
                         current_effect = Some(Effect {
                             index: 0,
                             name: String::new(),
@@ -506,6 +582,35 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                 // Handle text content based on current element
                 match (current_state.clone(), name.as_str()) {
                     // Metadata
+                    (ParseState::Root, "formatVersion") => {
+                        let trimmed = current_text.trim();
+                        format_version = if trimmed.starts_with('1') {
+                            FormatVersion::Legacy
+                        } else {
+                            FormatVersion::Modern
+                        };
+                        if format_version == FormatVersion::Legacy && !legacy_defaults_inserted {
+                            arpeggios.push(Arpeggio {
+                                index: 0,
+                                name: String::new(),
+                                values: vec![0],
+                                speed: 0,
+                                loop_start: 0,
+                                end_index: 0,
+                                shift: 0,
+                            });
+                            pitch_tables.push(PitchTable {
+                                index: 0,
+                                name: String::new(),
+                                values: vec![0],
+                                speed: 0,
+                                loop_start: 0,
+                                end_index: 0,
+                                shift: 0,
+                            });
+                            legacy_defaults_inserted = true;
+                        }
+                    }
                     (ParseState::Root, "title") => metadata.title = current_text.clone(),
                     (ParseState::Root, "author") => metadata.author = current_text.clone(),
                     (ParseState::Root, "composer") => metadata.composer = current_text.clone(),
@@ -657,7 +762,8 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             cell.noise = current_text.parse().unwrap_or(0);
                         }
                     }
-                    (ParseState::InstrumentCell, "primaryPeriod") => {
+                    (ParseState::InstrumentCell, "primaryPeriod")
+                    | (ParseState::InstrumentCell, "softwarePeriod") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.primary_period = current_text.parse().unwrap_or(0);
                         }
@@ -668,12 +774,21 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                                 current_text.parse().unwrap_or(0);
                         }
                     }
+                    (ParseState::InstrumentCell, "softwareArpeggio") => {
+                        if let Some(ref mut cell) = current_instrument_cell {
+                            let value = current_text.parse().unwrap_or(0);
+                            let (note_in_octave, octave) = split_note(value);
+                            cell.primary_arpeggio_note_in_octave = note_in_octave as u8;
+                            cell.primary_arpeggio_octave = octave as i8;
+                        }
+                    }
                     (ParseState::InstrumentCell, "primaryArpeggioOctave") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.primary_arpeggio_octave = current_text.parse().unwrap_or(0);
                         }
                     }
-                    (ParseState::InstrumentCell, "primaryPitch") => {
+                    (ParseState::InstrumentCell, "primaryPitch")
+                    | (ParseState::InstrumentCell, "softwarePitch") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.primary_pitch = current_text.parse().unwrap_or(0);
                         }
@@ -681,12 +796,20 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     (ParseState::InstrumentCell, "link") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.link = match current_text.as_str() {
-                                "noSoftwareNoHardware" => ChannelLink::NoSoftwareNoHardware,
-                                "softwareOnly" => ChannelLink::SoftwareOnly,
-                                "hardwareOnly" => ChannelLink::HardwareOnly,
-                                "softwareAndHardware" => ChannelLink::SoftwareAndHardware,
-                                "softwareToHardware" => ChannelLink::SoftwareToHardware,
-                                "hardwareToSoftware" => ChannelLink::HardwareToSoftware,
+                                "noSoftwareNoHardware" | "noSoftNoHard" => {
+                                    ChannelLink::NoSoftwareNoHardware
+                                }
+                                "softwareOnly" | "softOnly" => ChannelLink::SoftwareOnly,
+                                "hardwareOnly" | "hardOnly" => ChannelLink::HardwareOnly,
+                                "softwareAndHardware" | "softAndHard" => {
+                                    ChannelLink::SoftwareAndHardware
+                                }
+                                "softwareToHardware" | "softToHard" => {
+                                    ChannelLink::SoftwareToHardware
+                                }
+                                "hardwareToSoftware" | "hardToSoft" => {
+                                    ChannelLink::HardwareToSoftware
+                                }
                                 _ => ChannelLink::NoSoftwareNoHardware,
                             };
                         }
@@ -696,12 +819,14 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             cell.ratio = current_text.parse().unwrap_or(4);
                         }
                     }
-                    (ParseState::InstrumentCell, "hardwareEnvelope") => {
+                    (ParseState::InstrumentCell, "hardwareEnvelope")
+                    | (ParseState::InstrumentCell, "hardwareCurve") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.hardware_envelope = current_text.parse().unwrap_or(8);
                         }
                     }
-                    (ParseState::InstrumentCell, "secondaryPeriod") => {
+                    (ParseState::InstrumentCell, "secondaryPeriod")
+                    | (ParseState::InstrumentCell, "hardwarePeriod") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.secondary_period = current_text.parse().unwrap_or(0);
                         }
@@ -712,12 +837,21 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                                 current_text.parse().unwrap_or(0);
                         }
                     }
+                    (ParseState::InstrumentCell, "hardwareArpeggio") => {
+                        if let Some(ref mut cell) = current_instrument_cell {
+                            let value = current_text.parse().unwrap_or(0);
+                            let (note_in_octave, octave) = split_note(value);
+                            cell.secondary_arpeggio_note_in_octave = note_in_octave as u8;
+                            cell.secondary_arpeggio_octave = octave as i8;
+                        }
+                    }
                     (ParseState::InstrumentCell, "secondaryArpeggioOctave") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.secondary_arpeggio_octave = current_text.parse().unwrap_or(0);
                         }
                     }
-                    (ParseState::InstrumentCell, "secondaryPitch") => {
+                    (ParseState::InstrumentCell, "secondaryPitch")
+                    | (ParseState::InstrumentCell, "hardwarePitch") => {
                         if let Some(ref mut cell) = current_instrument_cell {
                             cell.secondary_pitch = current_text.parse().unwrap_or(0);
                         }
@@ -765,6 +899,12 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             arp.values.push(value);
                         }
                     }
+                    (ParseState::LegacyArpeggioCell, "note") => {
+                        legacy_arpeggio_note = current_text.parse().unwrap_or(0);
+                    }
+                    (ParseState::LegacyArpeggioCell, "octave") => {
+                        legacy_arpeggio_octave = current_text.parse().unwrap_or(0);
+                    }
 
                     // Pitch table fields
                     (ParseState::PitchTable, "index") => {
@@ -809,6 +949,9 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         let track_index = current_text.parse().unwrap_or(0);
                         current_pattern_track_indexes.push(track_index);
                     }
+                    (ParseState::Pattern, "height") => {
+                        current_pattern_height = current_text.parse().unwrap_or(64);
+                    }
                     (ParseState::PatternSpeedTrackIndex, "trackIndex") => {
                         if let Some(ref mut pat) = current_pattern {
                             pat.speed_track_index = current_text.parse().unwrap_or(0);
@@ -828,6 +971,14 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         if let Some(ref mut pat) = current_pattern {
                             pat.event_track_index = current_text.parse().unwrap_or(0);
                         }
+                    }
+                    (ParseState::PatternCell, "trackNumber")
+                    | (ParseState::PatternCell, "trackIndex") => {
+                        current_pattern_cell_track_number = Some(current_text.parse().unwrap_or(0));
+                    }
+                    (ParseState::PatternCell, "transposition") => {
+                        current_pattern_cell_transposition =
+                            current_text.parse::<i32>().unwrap_or(0) as i8;
                     }
                     (ParseState::Pattern, "colorArgb") => {
                         if let Some(ref mut pat) = current_pattern {
@@ -876,17 +1027,19 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             s.initial_speed = current_text.parse().unwrap_or(6);
                         }
                     }
-                    (ParseState::Subsong, "endPosition") => {
+                    (ParseState::Subsong, "endPosition") | (ParseState::Subsong, "endIndex") => {
                         if let Some(ref mut s) = current_subsong {
                             s.end_position = current_text.parse().unwrap_or(0);
                         }
                     }
-                    (ParseState::Subsong, "loopStartPosition") => {
+                    (ParseState::Subsong, "loopStartPosition")
+                    | (ParseState::Subsong, "loopStartIndex") => {
                         if let Some(ref mut s) = current_subsong {
                             s.loop_start_position = current_text.parse().unwrap_or(0);
                         }
                     }
-                    (ParseState::Subsong, "replayFrequencyHz") => {
+                    (ParseState::Subsong, "replayFrequencyHz")
+                    | (ParseState::Subsong, "replayFrequency") => {
                         if let Some(ref mut s) = current_subsong {
                             s.replay_frequency_hz = current_text.parse().unwrap_or(50.0);
                         }
@@ -907,17 +1060,20 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             };
                         }
                     }
-                    (ParseState::SubsongPsg, "frequencyHz") => {
+                    (ParseState::SubsongPsg, "frequencyHz")
+                    | (ParseState::SubsongPsg, "psgFrequency") => {
                         if let Some(ref mut psg) = current_psg {
                             psg.psg_frequency = current_text.parse().unwrap_or(2_000_000);
                         }
                     }
-                    (ParseState::SubsongPsg, "referenceFrequencyHz") => {
+                    (ParseState::SubsongPsg, "referenceFrequencyHz")
+                    | (ParseState::SubsongPsg, "referenceFrequency") => {
                         if let Some(ref mut psg) = current_psg {
                             psg.reference_frequency = current_text.parse().unwrap_or(440.0);
                         }
                     }
-                    (ParseState::SubsongPsg, "samplePlayerFrequencyHz") => {
+                    (ParseState::SubsongPsg, "samplePlayerFrequencyHz")
+                    | (ParseState::SubsongPsg, "samplePlayerFrequency") => {
                         if let Some(ref mut psg) = current_psg {
                             psg.sample_player_frequency = current_text.parse().unwrap_or(11025);
                         }
@@ -937,7 +1093,7 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     }
 
                     // Track fields
-                    (ParseState::Track, "index") => {
+                    (ParseState::Track, "index") | (ParseState::Track, "number") => {
                         if let Some(ref mut t) = current_track {
                             t.index = current_text.parse().unwrap_or(0);
                         }
@@ -956,8 +1112,21 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     }
                     (ParseState::Cell, "instrument") => {
                         if let Some(ref mut c) = current_cell {
-                            c.instrument = current_text.parse().unwrap_or(0);
-                            c.instrument_present = true;
+                            let parsed = current_text.parse::<i32>().unwrap_or(-1);
+                            if format_version == FormatVersion::Legacy {
+                                if parsed <= 0 {
+                                    c.instrument = usize::MAX;
+                                    c.instrument_present = true;
+                                } else {
+                                    c.instrument = (parsed - 1) as usize;
+                                    c.instrument_present = true;
+                                }
+                            } else if parsed >= 0 {
+                                c.instrument = parsed as usize;
+                                c.instrument_present = true;
+                            } else {
+                                c.instrument_present = false;
+                            }
                         }
                     }
 
@@ -972,9 +1141,48 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             eff.name = current_text.clone();
                         }
                     }
+                    (ParseState::Effect, "effect") => {
+                        if current_effect_container == Some(EffectContainer::Legacy) {
+                            if let Some(ref mut eff) = current_effect {
+                                eff.name = current_text.clone();
+                            }
+                        }
+                    }
                     (ParseState::Effect, "logicalValue") => {
                         if let Some(ref mut eff) = current_effect {
                             eff.logical_value = current_text.parse().unwrap_or(0);
+                        }
+                    }
+                    (ParseState::Effect, "hexValue") => {
+                        if let Some(ref mut eff) = current_effect {
+                            let trimmed = current_text.trim();
+                            let hex = trimmed.strip_prefix('#').unwrap_or(trimmed);
+                            if let Ok(mut value) = i32::from_str_radix(hex, 16) {
+                                if format_version == FormatVersion::Legacy {
+                                    let effect_type = EffectType::from_name(&eff.name);
+                                    value = effect_type.decode_legacy_value(value);
+                                    if value > 0 {
+                                        match effect_type {
+                                            EffectType::ArpeggioTable => {
+                                                if let Some(&mapped) =
+                                                    legacy_arpeggio_map.get(&(value as usize))
+                                                {
+                                                    value = mapped as i32;
+                                                }
+                                            }
+                                            EffectType::PitchTable => {
+                                                if let Some(&mapped) =
+                                                    legacy_pitch_map.get(&(value as usize))
+                                                {
+                                                    value = mapped as i32;
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                                eff.logical_value = value;
+                            }
                         }
                     }
 
@@ -984,6 +1192,13 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                 // State transitions on closing tags
                 match name.as_str() {
                     "trackIndexes" if current_state == ParseState::PatternTrackIndexes => {
+                        current_state = ParseState::Pattern;
+                    }
+                    "patternCell" if current_state == ParseState::PatternCell => {
+                        if let Some(track_index) = current_pattern_cell_track_number.take() {
+                            current_pattern_track_indexes.push(track_index);
+                            current_pattern_transpositions.push(current_pattern_cell_transposition);
+                        }
                         current_state = ParseState::Pattern;
                     }
                     "speedTrackIndex" if current_state == ParseState::PatternSpeedTrackIndex => {
@@ -998,11 +1213,28 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                             pattern.track_indexes = current_pattern_track_indexes.clone();
                             // Pattern index is implicit (position in vector)
                             if let Some(ref mut subsong) = current_subsong {
-                                pattern.index = subsong.patterns.len();
+                                let pattern_index = subsong.patterns.len();
+                                let height = current_pattern_height;
+                                pattern.index = pattern_index;
                                 subsong.patterns.push(pattern);
+                                if format_version == FormatVersion::Legacy {
+                                    let mut transpositions = current_pattern_transpositions.clone();
+                                    if transpositions.len() < current_pattern_track_indexes.len() {
+                                        transpositions
+                                            .resize(current_pattern_track_indexes.len(), 0);
+                                    }
+                                    subsong.positions.push(Position {
+                                        pattern_index,
+                                        height,
+                                        marker_name: String::new(),
+                                        marker_color: 0,
+                                        transpositions,
+                                    });
+                                }
                             }
                         }
                         current_pattern_track_indexes.clear();
+                        current_pattern_transpositions.clear();
                         current_state = ParseState::SubsongPatterns;
                     }
                     "patterns" if current_state == ParseState::SubsongPatterns => {
@@ -1016,7 +1248,11 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         {
                             instr.cells.push(cell);
                         }
-                        current_state = ParseState::InstrumentCells;
+                        current_state = if format_version == FormatVersion::Legacy {
+                            ParseState::Instrument
+                        } else {
+                            ParseState::InstrumentCells
+                        };
                     }
                     "cells" if current_state == ParseState::InstrumentCells => {
                         current_state = ParseState::Instrument;
@@ -1044,15 +1280,48 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     }
                     "expression" if current_state == ParseState::Arpeggio => {
                         if let Some(arp) = current_arpeggio.take() {
+                            if format_version == FormatVersion::Legacy {
+                                legacy_arpeggio_map.insert(arp.index, arpeggios.len());
+                            }
                             arpeggios.push(arp);
                         }
                         current_state = ParseState::Arpeggios;
+                    }
+                    "arpeggio" if current_state == ParseState::Arpeggio => {
+                        if let Some(arp) = current_arpeggio.take() {
+                            if format_version == FormatVersion::Legacy {
+                                legacy_arpeggio_map.insert(arp.index, arpeggios.len());
+                            }
+                            arpeggios.push(arp);
+                        }
+                        current_state = ParseState::Arpeggios;
+                    }
+                    "arpeggioCell" if current_state == ParseState::LegacyArpeggioCell => {
+                        if let Some(arp) = current_arpeggio.as_mut() {
+                            let value = (legacy_arpeggio_octave * 12 + legacy_arpeggio_note)
+                                .clamp(i8::MIN as i32, i8::MAX as i32)
+                                as i8;
+                            arp.values.push(value);
+                        }
+                        current_state = ParseState::Arpeggio;
                     }
                     "arpeggios" if current_state == ParseState::Arpeggios => {
                         current_state = ParseState::Root;
                     }
                     "expression" if current_state == ParseState::PitchTable => {
                         if let Some(pitch) = current_pitch_table.take() {
+                            if format_version == FormatVersion::Legacy {
+                                legacy_pitch_map.insert(pitch.index, pitch_tables.len());
+                            }
+                            pitch_tables.push(pitch);
+                        }
+                        current_state = ParseState::PitchTables;
+                    }
+                    "pitch" if current_state == ParseState::PitchTable => {
+                        if let Some(pitch) = current_pitch_table.take() {
+                            if format_version == FormatVersion::Legacy {
+                                legacy_pitch_map.insert(pitch.index, pitch_tables.len());
+                            }
                             pitch_tables.push(pitch);
                         }
                         current_state = ParseState::PitchTables;
@@ -1060,23 +1329,39 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     "pitchs" | "pitchTables" if current_state == ParseState::PitchTables => {
                         current_state = ParseState::Root;
                     }
-                    "psg" if current_state == ParseState::SubsongPsg => {
+                    "psg" | "psgMetadata" if current_state == ParseState::SubsongPsg => {
                         if let (Some(psg), Some(ref mut subsong)) =
                             (current_psg.take(), current_subsong.as_mut())
                         {
                             subsong.psgs.push(psg);
                         }
-                        current_state = ParseState::SubsongPsgs;
+                        current_state = if format_version == FormatVersion::Legacy {
+                            ParseState::Subsong
+                        } else {
+                            ParseState::SubsongPsgs
+                        };
                     }
                     "psgs" if current_state == ParseState::SubsongPsgs => {
                         current_state = ParseState::Subsong;
                     }
                     "effect" if current_state == ParseState::Effect => {
+                        if current_effect_container == Some(EffectContainer::Modern) {
+                            if let (Some(eff), Some(ref mut cell)) =
+                                (current_effect.take(), current_cell.as_mut())
+                            {
+                                cell.effects.push(eff);
+                            }
+                            current_effect_container = None;
+                            current_state = ParseState::Cell;
+                        }
+                    }
+                    "effectAndValue" if current_state == ParseState::Effect => {
                         if let (Some(eff), Some(ref mut cell)) =
                             (current_effect.take(), current_cell.as_mut())
                         {
                             cell.effects.push(eff);
                         }
+                        current_effect_container = None;
                         current_state = ParseState::Cell;
                     }
                     "cell" if current_state == ParseState::Cell => {
@@ -1096,7 +1381,7 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         }
                         current_state = ParseState::SubsongTracks;
                     }
-                    "cell" if current_state == ParseState::SpeedCell => {
+                    "cell" | "speedCell" if current_state == ParseState::SpeedCell => {
                         if let (Some(cell), Some(ref mut track)) =
                             (current_special_cell.take(), current_speed_track.as_mut())
                         {
@@ -1104,7 +1389,7 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         }
                         current_state = ParseState::SpeedTrack;
                     }
-                    "cell" if current_state == ParseState::EventCell => {
+                    "cell" | "eventCell" if current_state == ParseState::EventCell => {
                         if let (Some(cell), Some(ref mut track)) =
                             (current_special_cell.take(), current_event_track.as_mut())
                         {
@@ -1161,6 +1446,10 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
     }
 
     Ok(AksSong {
+        format: match format_version {
+            FormatVersion::Legacy => SongFormat::Legacy,
+            FormatVersion::Modern => SongFormat::Modern,
+        },
         metadata,
         instruments,
         arpeggios,
@@ -1295,6 +1584,13 @@ mod tests {
         assert_eq!(song.subsongs.len(), 1);
 
         let subsong = &song.subsongs[0];
+        let inst = &song.instruments[2];
+        for (idx, cell) in inst.cells.iter().enumerate().take(8) {
+            println!(
+                "inst2 cell{} link {:?} vol {} noise {}",
+                idx, cell.link, cell.volume, cell.noise
+            );
+        }
 
         // Check positions
         assert_eq!(subsong.positions.len(), 2);
@@ -1340,5 +1636,89 @@ mod tests {
         assert!(subsong.psgs.len() > 0);
         assert!(subsong.positions.len() > 0);
         assert!(subsong.patterns.len() > 0);
+    }
+
+    #[test]
+    fn test_load_real_at2_file() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../arkostracker3/packageFiles/songs/ArkosTracker2/Excellence in Art 2018 - Just add cream.aks");
+        let data = std::fs::read(&path).expect("AT2 test AKS file missing");
+        let song = load_aks(&data).expect("failed to parse AT2 AKS file");
+
+        assert!(!song.subsongs.is_empty(), "expected subsongs in AT2 song");
+        let subsong = &song.subsongs[0];
+        assert!(subsong.psgs.len() > 0);
+        assert!(subsong.positions.len() > 0);
+        assert!(subsong.patterns.len() > 0);
+        assert!(
+            subsong.speed_tracks.contains_key(&0),
+            "expected speed track 0 in AT2 song"
+        );
+    }
+
+    #[test]
+    fn test_at2_patterns_cover_all_channels() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../arkostracker3/packageFiles/songs/ArkosTracker2/Excellence in Art 2018 - Just add cream.aks");
+        let data = std::fs::read(&path).expect("AT2 test AKS file missing");
+        let song = load_aks(&data).expect("failed to parse AT2 AKS file");
+
+        let subsong = &song.subsongs[0];
+        let channel_count = subsong.psgs.len() * 3;
+        assert!(channel_count > 0, "song should define at least one PSG");
+
+        for pattern in &subsong.patterns {
+            assert_eq!(
+                pattern.track_indexes.len(),
+                channel_count,
+                "pattern {} should provide a track index per channel",
+                pattern.index
+            );
+        }
+    }
+
+    #[test]
+    fn test_at2_track_effects_have_names() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../arkostracker3/packageFiles/songs/ArkosTracker2/Excellence in Art 2018 - Just add cream.aks");
+        let data = std::fs::read(&path).expect("AT2 test AKS file missing");
+        let song = load_aks(&data).expect("failed to parse AT2 AKS file");
+
+        let subsong = &song.subsongs[0];
+        let track = subsong.tracks.get(&1).expect("missing track 1");
+        let cell = track
+            .cells
+            .iter()
+            .find(|c| c.index == 0)
+            .expect("missing cell 0");
+        println!(
+            "track1 cell0 instrument_present={} instrument={} format instruments={}",
+            cell.instrument_present,
+            cell.instrument,
+            song.instruments.len()
+        );
+        assert!(
+            !cell.effects.is_empty(),
+            "expected effects parsed for track 1 cell 0"
+        );
+        let effect = &cell.effects[0];
+        assert_eq!(effect.name, "volume");
+        assert_eq!(effect.logical_value, 0xF);
+
+        let arp_track = subsong.tracks.get(&22).expect("missing track 22");
+        let arp_cell = arp_track
+            .cells
+            .iter()
+            .find(|c| c.index == 0)
+            .expect("missing track 22 cell 0");
+        if let Some(vol_effect) = arp_cell.effects.iter().find(|eff| eff.name == "volume") {
+            println!("track22 volume effect {}", vol_effect.logical_value);
+        }
+        let arp_effect = arp_cell
+            .effects
+            .iter()
+            .find(|eff| eff.name == "arpeggioTable")
+            .expect("missing arpeggioTable effect");
+        assert_eq!(arp_effect.logical_value, 2);
     }
 }

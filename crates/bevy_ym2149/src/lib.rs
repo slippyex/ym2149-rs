@@ -101,6 +101,7 @@ pub mod oscilloscope;
 pub mod playback;
 pub mod playlist;
 pub mod plugin;
+pub mod song_player;
 // Spatial audio module removed - use Bevy's native spatial audio instead
 // pub mod spatial;
 

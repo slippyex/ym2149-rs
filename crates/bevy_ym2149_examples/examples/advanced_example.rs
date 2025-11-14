@@ -47,7 +47,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Text::new(
             "Controls:\n\
-             - Drag & Drop: Load YM file\n\
+             - Drag & Drop: Load YM/AKS file\n\
              - SPACE: Play/Pause\n\
              - R: Restart\n\
              - L: Toggle Looping\n\
@@ -142,15 +142,16 @@ fn handle_file_drop(
     for event in drop_events.read() {
         if let FileDragAndDrop::DroppedFile { path_buf, .. } = event {
             let path_str = path_buf.to_string_lossy().to_string();
-            if !path_str.to_lowercase().ends_with(".ym") {
-                warn!("Dropped file is not a YM file: {}", path_str);
+            let lower = path_str.to_lowercase();
+            if !lower.ends_with(".ym") && !lower.ends_with(".aks") {
+                warn!("Dropped file is not a YM/AKS file: {}", path_str);
                 continue;
             }
 
             if let Some(mut playback) = playbacks.iter_mut().next() {
                 playback.set_source_path(path_str.clone());
                 playback.play();
-                info!("Loaded YM file from drag-and-drop: {}", path_str);
+                info!("Loaded song from drag-and-drop: {}", path_str);
             }
         }
     }

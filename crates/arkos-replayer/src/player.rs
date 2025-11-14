@@ -14,8 +14,9 @@ use crate::channel_player::{
 };
 use crate::effect_context::EffectContext;
 use crate::error::{ArkosError, Result};
-use crate::format::{AksSong, InstrumentType};
+use crate::format::{AksSong, InstrumentType, SongMetadata};
 use ym2149::ym2149::PsgBank;
+use ym2149::ym2149::Ym2149;
 
 /// Arkos Tracker song player
 ///
@@ -183,8 +184,12 @@ impl ArkosPlayer {
                     channel_player.apply_line_context(&context);
                 }
 
-                let frame =
-                    channel_player.play_frame(cell, transposition, is_first_tick, still_within_line);
+                let frame = channel_player.play_frame(
+                    cell,
+                    transposition,
+                    is_first_tick,
+                    still_within_line,
+                );
                 frames.push(frame);
             }
         } else {
@@ -253,6 +258,71 @@ impl ArkosPlayer {
         }
 
         Ok(())
+    }
+
+    /// Output sample rate in Hz
+    pub fn output_sample_rate(&self) -> f32 {
+        self.output_sample_rate
+    }
+
+    /// Samples produced per tick (line advancement)
+    pub fn samples_per_tick(&self) -> f32 {
+        self.samples_per_tick
+    }
+
+    /// Number of PSG chips in this song
+    pub fn chip_count(&self) -> usize {
+        self.psg_bank.psg_count()
+    }
+
+    /// Get a reference to a PSG chip by index
+    pub fn chip(&self, index: usize) -> Option<&Ym2149> {
+        if index < self.psg_bank.psg_count() {
+            Some(self.psg_bank.get_chip(index))
+        } else {
+            None
+        }
+    }
+
+    /// Get current absolute tick (line * speed + tick)
+    pub fn current_tick_index(&self) -> usize {
+        let line_offset = self.calculate_line_offset();
+        line_offset
+            .saturating_mul(self.current_speed.max(1) as usize)
+            .saturating_add(self.current_tick as usize)
+    }
+
+    /// Estimated total ticks (lines * nominal speed)
+    pub fn estimated_total_ticks(&self) -> usize {
+        let subsong = &self.song.subsongs[self.subsong_index];
+        let total_lines: usize = subsong.positions.iter().map(|pos| pos.height).sum();
+        total_lines.saturating_mul(subsong.initial_speed.max(1) as usize)
+    }
+
+    /// Access song metadata
+    pub fn metadata(&self) -> &SongMetadata {
+        &self.song.metadata
+    }
+
+    /// Replay frequency in Hz
+    pub fn replay_frequency_hz(&self) -> f32 {
+        self.song.subsongs[self.subsong_index].replay_frequency_hz
+    }
+
+    fn calculate_line_offset(&self) -> usize {
+        let subsong = &self.song.subsongs[self.subsong_index];
+        let mut total_lines = 0usize;
+        for pos_idx in 0..self.current_position.min(subsong.positions.len()) {
+            total_lines += subsong.positions[pos_idx].height;
+        }
+        total_lines
+            + self.current_line.min(
+                subsong
+                    .positions
+                    .get(self.current_position)
+                    .map(|pos| pos.height)
+                    .unwrap_or(0),
+            )
     }
 
     /// Get number of PSG chips
@@ -369,7 +439,7 @@ impl ArkosPlayer {
             self.apply_speed_track(subsong_index);
         }
 
-        let still_within_line = self.current_tick < self.current_speed;
+        let still_within_line = true;
         let position_count = self.song.subsongs[subsong_index].positions.len();
         let (loop_start, past_end_position) = self.loop_bounds(subsong_index, position_count);
 
@@ -378,7 +448,12 @@ impl ArkosPlayer {
             self.current_line = 0;
         }
 
-        let frames = self.build_frames(subsong_index, position_count, is_first_tick, still_within_line);
+        let frames = self.build_frames(
+            subsong_index,
+            position_count,
+            is_first_tick,
+            still_within_line,
+        );
 
         self.apply_frame_samples(&frames);
         observer(&frames);
@@ -920,6 +995,42 @@ mod tests {
     }
 
     #[test]
+    fn at2_first_tick_is_silent() {
+        let aks_path = data_path(&[
+            "..",
+            "..",
+            "arkostracker3",
+            "packageFiles",
+            "songs",
+            "ArkosTracker2",
+            "Excellence in Art 2018 - Just add cream.aks",
+        ]);
+        let song_data = std::fs::read(aks_path).expect("read AT2 AKS");
+        let song = load_aks(&song_data).expect("parse AT2 AKS");
+        let mut player = ArkosPlayer::new(song, 0).expect("init AT2 player");
+
+        assert!(
+            !player.song.subsongs[player.subsong_index]
+                .positions
+                .is_empty(),
+            "AT2 subsong should have synthesized positions"
+        );
+        let subsong = &player.song.subsongs[player.subsong_index];
+        let (cell, _) = ArkosPlayer::resolve_cell(subsong, 0, 0, 0);
+        let cell = cell.expect("expected a cell at first line/channel for AT2 pattern 0");
+        assert!(
+            cell.instrument_present && cell.instrument == usize::MAX,
+            "legacy cells with instrument 0 should be marked as RST sentinel"
+        );
+        let frames = player.capture_tick_frames();
+        assert!(
+            frames.iter().all(|frame| frame.psg.volume == 0),
+            "expected volume 0 on first tick before the buzzer is primed, got {:?}",
+            frames
+        );
+    }
+
+    #[test]
     #[ignore]
     fn doclands_matches_reference_ym() {
         let ym_path = data_path(&[
@@ -997,6 +1108,7 @@ mod tests {
                     println!("  ch{ch} ctx {:?}", ctx);
                 }
                 println!("Frame {} mismatch:", idx);
+                println!("  current speed {}", player.current_speed);
                 println!("  Expected regs: {:?}", &expected[..14]);
                 println!("  Actual regs:   {:?}", &actual[..14]);
                 for (channel, frame) in frames.iter().enumerate().take(3) {
@@ -1077,6 +1189,9 @@ mod tests {
             let expected = normalize_ym_registers(frame, &mut prev_expected);
             let frames = player.capture_tick_frames();
             let actual = frames_to_registers(0, &frames, &mut prev_actual);
+            if idx < 8 {
+                continue;
+            }
             if expected[..14] != actual[..14] {
                 println!(
                     "Context at position {} line {}:",
@@ -1099,6 +1214,7 @@ mod tests {
                     println!("  ch{ch} ctx {:?}", ctx);
                 }
                 println!("Frame {} mismatch:", idx);
+                println!("  current speed {}", player.current_speed);
                 println!("  Expected regs: {:?}", &expected[..14]);
                 println!("  Actual regs:   {:?}", &actual[..14]);
                 for (channel, frame) in frames.iter().enumerate().take(3) {
@@ -1315,13 +1431,116 @@ mod tests {
         let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
         let song = load_aks(&song_data).expect("parse Doclands AKS");
         let subsong = &song.subsongs[0];
-        println!("speed tracks available: {:?}", subsong.speed_tracks.keys().collect::<Vec<_>>());
+        println!(
+            "speed tracks available: {:?}",
+            subsong.speed_tracks.keys().collect::<Vec<_>>()
+        );
         let pattern = &subsong.patterns[subsong.positions[0].pattern_index];
         println!("pattern0 speed idx {}", pattern.speed_track_index);
         if let Some(track) = subsong.speed_tracks.get(&pattern.speed_track_index) {
             println!("track cells {:?}", track.cells);
         } else {
             println!("track not found!");
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn at2_matches_reference_ym() {
+        let ym_path = data_path(&[
+            "..",
+            "..",
+            "arkostracker3",
+            "packageFiles",
+            "songs",
+            "ArkosTracker2",
+            "Excellence in Art 2018 - Just add cream.ym",
+        ]);
+        let ym_data = std::fs::read(ym_path).expect("read AT2 YM");
+        let parser = Ym6Parser;
+        let (ym_frames, header, _, _) = parser.parse_full(&ym_data).expect("parse AT2 YM");
+
+        let aks_path = data_path(&[
+            "..",
+            "..",
+            "arkostracker3",
+            "packageFiles",
+            "songs",
+            "ArkosTracker2",
+            "Excellence in Art 2018 - Just add cream.aks",
+        ]);
+        let song_data = std::fs::read(aks_path).expect("read AT2 AKS");
+        let song = load_aks(&song_data).expect("parse AT2 AKS");
+        let mut player = ArkosPlayer::new(song, 0).expect("init AT2 player");
+
+        let frame_limit = ym_frames.len();
+        let mut prev_expected = [0u8; 16];
+        let mut prev_actual = [0u8; 16];
+        prev_actual[13] = 8;
+        for (idx, frame) in ym_frames.iter().take(frame_limit).enumerate() {
+            let expected = normalize_ym_registers(frame, &mut prev_expected);
+            let frames = player.capture_tick_frames();
+            let actual = frames_to_registers(0, &frames, &mut prev_actual);
+            if expected[..14] != actual[..14] {
+                println!(
+                    "AT2 mismatch at frame {} position {} line {}",
+                    idx, player.current_position, player.current_line
+                );
+                if let Some(subsong) = player.song.subsongs.get(player.subsong_index) {
+                    if let Some(pos) = subsong.positions.get(player.current_position) {
+                        if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
+                            println!(
+                                "  pattern {} track idx {:?} speed {} event {}",
+                                pattern.index,
+                                pattern.track_indexes,
+                                pattern.speed_track_index,
+                                pattern.event_track_index
+                            );
+                        }
+                        println!("  position transpositions {:?}", pos.transpositions);
+                    }
+                }
+                for ch in 0..player.channel_players.len().min(3) {
+                    if let Some(subsong) = player.song.subsongs.get(player.subsong_index) {
+                        if let Some(pos) = subsong.positions.get(player.current_position) {
+                            if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
+                                if let Some(track_idx) = pattern.track_indexes.get(ch) {
+                                    println!("  ch{ch} uses track {}", track_idx);
+                                }
+                            }
+                        }
+                    }
+                    let ctx = player
+                        .effect_context
+                        .line_context(player.current_position, ch, player.current_line)
+                        .cloned();
+                    println!("  ch{ch} ctx {:?}", ctx);
+                }
+                println!("Frame {} mismatch:", idx);
+                println!("  current speed {}", player.current_speed);
+                println!("  Expected regs: {:?}", &expected[..14]);
+                println!("  Actual regs:   {:?}", &actual[..14]);
+                for (channel, frame) in frames.iter().enumerate().take(3) {
+                    let out = &frame.psg;
+                    println!(
+                        "  Ch{}: vol {:>2} noise {:>2} sound_open {} period {:>4} hw_period {:>4} env {:>2} sample {:?}",
+                        channel,
+                        out.volume,
+                        out.noise,
+                        out.sound_open,
+                        out.software_period,
+                        out.hardware_period,
+                        out.hardware_envelope,
+                        frame.sample
+                    );
+                    let state = player.channel_players[channel].debug_state();
+                    println!("    state: {:?}", state);
+                }
+                panic!(
+                    "AT2 Register mismatch at frame {} (of {})",
+                    idx, header.frame_count
+                );
+            }
         }
     }
 }

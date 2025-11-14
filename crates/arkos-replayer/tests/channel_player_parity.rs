@@ -4,7 +4,7 @@ use std::sync::Arc;
 use arkos_replayer::channel_player::{ChannelPlayer, SampleCommand};
 use arkos_replayer::format::{
     AksSong, Arpeggio, Cell, ChannelLink, Effect, Instrument, InstrumentCell, InstrumentType, Note,
-    Pattern, Position, PsgConfig, PsgType, Subsong, Track,
+    Pattern, Position, PsgConfig, PsgType, SongFormat, Subsong, Track,
 };
 fn empty_instrument() -> Instrument {
     Instrument {
@@ -196,6 +196,7 @@ fn build_song_with_data(instruments: Vec<Instrument>, extra_arps: Vec<Arpeggio>)
     arpeggios.extend(extra_arps);
 
     Arc::new(AksSong {
+        format: SongFormat::Modern,
         metadata: arkos_replayer::format::SongMetadata::default(),
         instruments,
         arpeggios,

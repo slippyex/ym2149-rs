@@ -3,7 +3,7 @@
 //!
 //! Shader: `shaders/oldschool.wgsl` (relative to assets directory)
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fs};
 
 use bevy::{
     app::AppExit,
@@ -17,7 +17,7 @@ use bevy::{
         TextureUsages,
     },
     shader::{Shader, ShaderRef},
-    sprite_render::{Material2d, Material2dPlugin, MeshMaterial2d},
+    sprite_render::{AlphaMode2d, Material2d, Material2dPlugin, MeshMaterial2d},
     ui::{
         IsDefaultUiCamera,
         widget::{ImageNode, NodeImageMode},
@@ -202,6 +202,48 @@ impl Material2d for CrtPostMaterial {
     }
 }
 
+#[derive(AsBindGroup, TypePath, Debug, Clone, Asset)]
+pub struct LogoMaterial {
+    #[texture(0)]
+    #[sampler(1)]
+    logo_texture: Handle<Image>,
+    #[uniform(2)]
+    params: LogoShaderParams,
+}
+impl Material2d for LogoMaterial {
+    fn fragment_shader() -> ShaderRef {
+        ShaderRef::Path("shaders/logo_wave.wgsl".into())
+    }
+
+    fn alpha_mode(&self) -> AlphaMode2d {
+        AlphaMode2d::Blend
+    }
+}
+
+#[derive(ShaderType, Clone, Copy, Debug)]
+struct LogoShaderParams {
+    time: f32,
+    amp_x: f32,
+    freq_x: f32,
+    speed_x: f32,
+    amp_y: f32,
+    freq_y: f32,
+    speed_y: f32,
+}
+impl Default for LogoShaderParams {
+    fn default() -> Self {
+        Self {
+            time: 0.0,
+            amp_x: LogoConfig::DISTORT_X_AMPLITUDE,
+            freq_x: LogoConfig::DISTORT_X_FREQUENCY,
+            speed_x: LogoConfig::DISTORT_X_SPEED,
+            amp_y: LogoConfig::DISTORT_Y_AMPLITUDE,
+            freq_y: LogoConfig::DISTORT_Y_FREQUENCY,
+            speed_y: LogoConfig::DISTORT_Y_SPEED,
+        }
+    }
+}
+
 #[derive(ShaderType, Clone, Copy, Debug)]
 struct CubeParams {
     time: f32,
@@ -247,6 +289,9 @@ struct MaterialHandle(Handle<CubeFacesMaterial>);
 
 #[derive(Resource)]
 struct CrtMaterialHandle(Handle<CrtPostMaterial>);
+
+#[derive(Resource)]
+struct LogoMaterialHandle(Handle<LogoMaterial>);
 
 #[derive(Resource, Clone)]
 struct SceneRenderTarget(pub Handle<Image>);
@@ -296,6 +341,127 @@ const BITMAP_FONT_LAYOUT: [&str; 3] = [
 
 const PLAY_MUSIC: bool = true;
 const YM_TRACK_PATH: &str = "music/Prelude.ym";
+const LOGO_TEXTURE_PATH: &str = "textures/vectronix.png";
+const MEGA_FONT_LAYOUT: [&str; 3] = [
+    " !\"#$%&'()*+,-./0123",
+    "456789:;<=>?@ABCDEFG",
+    "HIJKLMNOPQRSTUVWXYZ[",
+];
+const SCROLL_TEXT: &str = "VECTRONIX  YM2149  RUST POWER  BEVY DEMOSCENE  ";
+const SCROLL_TEXTURE_WIDTH: u32 = 2048;
+const SCROLL_TEXTURE_HEIGHT: u32 = 64;
+const SCROLL_GLYPH_WIDTH: u32 = 32;
+const SCROLL_GLYPH_HEIGHT: u32 = 32;
+const SCROLL_LETTER_SPACING: u32 = 6;
+const SCROLL_SPEED_PX: f32 = 220.0;
+const SCROLL_HOVER_AMPLITUDE: f32 = 6.0;
+const SCROLL_HOVER_FREQUENCY: f32 = 1.4;
+const SCROLL_BASE_OFFSET: f32 = 40.0;
+
+struct LogoConfig;
+impl LogoConfig {
+    const WIDTH: f32 = 1020.0;
+    const HEIGHT: f32 = 400.0;
+    const TOP_MARGIN_PX: f32 = 40.0;
+    const BOTTOM_MARGIN_PX: f32 = 60.0;
+    const VERTICAL_CENTER_RATIO: f32 = 0.75;
+    const VERTICAL_BIAS_PX: f32 = 20.0;
+    const HOVER_AMPLITUDE_X: f32 = 120.0;
+    const HOVER_AMPLITUDE_Y: f32 = 0.8; // scaler, actual amplitude computed dynamically
+    const HOVER_FREQUENCY_X: f32 = 1.6;
+    const HOVER_FREQUENCY_Y: f32 = 2.2;
+    const PHASE_DELTA: f32 = std::f32::consts::FRAC_PI_2;
+    const DISTORT_X_AMPLITUDE: f32 = 0.016;
+    const DISTORT_X_FREQUENCY: f32 = 5.8;
+    const DISTORT_X_SPEED: f32 = 1.2;
+    const DISTORT_Y_AMPLITUDE: f32 = 0.16;
+    const DISTORT_Y_FREQUENCY: f32 = 10.5;
+    const DISTORT_Y_SPEED: f32 = 2.9;
+}
+
+#[derive(Component)]
+struct LogoHover {
+    phase: Vec2,
+}
+impl Default for LogoHover {
+    fn default() -> Self {
+        Self {
+            phase: Vec2::new(0.0, LogoConfig::PHASE_DELTA),
+        }
+    }
+}
+
+#[derive(Component)]
+struct LogoQuad;
+
+#[derive(Clone, Copy)]
+struct GlyphCoord {
+    col: usize,
+    row: usize,
+}
+
+#[derive(Clone, Copy)]
+struct GlyphRect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Resource)]
+struct MegadethFont {
+    glyphs: HashMap<char, GlyphCoord>,
+    columns: usize,
+    rows: usize,
+    pixels: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+impl MegadethFont {
+    fn from_pixels(pixels: Vec<u8>, width: u32, height: u32) -> Self {
+        let rows = MEGA_FONT_LAYOUT.len();
+        let columns = MEGA_FONT_LAYOUT
+            .first()
+            .map(|line| line.chars().count())
+            .unwrap_or(0);
+        let mut glyphs = HashMap::new();
+        for (row, line) in MEGA_FONT_LAYOUT.iter().enumerate() {
+            for (col, ch) in line.chars().enumerate() {
+                glyphs.insert(ch, GlyphCoord { col, row });
+            }
+        }
+        Self {
+            glyphs,
+            columns,
+            rows,
+            pixels,
+            width,
+            height,
+        }
+    }
+
+    fn coord_for(&self, ch: char) -> GlyphCoord {
+        self.glyphs
+            .get(&ch)
+            .copied()
+            .unwrap_or(GlyphCoord { col: 0, row: 0 })
+    }
+}
+
+#[derive(Resource)]
+struct ScrollTextState {
+    buffer: Handle<Image>,
+    message: Vec<char>,
+    start_index: usize,
+    offset: f32,
+    speed: f32,
+    glyph_width: u32,
+    glyph_height: u32,
+    letter_spacing: u32,
+}
+
+#[derive(Component)]
+struct ScrollSprite;
 
 #[derive(Resource)]
 struct BitmapFont {
@@ -544,6 +710,7 @@ fn main() {
         .add_plugins((
             Material2dPlugin::<CubeFacesMaterial>::default(),
             Material2dPlugin::<CrtPostMaterial>::default(),
+            Material2dPlugin::<LogoMaterial>::default(),
             Ym2149Plugin::default(),
             Ym2149VizPlugin::default(),
         ))
@@ -553,6 +720,8 @@ fn main() {
             (
                 setup,
                 setup_text_overlay,
+                setup_logo_mesh,
+                setup_scroll_text,
                 setup_startup_fade,
                 init_resources,
             ),
@@ -573,6 +742,10 @@ fn main() {
                 update_uniforms,
                 typewriter_update, // Apply text animation + swing offsets to text layout
                 apply_background_swing, // Apply background swing offsets
+                animate_logo_hover, // Hover animation for the logo
+                update_logo_material, // Update shader uniforms for logo distortion
+                update_scroll_buffer,
+                animate_scroll_sprite,
             ),
         )
         .run();
@@ -831,7 +1004,103 @@ fn setup_text_overlay(
             ));
         });
 }
+fn setup_logo_mesh(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<LogoMaterial>>,
+) {
+    let mesh_handle = meshes.add(Mesh::from(Rectangle::new(
+        LogoConfig::WIDTH,
+        LogoConfig::HEIGHT,
+    )));
+    let texture = asset_server.load(LOGO_TEXTURE_PATH);
+    let material_handle = materials.add(LogoMaterial {
+        logo_texture: texture,
+        params: LogoShaderParams::default(),
+    });
+    commands.insert_resource(LogoMaterialHandle(material_handle.clone()));
 
+    commands.spawn((
+        Mesh2d(mesh_handle),
+        MeshMaterial2d(material_handle),
+        Transform::from_xyz(0.0, 0.0, 50.0),
+        Visibility::Visible,
+        InheritedVisibility::VISIBLE,
+        ViewVisibility::default(),
+        LogoHover::default(),
+        LogoQuad,
+        RenderLayers::layer(1),
+        Name::new("DemosceneLogoQuad"),
+    ));
+}
+fn setup_scroll_text(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let font_path = format!("{}/fonts/megadeth_font.png", ASSET_BASE);
+    let font_bytes = fs::read(&font_path).expect("failed to read megadeth font png");
+    let decoded = image::load_from_memory(&font_bytes)
+        .expect("failed to decode megadeth font png")
+        .to_rgba8();
+    let (font_width, font_height) = decoded.dimensions();
+    let font = MegadethFont::from_pixels(decoded.into_raw(), font_width, font_height);
+
+    let extent = Extent3d {
+        width: SCROLL_TEXTURE_WIDTH,
+        height: SCROLL_TEXTURE_HEIGHT,
+        depth_or_array_layers: 1,
+    };
+    let scroll_image = Image::new_fill(
+        extent,
+        TextureDimension::D2,
+        &[0, 0, 0, 0],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    let buffer_handle = images.add(scroll_image);
+
+    commands.insert_resource(font);
+    commands.insert_resource(ScrollTextState {
+        buffer: buffer_handle.clone(),
+        message: SCROLL_TEXT.chars().collect(),
+        start_index: 0,
+        offset: 0.0,
+        speed: SCROLL_SPEED_PX,
+        glyph_width: SCROLL_GLYPH_WIDTH,
+        glyph_height: SCROLL_GLYPH_HEIGHT,
+        letter_spacing: SCROLL_LETTER_SPACING,
+    });
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                bottom: Val::Px(SCROLL_BASE_OFFSET),
+                height: Val::Px(SCROLL_TEXTURE_HEIGHT as f32),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+            ScrollSprite,
+            RenderLayers::layer(1),
+            Name::new("ScrollTextContainer"),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                ImageNode::from(buffer_handle.clone()).with_mode(NodeImageMode::Stretch),
+                Node {
+                    width: Val::Px(SCROLL_TEXTURE_WIDTH as f32),
+                    height: Val::Px(SCROLL_TEXTURE_HEIGHT as f32),
+                    ..default()
+                },
+                Visibility::Visible,
+                InheritedVisibility::VISIBLE,
+                Name::new("ScrollTextImage"),
+            ));
+        });
+}
 fn setup_startup_fade(mut commands: Commands) {
     commands.spawn((
         Node {
@@ -1519,6 +1788,131 @@ fn apply_background_swing(
     }
 }
 
+fn animate_logo_hover(
+    time: Res<Time>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut query: Query<(&mut Transform, &LogoHover)>,
+) {
+    let elapsed = time.elapsed_secs();
+    let (_window_height, half_height) = match windows.single() {
+        Ok(window) => {
+            let h = window.resolution.height();
+            (h, h * 0.5)
+        }
+        Err(_) => {
+            let h = 720.0;
+            (h, h * 0.5)
+        }
+    };
+    for (mut transform, hover) in query.iter_mut() {
+        let horizontal = (elapsed * LogoConfig::HOVER_FREQUENCY_X + hover.phase.x).sin()
+            * LogoConfig::HOVER_AMPLITUDE_X;
+        let top_limit = half_height - LogoConfig::TOP_MARGIN_PX - LogoConfig::HEIGHT * 0.5;
+        let bottom_limit = -half_height + LogoConfig::BOTTOM_MARGIN_PX + LogoConfig::HEIGHT * 0.5;
+        let span = (top_limit - bottom_limit).max(10.0);
+        let mut center =
+            bottom_limit + span * LogoConfig::VERTICAL_CENTER_RATIO + LogoConfig::VERTICAL_BIAS_PX;
+        center = center.clamp(bottom_limit + 20.0, top_limit - 20.0);
+        let amplitude = ((top_limit - center).min(center - bottom_limit)).max(10.0)
+            * LogoConfig::HOVER_AMPLITUDE_Y;
+        let swing = (elapsed * LogoConfig::HOVER_FREQUENCY_Y + hover.phase.y).sin() * amplitude;
+        let y = (center + swing).clamp(bottom_limit, top_limit);
+        transform.translation.x = horizontal;
+        transform.translation.y = y;
+    }
+}
+
+fn update_logo_material(
+    time: Res<Time>,
+    mut materials: ResMut<Assets<LogoMaterial>>,
+    handle: Option<Res<LogoMaterialHandle>>,
+) {
+    let Some(handle) = handle else {
+        return;
+    };
+    if let Some(material) = materials.get_mut(&handle.0) {
+        material.params.time = time.elapsed_secs();
+    }
+}
+
+fn update_scroll_buffer(
+    time: Res<Time>,
+    font: Option<Res<MegadethFont>>,
+    state: Option<ResMut<ScrollTextState>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(font) = font else {
+        return;
+    };
+    let Some(mut state) = state else {
+        return;
+    };
+    if state.message.is_empty() {
+        return;
+    }
+
+    let advance = (state.glyph_width + state.letter_spacing) as f32;
+    state.offset += state.speed * time.delta_secs();
+    while state.offset >= advance {
+        state.offset -= advance;
+        state.start_index = (state.start_index + 1) % state.message.len();
+    }
+
+    let Some(buffer) = images.get_mut(&state.buffer) else {
+        return;
+    };
+    let tex_width = buffer.texture_descriptor.size.width;
+    let tex_height = buffer.texture_descriptor.size.height;
+    let Some(pixels) = buffer.data.as_mut() else {
+        return;
+    };
+    for chunk in pixels.chunks_exact_mut(4) {
+        chunk[0] = 0;
+        chunk[1] = 0;
+        chunk[2] = 0;
+        chunk[3] = 0;
+    }
+
+    let baseline = ((tex_height.saturating_sub(state.glyph_height)) / 2) as i32;
+    let advance_i = (state.glyph_width + state.letter_spacing) as i32;
+    let mut draw_x = -(state.offset.round() as i32);
+    let mut idx = state.start_index;
+    while draw_x < tex_width as i32 {
+        let ch = state.message[idx];
+        let rect = glyph_rect_for(&font, ch);
+        blit_scaled_glyph(
+            &font.pixels,
+            font.width,
+            rect,
+            pixels,
+            tex_width,
+            tex_height,
+            draw_x,
+            baseline,
+            state.glyph_width,
+            state.glyph_height,
+        );
+        draw_x += advance_i;
+        idx = (idx + 1) % state.message.len();
+    }
+}
+
+fn animate_scroll_sprite(
+    time: Res<Time>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut query: Query<&mut Node, With<ScrollSprite>>,
+) {
+    let elapsed = time.elapsed_secs();
+    let base = windows
+        .single()
+        .map(|window| window.resolution.height() * 0.05)
+        .unwrap_or(SCROLL_BASE_OFFSET);
+    let hover = (elapsed * SCROLL_HOVER_FREQUENCY).sin() * SCROLL_HOVER_AMPLITUDE;
+    for mut layout in query.iter_mut() {
+        layout.bottom = Val::Px(base + hover);
+    }
+}
+
 /// Prepare font image by converting to RGBA8 format if needed
 fn prepare_font_image(font: &BitmapFont, images: &mut Assets<Image>) {
     if let Some(font_image) = images.get_mut(&font.image) {
@@ -1542,6 +1936,118 @@ fn get_font_data(font: &BitmapFont, images: &Assets<Image>) -> Option<(u32, u32,
         font_image.texture_descriptor.size.height,
         font_pixels,
     ))
+}
+
+fn glyph_rect_for(font: &MegadethFont, ch: char) -> GlyphRect {
+    let coord = font.coord_for(ch);
+    let cols = font.columns.max(1);
+    let rows = font.rows.max(1);
+    let cell_w = (font.width / cols as u32).max(1);
+    let cell_h = (font.height / rows as u32).max(1);
+    let x_base = coord.col as u32 * cell_w;
+    let y_base = coord.row as u32 * cell_h;
+    let mut min_x = cell_w;
+    let mut max_x = 0;
+    let mut min_y = cell_h;
+    let mut max_y = 0;
+    let threshold = 32u8;
+    for y in 0..cell_h {
+        let sy = y_base + y;
+        if sy >= font.height {
+            break;
+        }
+        for x in 0..cell_w {
+            let sx = x_base + x;
+            if sx >= font.width {
+                break;
+            }
+            let idx = ((sy * font.width + sx) * 4) as usize;
+            let r = font.pixels[idx];
+            let g = font.pixels[idx + 1];
+            let b = font.pixels[idx + 2];
+            let a = font.pixels[idx + 3];
+            let luminance = ((r as u16 + g as u16 + b as u16) / 3) as u8;
+            if a < 16 && luminance < threshold {
+                continue;
+            }
+            if x < min_x {
+                min_x = x;
+            }
+            if x > max_x {
+                max_x = x;
+            }
+            if y < min_y {
+                min_y = y;
+            }
+            if y > max_y {
+                max_y = y;
+            }
+        }
+    }
+    if max_x < min_x || max_y < min_y {
+        return GlyphRect {
+            x: x_base,
+            y: y_base,
+            width: cell_w,
+            height: cell_h,
+        };
+    }
+    GlyphRect {
+        x: x_base + min_x,
+        y: y_base + min_y,
+        width: (max_x - min_x + 1).max(1),
+        height: (max_y - min_y + 1).max(1),
+    }
+}
+
+fn blit_scaled_glyph(
+    src_pixels: &[u8],
+    src_width: u32,
+    rect: GlyphRect,
+    dst_pixels: &mut [u8],
+    dst_width: u32,
+    dst_height: u32,
+    dest_x: i32,
+    dest_y: i32,
+    target_width: u32,
+    target_height: u32,
+) {
+    if rect.width == 0 || rect.height == 0 {
+        return;
+    }
+    let scale_x = rect.width as f32 / target_width.max(1) as f32;
+    let scale_y = rect.height as f32 / target_height.max(1) as f32;
+    for ty in 0..target_height {
+        let sy = rect.y
+            + ((ty as f32) * scale_y)
+                .floor()
+                .clamp(0.0, (rect.height - 1) as f32) as u32;
+        let dy = dest_y + ty as i32;
+        if dy < 0 || dy >= dst_height as i32 {
+            continue;
+        }
+        for tx in 0..target_width {
+            let sx = rect.x
+                + ((tx as f32) * scale_x)
+                    .floor()
+                    .clamp(0.0, (rect.width - 1) as f32) as u32;
+            let dx = dest_x + tx as i32;
+            if dx < 0 || dx >= dst_width as i32 {
+                continue;
+            }
+            let src_index = ((sy * src_width + sx) * 4) as usize;
+            let rgba = &src_pixels[src_index..src_index + 4];
+            if rgba[3] == 0 {
+                continue;
+            }
+            let luminance = (rgba[0] as u32 + rgba[1] as u32 + rgba[2] as u32) / 3;
+            if luminance < 48 {
+                continue;
+            }
+            let dst_index = (((dy as u32) * dst_width + dx as u32) * 4) as usize;
+            dst_pixels[dst_index..dst_index + 4].copy_from_slice(rgba);
+        }
+    }
 }
 
 /// Create empty 1x1 transparent image

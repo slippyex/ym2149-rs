@@ -21,7 +21,7 @@ use crate::expression::{
     read_arpeggio_value, read_pitch_value,
 };
 use crate::fixed_point::FixedPoint;
-use crate::format::{AksSong, Cell, ChannelLink, InstrumentType, Note};
+use crate::format::{AksSong, Cell, ChannelLink, InstrumentType, Note, SongFormat};
 use crate::psg;
 
 /// Output from channel player (PSG parameters for one channel)
@@ -343,18 +343,20 @@ impl ChannelPlayer {
             self.new_played_note = Some(note);
 
             if has_glide {
+                self.pitch_slide.reset_slide();
                 // Glide: set goal period but don't change current note/instrument
                 self.setup_glide_goal(note);
             } else {
                 // Normal note: update base note and reset slides
-            self.base_note = note;
-            #[cfg(test)]
-            if cell.index == 38 && self._channel_index == 2 {
-                println!(
-                    "[dbg] channel {} base_note set to {} track_note {}",
-                    self._channel_index, self.base_note, self.track_note
-                );
-            }
+                let note_changed = self.base_note != note;
+                self.base_note = note;
+                #[cfg(test)]
+                if cell.index == 38 && self._channel_index == 2 {
+                    println!(
+                        "[dbg] channel {} base_note set to {} track_note {}",
+                        self._channel_index, self.base_note, self.track_note
+                    );
+                }
                 self.pitch_slide.reset();
                 self.volume_slide.reset_slide();
                 self.glide.stop();
@@ -362,6 +364,8 @@ impl ChannelPlayer {
                 // If there's an instrument, start it
                 if cell.instrument_present {
                     self.start_instrument(cell.instrument);
+                } else if note_changed {
+                    self.current_instrument_id = None;
                 }
             }
         }
@@ -397,7 +401,11 @@ impl ChannelPlayer {
 
     /// Start playing an instrument
     fn start_instrument(&mut self, instrument_index: usize) {
-        if instrument_index > self.song.instruments.len() {
+        if instrument_index == usize::MAX {
+            self.stop_sound();
+            return;
+        }
+        if instrument_index >= self.song.instruments.len() {
             return;
         }
 
@@ -522,11 +530,14 @@ impl ChannelPlayer {
             self.wrap_note((self.base_note as i32) + arpeggio_offset as i32)
         };
 
+        let legacy_song = self.song.format == SongFormat::Legacy;
+        let apply_pitch_slide = legacy_song || self.new_played_note.is_none();
+
         // Apply slides if still within line
         if still_within_line {
             if self.glide.active {
                 self.manage_trailing_glide();
-            } else {
+            } else if apply_pitch_slide {
                 self.pitch_slide.apply_slide();
             }
             self.volume_slide.apply_slide();
@@ -549,17 +560,20 @@ impl ChannelPlayer {
             (self.glide.initial_period as i32 + self.pitch_slide.current.integer_part()) as u16;
 
         if current_period == self.glide.goal_period {
-            self.pitch_slide.current = FixedPoint::from_int(self.glide.final_pitch as i32);
-            self.glide.stop();
+            self.finish_glide();
         } else if self.glide.goal_period > current_period {
             if !self.glide.period_increasing {
-                self.pitch_slide.current = FixedPoint::from_int(self.glide.final_pitch as i32);
-                self.glide.stop();
+                self.finish_glide();
             }
         } else if self.glide.period_increasing {
-            self.pitch_slide.current = FixedPoint::from_int(self.glide.final_pitch as i32);
-            self.glide.stop();
+            self.finish_glide();
         }
+    }
+
+    fn finish_glide(&mut self) {
+        self.pitch_slide.current = FixedPoint::from_int(self.glide.final_pitch as i32);
+        self.pitch_slide.reset_slide();
+        self.glide.stop();
     }
 
     // ============================================================================
@@ -777,7 +791,11 @@ impl ChannelPlayer {
                 if self._channel_index == 2 && self.software_period == 0 {
                     println!(
                         "[dbg] channel {} computed period 0 for Software link {:?}, note {} base {} track {}",
-                        self._channel_index, cell.link, self.track_note, self.base_note, self.track_note
+                        self._channel_index,
+                        cell.link,
+                        self.track_note,
+                        self.base_note,
+                        self.track_note
                     );
                 }
 

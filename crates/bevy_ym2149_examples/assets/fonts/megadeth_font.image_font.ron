@@ -1,0 +1,11 @@
+(
+    // note that the initial and trailing new lines are stripped, but the
+    // space at the start of the first line isn't (since there 'really is' a
+    // space there in the font texture
+    layout: Automatic(r##"
+ !"#$%&'()*+,-./0123
+456789:;<=>?@ABCDEFG
+HIJKLMNOPQRSTUVWXYZ[
+"##),
+    image: "fonts/megadeth_font.png"
+)

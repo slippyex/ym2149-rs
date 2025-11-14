@@ -1572,6 +1572,7 @@ name = "bevy_ym2149"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "arkos-replayer",
  "bevy",
  "bevy_mesh",
  "parking_lot",
@@ -1590,6 +1591,7 @@ dependencies = [
  "bevy_mesh",
  "bevy_ym2149",
  "bevy_ym2149_viz",
+ "image",
  "ym2149",
 ]
 

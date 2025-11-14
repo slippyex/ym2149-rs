@@ -32,10 +32,9 @@
 //! ```
 
 use crate::audio_source::Ym2149AudioSource;
+use crate::song_player::SharedSongPlayer;
 use bevy::prelude::*;
-use parking_lot::RwLock;
 use std::sync::Arc;
-use ym_replayer::Ym6Player;
 
 /// Fixed output sample rate used by the YM2149 mixer.
 pub const YM2149_SAMPLE_RATE: u32 = 44_100;
@@ -44,7 +43,7 @@ pub const YM2149_SAMPLE_RATE_F32: f32 = YM2149_SAMPLE_RATE as f32;
 
 /// Summary of a loaded track used for progress/duration calculations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct PlaybackMetrics {
+pub struct PlaybackMetrics {
     pub frame_count: usize,
     pub samples_per_frame: u32,
 }
@@ -87,7 +86,7 @@ pub(crate) struct CrossfadeRequest {
 
 /// Active crossfade layer being mixed alongside the primary player.
 ///
-/// Note: Uses Arc<RwLock<Ym6Player>> to enable shared ownership between the crossfade
+/// Note: Uses Arc<RwLock<...>> to enable shared ownership between the crossfade
 /// state and the audio source decoder. This is necessary because:
 /// 1. Crossfade needs simultaneous access to both primary and secondary players
 /// 2. The audio decoder holds a reference that must outlive individual system calls
@@ -96,7 +95,7 @@ pub(crate) struct CrossfadeRequest {
 /// RwLock allows multiple concurrent readers while ensuring exclusive write access
 /// during sample generation. This reduces lock contention compared to Mutex.
 pub(crate) struct ActiveCrossfade {
-    pub player: Arc<RwLock<Ym6Player>>,
+    pub player: SharedSongPlayer,
     pub metrics: PlaybackMetrics,
     pub song_title: String,
     pub song_author: String,
@@ -164,9 +163,9 @@ pub struct Ym2149Playback {
     pub(crate) right_gain: f32,
     /// Internal YM player instance (created by plugin systems)
     ///
-    /// Uses `Arc<RwLock<Ym6Player>>` for shared ownership with the audio decoder.
+    /// Uses `Arc<RwLock<_>>` for shared ownership with the audio decoder.
     /// See [`ActiveCrossfade`] documentation for rationale.
-    pub(crate) player: Option<Arc<RwLock<Ym6Player>>>,
+    pub(crate) player: Option<SharedSongPlayer>,
     /// Flag to trigger reloading the player on next play
     pub(crate) needs_reload: bool,
     /// Song title extracted from YM file metadata
@@ -439,7 +438,7 @@ impl Ym2149Playback {
     ///     let frame = player.get_current_frame();
     /// }
     /// ```
-    pub fn player_handle(&self) -> Option<Arc<RwLock<Ym6Player>>> {
+    pub fn player_handle(&self) -> Option<SharedSongPlayer> {
         self.player.as_ref().map(Arc::clone)
     }
 

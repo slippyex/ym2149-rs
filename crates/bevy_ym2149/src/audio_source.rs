@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use ym_replayer::{LoadSummary, PlaybackController, Ym6Player};
 
 use crate::error::{BevyYm2149Error, Result};
+use crate::playback::PlaybackMetrics;
+use crate::song_player::{SharedSongPlayer, load_song_from_bytes};
 
 /// A loaded YM2149 audio file ready to be played
 ///
@@ -24,7 +25,7 @@ pub struct Ym2149AudioSource {
     /// Cached metadata about the YM file
     pub metadata: Ym2149Metadata,
     /// Shared YM player instance for audio generation
-    player: Arc<RwLock<Ym6Player>>,
+    player: SharedSongPlayer,
     /// Sample rate for playback
     sample_rate: u32,
     /// Total number of samples in the track
@@ -49,41 +50,32 @@ pub struct Ym2149Metadata {
 impl Ym2149AudioSource {
     /// Create a new audio source from an existing player (for crossfade)
     pub(crate) fn from_player(
-        player: Arc<RwLock<Ym6Player>>,
+        player: SharedSongPlayer,
         data: Vec<u8>,
         metadata: Ym2149Metadata,
-        frame_count: usize,
-        samples_per_frame: usize,
+        metrics: PlaybackMetrics,
     ) -> Self {
         Self {
             data,
             metadata,
             player,
             sample_rate: crate::playback::YM2149_SAMPLE_RATE,
-            total_samples: frame_count * samples_per_frame,
+            total_samples: metrics.total_samples(),
         }
     }
 
     /// Create a new audio source from raw YM file data
     pub fn new(data: Vec<u8>) -> Result<Self> {
         // Load the song to create a player
-        let (mut player, summary) = ym_replayer::load_song(&data).map_err(|e| {
-            BevyYm2149Error::MetadataExtraction(format!("Failed to load song: {}", e))
-        })?;
+        let (mut player, metrics, metadata) =
+            load_song_from_bytes(&data).map_err(BevyYm2149Error::MetadataExtraction)?;
 
-        // Extract metadata
-        let metadata = extract_metadata_from_player(&player, &summary);
-
-        // Start the player so it generates audio samples
-        if let Err(e) = player.play() {
-            return Err(BevyYm2149Error::Other(format!(
-                "Failed to start player: {}",
-                e
-            )));
-        }
+        player
+            .play()
+            .map_err(|e| BevyYm2149Error::Other(format!("Failed to start player: {}", e)))?;
 
         let sample_rate = crate::playback::YM2149_SAMPLE_RATE;
-        let total_samples = summary.frame_count * summary.samples_per_frame as usize;
+        let total_samples = metrics.total_samples();
 
         Ok(Self {
             data,
@@ -105,7 +97,7 @@ impl Ym2149AudioSource {
     }
 
     /// Get a handle to the shared player for external control
-    pub fn player(&self) -> Arc<RwLock<Ym6Player>> {
+    pub fn player(&self) -> SharedSongPlayer {
         Arc::clone(&self.player)
     }
 }
@@ -140,36 +132,7 @@ impl AssetLoader for Ym2149Loader {
     }
 
     fn extensions(&self) -> &[&str] {
-        &["ym"]
-    }
-}
-
-/// Extract metadata from a player and summary
-fn extract_metadata_from_player(player: &Ym6Player, summary: &LoadSummary) -> Ym2149Metadata {
-    let frame_count = summary.frame_count;
-
-    // Try to get metadata from player's info
-    let (title, author, comment) = if let Some(info) = player.info() {
-        (
-            info.song_name.clone(),
-            info.author.clone(),
-            info.comment.clone(),
-        )
-    } else {
-        (String::new(), String::new(), String::new())
-    };
-
-    // Calculate duration: samples = frame_count * samples_per_frame
-    let samples_per_frame = summary.samples_per_frame as f32;
-    let total_samples = frame_count as f32 * samples_per_frame;
-    let duration_seconds = total_samples / crate::playback::YM2149_SAMPLE_RATE_F32;
-
-    Ym2149Metadata {
-        title,
-        author,
-        comment,
-        frame_count,
-        duration_seconds,
+        &["ym", "aks"]
     }
 }
 
@@ -180,7 +143,7 @@ fn extract_metadata_from_player(player: &Ym6Player, summary: &LoadSummary) -> Ym
 /// calling the YM player.
 pub struct Ym2149Decoder {
     /// Shared reference to the YM player
-    player: Arc<RwLock<Ym6Player>>,
+    player: SharedSongPlayer,
     /// Sample rate in Hz
     sample_rate: u32,
     /// Current sample position
@@ -195,7 +158,7 @@ pub struct Ym2149Decoder {
 
 impl Ym2149Decoder {
     /// Create a new decoder
-    fn new(player: Arc<RwLock<Ym6Player>>, sample_rate: u32, total_samples: usize) -> Self {
+    fn new(player: SharedSongPlayer, sample_rate: u32, total_samples: usize) -> Self {
         Self {
             player,
             sample_rate,

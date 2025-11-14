@@ -75,6 +75,15 @@ pub enum InstrumentType {
     Digi,
 }
 
+/// Song file format (legacy Arkos Tracker 2 vs modern Arkos Tracker 3)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SongFormat {
+    /// Arkos Tracker 3.x song
+    Modern,
+    /// Arkos Tracker 2.x (legacy) song
+    Legacy,
+}
+
 /// Channel link mode for instrument cells
 ///
 /// This determines how the instrument cell's parameters are used:
@@ -361,6 +370,8 @@ pub struct PitchTable {
 /// Complete AKS song
 #[derive(Debug, Clone)]
 pub struct AksSong {
+    /// Original source format
+    pub format: SongFormat,
     /// Song metadata
     pub metadata: SongMetadata,
     /// Instruments

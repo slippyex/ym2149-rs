@@ -16,6 +16,7 @@ default = []
 ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator"] }
 # YM file parsing and playback
 ym-replayer = { path = "../ym-replayer", version = "0.6" }
+arkos-replayer = { path = "../arkos-replayer", version = "0.6" }
 bevy = { version = "0.17", features = ["bevy_audio"] }
 bevy_mesh = "0.17"
 thiserror.workspace = true

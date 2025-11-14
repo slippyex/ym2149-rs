@@ -84,6 +84,39 @@ impl EffectType {
                 | Self::PitchGlide
         )
     }
+
+    /// Number of hex digits used to encode this effect in legacy formats
+    pub fn digit_count(self) -> u8 {
+        match self {
+            EffectType::None => 0,
+            EffectType::Volume | EffectType::Reset => 1,
+            EffectType::PitchTable
+            | EffectType::ArpeggioTable
+            | EffectType::Arpeggio3Notes
+            | EffectType::ForceArpeggioSpeed
+            | EffectType::ForcePitchTableSpeed
+            | EffectType::ForceInstrumentSpeed
+            | EffectType::Legato => 2,
+            EffectType::VolumeIn
+            | EffectType::VolumeOut
+            | EffectType::PitchUp
+            | EffectType::PitchDown
+            | EffectType::PitchGlide
+            | EffectType::FastPitchUp
+            | EffectType::FastPitchDown
+            | EffectType::Arpeggio4Notes => 3,
+        }
+    }
+
+    /// Convert a legacy raw hex value into the logical value used by AT3
+    pub fn decode_legacy_value(self, raw_value: i32) -> i32 {
+        match self.digit_count() {
+            0 => 0,
+            1 => ((raw_value >> 8) & 0xF) as i32,
+            2 => ((raw_value >> 4) & 0xFF) as i32,
+            _ => (raw_value & 0xFFF) as i32,
+        }
+    }
 }
 
 /// State for volume slide effects
@@ -180,6 +213,11 @@ impl PitchSlide {
     /// Apply slide for one tick
     pub fn apply_slide(&mut self) {
         self.current += self.slide;
+    }
+
+    /// Reset only the slide component, preserving the current offset
+    pub fn reset_slide(&mut self) {
+        self.slide.reset();
     }
 
     /// Get current pitch as i16
