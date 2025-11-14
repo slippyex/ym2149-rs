@@ -65,6 +65,7 @@ enum ParseState {
     Root,
     Instruments,
     Instrument,
+    InstrumentAutoSpread,
     InstrumentCells,
     InstrumentCell,
     Arpeggios,
@@ -328,6 +329,9 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     "cells" if current_state == ParseState::Instrument => {
                         current_state = ParseState::InstrumentCells
                     }
+                    "autoSpread" if current_state == ParseState::Instrument => {
+                        current_state = ParseState::InstrumentAutoSpread;
+                    }
                     "cell" | "fmInstrumentCell" if current_state == ParseState::InstrumentCells => {
                         current_state = ParseState::InstrumentCell;
                         current_instrument_cell = Some(InstrumentCell {
@@ -572,6 +576,9 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                                 }
                             }
                         }
+                    }
+                    (ParseState::InstrumentAutoSpread, _) => {
+                        // Ignore loop/index fields inside autoSpread blocks
                     }
                     (ParseState::Instrument, "isSfxExported") => {
                         if let Some(ref mut instr) = current_instrument {
@@ -1012,6 +1019,9 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         current_state = ParseState::InstrumentCells;
                     }
                     "cells" if current_state == ParseState::InstrumentCells => {
+                        current_state = ParseState::Instrument;
+                    }
+                    "autoSpread" if current_state == ParseState::InstrumentAutoSpread => {
                         current_state = ParseState::Instrument;
                     }
                     "instrument" | "fmInstrument" if current_state == ParseState::Instrument => {
