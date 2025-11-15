@@ -32,6 +32,9 @@ wasm-pack build --target web --out-dir pkg
 
 # Or for bundler (webpack, rollup, etc.)
 wasm-pack build --target bundler --out-dir pkg
+
+# Shortcut: rebuild + copy into examples/pkg
+./scripts/build-wasm-examples.sh --release
 ```
 
 ## Quick Start

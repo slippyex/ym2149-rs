@@ -1591,7 +1591,6 @@ dependencies = [
  "bevy_mesh",
  "bevy_ym2149",
  "bevy_ym2149_viz",
- "image",
  "ym2149",
 ]
 

@@ -74,14 +74,14 @@ Configure the plugin at runtime via `Ym2149PluginConfig`:
 
 Disable what you don’t need to keep your app lean.
 
-## Runtime Flow
+## Runtime Flow / Systems
 
-1. **Asset Loading** – YM files are loaded via Bevy's asset system as `Ym2149AudioSource` assets (implementing the `Decodable` trait)
-2. **Initialization** – `initialize_playback` spawns `AudioPlayer` entities with Bevy's native audio system
-3. **Playback** – Bevy's audio thread pulls samples on-demand from `Ym2149Decoder`, which generates samples via the YM2149 emulator
-4. **Control** – `update_playback` system uses `AudioSink` to control play/pause/volume based on `Ym2149Playback` component state
-5. **Observability** – messages & diagnostics provide current frame and per-channel snapshots
-6. **Visualization (optional)** – `bevy_ym2149_viz` systems consume the observability data to render UI
+1. **Asset Loading** – `.ym`/`.aks` files load via Bevy’s asset system as `Ym2149AudioSource` (implements `Decodable`)
+2. **Initialization (PreUpdate)** – `initialize_playback` attaches `AudioPlayer`/`PlaybackRuntimeState` to entities
+3. **State Driving (PreUpdate)** – `drive_playback_state` reacts to `Ym2149Playback.state`, controlling `AudioSink`s and emitting `TrackStarted/TrackFinished`
+4. **Frame Processing (Update)** – `process_playback_frames` generates audio samples per VBL frame, drives crossfades, and emits lightweight `FrameAudioData` messages
+5. **Observability (Update)** – `emit_playback_diagnostics` (when enabled) converts `FrameAudioData` into `ChannelSnapshot`s and oscilloscope buffers; `publish_bridge_audio` mirrors raw stereo data if the audio bridge is on
+6. **Visualization (optional)** – `bevy_ym2149_viz` systems consume those diagnostics/resources to render their UI widgets
 
 ## Key APIs
 

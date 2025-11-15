@@ -47,9 +47,12 @@ graph TB
 | **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation | `Ym2149`, `Ym2149Backend` trait, streaming, visualization | `chip_demo` example |
 | **ym-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` (implements `Ym2149Backend`) | None (library only) |
 | **ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()`, parsers, loader | `ym-replayer` CLI |
+| **arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Uses curated songs in [`examples/arkos`](examples/arkos) |
 | **bevy_ym2149** | 4 | Bevy audio plugin with playback management | `Ym2149Plugin`, `Ym2149Playback` component | None (library only) |
 | **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization components & systems | None (library only) |
-| **bevy_ym2149_examples** | 4 | Runnable demo applications | None (examples only) | 5 example applications |
+| **bevy_ym2149_examples** | 4 | Runnable demo applications | None (examples only) | 5 example scenes |
+| **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | [`crates/ym2149-wasm/examples`](crates/ym2149-wasm/examples) |
+| **ym-replayer-cli** | 4 | Terminal streaming/export tool | `main.rs` CLI | `cargo run -p ym-replayer-cli` |
 
 ---
 
@@ -254,7 +257,7 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
 
 ---
 
-## Layer 3: Music Playback (ym-replayer)
+## Layer 3: Music Playback (ym-replayer & arkos-replayer)
 
 ### Responsibilities
 
@@ -362,38 +365,38 @@ pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
 
 ---
 
-## Layer 4: Bevy Integration
+## Layer 4: Integration Targets
 
 ### bevy_ym2149
 
-**Bevy ECS plugin** for YM2149 audio playback in games using Bevy's native audio system.
+Bevy integration is now split into focused systems so optional features
+can subscribe without bloating the hot loop:
 
-**Architecture:**
 ```
 Ym2149Plugin
-├── Asset System Integration
-│   ├── Ym2149Loader (AssetLoader for .ym files)
+├── Asset Integration
+│   ├── Ym2149Loader (.ym/.aks via Arkos fallback)
 │   ├── Ym2149AudioSource (Asset + Decodable)
-│   └── Ym2149Decoder (Iterator + Source for sample generation)
-├── Playback Management
-│   ├── Ym2149Playback (component)
-│   ├── PlaybackState (Playing/Paused/Stopped)
-│   ├── AudioPlayer (Bevy's audio entity component)
-│   └── AudioSink (play/pause/volume control)
-├── Systems
-│   ├── initialize_playback (spawns AudioPlayer entities)
-│   ├── update_playback (controls AudioSink based on component state)
-│   ├── audio_bridge_system (sample mirroring for custom DSP)
-│   └── event_emission_system
-└── Events
-    ├── TrackStarted
-    ├── TrackFinished
-    └── ChannelSnapshot
+│   └── Ym2149Decoder (Iterator + rodio::Source)
+├── Runtime Components
+│   ├── Ym2149Playback (user-facing component)
+│   └── PlaybackRuntimeState (timing / last-volume cache)
+├── Systems (PreUpdate)
+│   ├── initialize_playback
+│   └── drive_playback_state (AudioSink + events)
+├── Systems (Update)
+│   ├── process_playback_frames → emits FrameAudioData messages
+│   ├── emit_playback_diagnostics (ChannelSnapshot, oscilloscope)
+│   └── publish_bridge_audio (legacy audio-bridge buffers)
+└── Events / Messages
+    ├── TrackStarted / TrackFinished
+    ├── ChannelSnapshot
+    └── FrameAudioData (internal)
 ```
 
 **Key Features:**
 - Native Bevy audio integration via `Decodable` trait
-- On-demand sample generation (pull-based model)
+- `FrameAudioData` message bus decouples diagnostics/bridge subscribers
 - Automatic asset loading and caching
 - ECS component-based playback management
 - Playlist support with crossfading
@@ -464,6 +467,26 @@ Ym2149VizPlugin
 | `crossfade_example` | Playlist with smooth transitions |
 | `feature_showcase` | Per-channel mute, diagnostics, events |
 | `demoscene` | Visual effects synchronized to music |
+
+---
+
+### CLI / Streaming
+
+`ym-replayer-cli` wraps `ym-replayer` + `arkos-replayer` under a single
+`RealtimeChip` trait. It wires streaming audio (`ym2149::streaming`),
+terminal visualization, and hotkeys for muting, color filter toggles,
+and tracker metadata.
+
+### WebAssembly Player
+
+`ym2149-wasm` exposes `Ym2149Player` to JavaScript via wasm-bindgen. A
+`BrowserSongPlayer` enum automatically decides whether the loaded bytes
+should be handled by `ym-replayer` (YM dumps) or `arkos-replayer`
+(`.aks`), ensuring the same API works for both ecosystems. The `pkg/`
+artifacts live next to `crates/ym2149-wasm/examples`, and
+`scripts/build-wasm-examples.sh` rebuilds/copies them so `simple-player.html`
+always serves the latest bundle. Sample AKS/YM files used in wasm demos
+and tests live in [`examples/arkos`](examples/arkos).
 
 ---
 

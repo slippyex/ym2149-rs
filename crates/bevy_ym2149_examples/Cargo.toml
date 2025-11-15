@@ -18,7 +18,6 @@ bevy_ym2149_viz = { path = "../bevy_ym2149_viz" }
 bevy = { version = "0.17", features = ["bevy_audio"] }
 bevy_mesh = "0.17"
 ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator", "streaming"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
 
 [[example]]
 name = "basic_example"

@@ -3,7 +3,7 @@
 //!
 //! Shader: `shaders/oldschool.wgsl` (relative to assets directory)
 
-use std::{collections::HashMap, fs};
+use std::collections::HashMap;
 
 use bevy::{
     app::AppExit,
@@ -342,30 +342,26 @@ const BITMAP_FONT_LAYOUT: [&str; 3] = [
 const PLAY_MUSIC: bool = true;
 const YM_TRACK_PATH: &str = "music/Prelude.ym";
 const LOGO_TEXTURE_PATH: &str = "textures/vectronix.png";
-const MEGA_FONT_LAYOUT: [&str; 3] = [
-    " !\"#$%&'()*+,-./0123",
-    "456789:;<=>?@ABCDEFG",
-    "HIJKLMNOPQRSTUVWXYZ[",
-];
-const SCROLL_TEXT: &str = "VECTRONIX  YM2149  RUST POWER  BEVY DEMOSCENE  ";
-const SCROLL_TEXTURE_WIDTH: u32 = 2048;
-const SCROLL_TEXTURE_HEIGHT: u32 = 64;
-const SCROLL_GLYPH_WIDTH: u32 = 32;
-const SCROLL_GLYPH_HEIGHT: u32 = 32;
-const SCROLL_LETTER_SPACING: u32 = 6;
-const SCROLL_SPEED_PX: f32 = 220.0;
-const SCROLL_HOVER_AMPLITUDE: f32 = 6.0;
-const SCROLL_HOVER_FREQUENCY: f32 = 1.4;
-const SCROLL_BASE_OFFSET: f32 = 40.0;
-
+const STAR_TEXTURE_PATH: &str = "textures/star.png";
+const STAR_COUNT: usize = 12;
+const STAR_TARGET_SIZE: f32 = 128.0;
+const STAR_ORBIT_HORIZONTAL_RADIUS: f32 = LogoConfig::WIDTH * 0.55;
+const STAR_ORBIT_VERTICAL_RADIUS: f32 = LogoConfig::HEIGHT * 0.65;
+const STAR_ORBIT_SPEED_BASE: f32 = 0.55;
+const STAR_ROTATION_SPEED_BASE: f32 = 1.6;
+const STAR_ROTATION_SPEED_VARIATION: f32 = 0.7;
+const STAR_DEPTH_RANGE: f32 = 25.0;
+const STAR_ZOOM_AMPLITUDE: f32 = 0.2;
+const STAR_ZOOM_SPEED_BASE: f32 = 0.9;
+const STAR_ZOOM_SPEED_VARIATION: f32 = 0.4;
 struct LogoConfig;
 impl LogoConfig {
     const WIDTH: f32 = 1020.0;
     const HEIGHT: f32 = 400.0;
     const TOP_MARGIN_PX: f32 = 40.0;
     const BOTTOM_MARGIN_PX: f32 = 60.0;
-    const VERTICAL_CENTER_RATIO: f32 = 0.75;
-    const VERTICAL_BIAS_PX: f32 = 20.0;
+    const VERTICAL_CENTER_RATIO: f32 = 0.55;
+    const VERTICAL_BIAS_PX: f32 = -40.0;
     const HOVER_AMPLITUDE_X: f32 = 120.0;
     const HOVER_AMPLITUDE_Y: f32 = 0.8; // scaler, actual amplitude computed dynamically
     const HOVER_FREQUENCY_X: f32 = 1.6;
@@ -394,74 +390,16 @@ impl Default for LogoHover {
 #[derive(Component)]
 struct LogoQuad;
 
-#[derive(Clone, Copy)]
-struct GlyphCoord {
-    col: usize,
-    row: usize,
-}
-
-#[derive(Clone, Copy)]
-struct GlyphRect {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-}
-
-#[derive(Resource)]
-struct MegadethFont {
-    glyphs: HashMap<char, GlyphCoord>,
-    columns: usize,
-    rows: usize,
-    pixels: Vec<u8>,
-    width: u32,
-    height: u32,
-}
-impl MegadethFont {
-    fn from_pixels(pixels: Vec<u8>, width: u32, height: u32) -> Self {
-        let rows = MEGA_FONT_LAYOUT.len();
-        let columns = MEGA_FONT_LAYOUT
-            .first()
-            .map(|line| line.chars().count())
-            .unwrap_or(0);
-        let mut glyphs = HashMap::new();
-        for (row, line) in MEGA_FONT_LAYOUT.iter().enumerate() {
-            for (col, ch) in line.chars().enumerate() {
-                glyphs.insert(ch, GlyphCoord { col, row });
-            }
-        }
-        Self {
-            glyphs,
-            columns,
-            rows,
-            pixels,
-            width,
-            height,
-        }
-    }
-
-    fn coord_for(&self, ch: char) -> GlyphCoord {
-        self.glyphs
-            .get(&ch)
-            .copied()
-            .unwrap_or(GlyphCoord { col: 0, row: 0 })
-    }
-}
-
-#[derive(Resource)]
-struct ScrollTextState {
-    buffer: Handle<Image>,
-    message: Vec<char>,
-    start_index: usize,
-    offset: f32,
-    speed: f32,
-    glyph_width: u32,
-    glyph_height: u32,
-    letter_spacing: u32,
-}
-
 #[derive(Component)]
-struct ScrollSprite;
+struct OrbitingStar {
+    orbit_offset: f32,
+    radius: Vec2,
+    spin_angle: f32,
+    spin_speed: f32,
+    zoom_phase: f32,
+    zoom_speed: f32,
+    zoom_amplitude: f32,
+}
 
 #[derive(Resource)]
 struct BitmapFont {
@@ -721,7 +659,7 @@ fn main() {
                 setup,
                 setup_text_overlay,
                 setup_logo_mesh,
-                setup_scroll_text,
+                setup_orbiting_stars,
                 setup_startup_fade,
                 init_resources,
             ),
@@ -743,9 +681,8 @@ fn main() {
                 typewriter_update, // Apply text animation + swing offsets to text layout
                 apply_background_swing, // Apply background swing offsets
                 animate_logo_hover, // Hover animation for the logo
+                animate_orbiting_stars, // Orbit + spin the star sprites
                 update_logo_material, // Update shader uniforms for logo distortion
-                update_scroll_buffer,
-                animate_scroll_sprite,
             ),
         )
         .run();
@@ -1034,72 +971,41 @@ fn setup_logo_mesh(
         Name::new("DemosceneLogoQuad"),
     ));
 }
-fn setup_scroll_text(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let font_path = format!("{}/fonts/megadeth_font.png", ASSET_BASE);
-    let font_bytes = fs::read(&font_path).expect("failed to read megadeth font png");
-    let decoded = image::load_from_memory(&font_bytes)
-        .expect("failed to decode megadeth font png")
-        .to_rgba8();
-    let (font_width, font_height) = decoded.dimensions();
-    let font = MegadethFont::from_pixels(decoded.into_raw(), font_width, font_height);
-
-    let extent = Extent3d {
-        width: SCROLL_TEXTURE_WIDTH,
-        height: SCROLL_TEXTURE_HEIGHT,
-        depth_or_array_layers: 1,
-    };
-    let scroll_image = Image::new_fill(
-        extent,
-        TextureDimension::D2,
-        &[0, 0, 0, 0],
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    );
-    let buffer_handle = images.add(scroll_image);
-
-    commands.insert_resource(font);
-    commands.insert_resource(ScrollTextState {
-        buffer: buffer_handle.clone(),
-        message: SCROLL_TEXT.chars().collect(),
-        start_index: 0,
-        offset: 0.0,
-        speed: SCROLL_SPEED_PX,
-        glyph_width: SCROLL_GLYPH_WIDTH,
-        glyph_height: SCROLL_GLYPH_HEIGHT,
-        letter_spacing: SCROLL_LETTER_SPACING,
-    });
-
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                bottom: Val::Px(SCROLL_BASE_OFFSET),
-                height: Val::Px(SCROLL_TEXTURE_HEIGHT as f32),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+fn setup_orbiting_stars(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let texture: Handle<Image> = asset_server.load(STAR_TEXTURE_PATH);
+    for i in 0..STAR_COUNT {
+        let t = i as f32 / STAR_COUNT as f32;
+        let angle = t * std::f32::consts::TAU;
+        let spin_speed = STAR_ROTATION_SPEED_BASE + STAR_ROTATION_SPEED_VARIATION * (0.5 - t);
+        let zoom_speed = STAR_ZOOM_SPEED_BASE + STAR_ZOOM_SPEED_VARIATION * (t - 0.5);
+        let zoom_phase = angle * 0.73;
+        let zoom_amplitude = STAR_ZOOM_AMPLITUDE * (0.7 + 0.6 * (t - 0.5).abs());
+        let spin_angle = angle * 0.35;
+        let initial_rotation = Quat::from_rotation_z(spin_angle);
+        commands.spawn((
+            Sprite {
+                image: texture.clone(),
+                custom_size: Some(Vec2::splat(STAR_TARGET_SIZE)),
                 ..default()
             },
-            Visibility::Visible,
-            InheritedVisibility::VISIBLE,
-            ScrollSprite,
+            Transform {
+                translation: Vec3::new(0.0, 0.0, 40.0),
+                rotation: initial_rotation,
+                scale: Vec3::ONE,
+            },
+            OrbitingStar {
+                orbit_offset: angle,
+                radius: Vec2::new(STAR_ORBIT_HORIZONTAL_RADIUS, STAR_ORBIT_VERTICAL_RADIUS),
+                spin_angle,
+                spin_speed,
+                zoom_phase,
+                zoom_speed,
+                zoom_amplitude,
+            },
             RenderLayers::layer(1),
-            Name::new("ScrollTextContainer"),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                ImageNode::from(buffer_handle.clone()).with_mode(NodeImageMode::Stretch),
-                Node {
-                    width: Val::Px(SCROLL_TEXTURE_WIDTH as f32),
-                    height: Val::Px(SCROLL_TEXTURE_HEIGHT as f32),
-                    ..default()
-                },
-                Visibility::Visible,
-                InheritedVisibility::VISIBLE,
-                Name::new("ScrollTextImage"),
-            ));
-        });
+            Name::new(format!("OrbitingStar{}", i + 1)),
+        ));
+    }
 }
 fn setup_startup_fade(mut commands: Commands) {
     commands.spawn((
@@ -1822,6 +1728,39 @@ fn animate_logo_hover(
     }
 }
 
+fn animate_orbiting_stars(
+    time: Res<Time>,
+    logo_query: Query<&Transform, (With<LogoQuad>, Without<OrbitingStar>)>,
+    mut stars: Query<(&mut Transform, &mut OrbitingStar)>,
+) {
+    let delta = time.delta_secs();
+    let elapsed = time.elapsed_secs();
+    let (center, base_z) = logo_query
+        .iter()
+        .next()
+        .map(|transform| (transform.translation, transform.translation.z))
+        .unwrap_or((Vec3::ZERO, 50.0));
+    for (mut transform, mut star) in stars.iter_mut() {
+        let orbit_angle =
+            (elapsed * STAR_ORBIT_SPEED_BASE + star.orbit_offset).rem_euclid(std::f32::consts::TAU);
+        star.spin_angle =
+            (star.spin_angle + star.spin_speed * delta).rem_euclid(std::f32::consts::TAU);
+        star.zoom_phase =
+            (star.zoom_phase + star.zoom_speed * delta).rem_euclid(std::f32::consts::TAU);
+        let (sin_angle, cos_angle) = orbit_angle.sin_cos();
+        let offset = Vec3::new(
+            cos_angle * star.radius.x,
+            sin_angle * star.radius.y,
+            -sin_angle * STAR_DEPTH_RANGE,
+        );
+        transform.translation =
+            Vec3::new(center.x + offset.x, center.y + offset.y, base_z + offset.z);
+        let zoom_scale = 1.0 + star.zoom_amplitude * star.zoom_phase.sin();
+        transform.scale = Vec3::splat(zoom_scale.max(0.25));
+        transform.rotation = Quat::from_rotation_z(star.spin_angle);
+    }
+}
+
 fn update_logo_material(
     time: Res<Time>,
     mut materials: ResMut<Assets<LogoMaterial>>,
@@ -1832,84 +1771,6 @@ fn update_logo_material(
     };
     if let Some(material) = materials.get_mut(&handle.0) {
         material.params.time = time.elapsed_secs();
-    }
-}
-
-fn update_scroll_buffer(
-    time: Res<Time>,
-    font: Option<Res<MegadethFont>>,
-    state: Option<ResMut<ScrollTextState>>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    let Some(font) = font else {
-        return;
-    };
-    let Some(mut state) = state else {
-        return;
-    };
-    if state.message.is_empty() {
-        return;
-    }
-
-    let advance = (state.glyph_width + state.letter_spacing) as f32;
-    state.offset += state.speed * time.delta_secs();
-    while state.offset >= advance {
-        state.offset -= advance;
-        state.start_index = (state.start_index + 1) % state.message.len();
-    }
-
-    let Some(buffer) = images.get_mut(&state.buffer) else {
-        return;
-    };
-    let tex_width = buffer.texture_descriptor.size.width;
-    let tex_height = buffer.texture_descriptor.size.height;
-    let Some(pixels) = buffer.data.as_mut() else {
-        return;
-    };
-    for chunk in pixels.chunks_exact_mut(4) {
-        chunk[0] = 0;
-        chunk[1] = 0;
-        chunk[2] = 0;
-        chunk[3] = 0;
-    }
-
-    let baseline = ((tex_height.saturating_sub(state.glyph_height)) / 2) as i32;
-    let advance_i = (state.glyph_width + state.letter_spacing) as i32;
-    let mut draw_x = -(state.offset.round() as i32);
-    let mut idx = state.start_index;
-    while draw_x < tex_width as i32 {
-        let ch = state.message[idx];
-        let rect = glyph_rect_for(&font, ch);
-        blit_scaled_glyph(
-            &font.pixels,
-            font.width,
-            rect,
-            pixels,
-            tex_width,
-            tex_height,
-            draw_x,
-            baseline,
-            state.glyph_width,
-            state.glyph_height,
-        );
-        draw_x += advance_i;
-        idx = (idx + 1) % state.message.len();
-    }
-}
-
-fn animate_scroll_sprite(
-    time: Res<Time>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    mut query: Query<&mut Node, With<ScrollSprite>>,
-) {
-    let elapsed = time.elapsed_secs();
-    let base = windows
-        .single()
-        .map(|window| window.resolution.height() * 0.05)
-        .unwrap_or(SCROLL_BASE_OFFSET);
-    let hover = (elapsed * SCROLL_HOVER_FREQUENCY).sin() * SCROLL_HOVER_AMPLITUDE;
-    for mut layout in query.iter_mut() {
-        layout.bottom = Val::Px(base + hover);
     }
 }
 
@@ -1938,119 +1799,8 @@ fn get_font_data(font: &BitmapFont, images: &Assets<Image>) -> Option<(u32, u32,
     ))
 }
 
-fn glyph_rect_for(font: &MegadethFont, ch: char) -> GlyphRect {
-    let coord = font.coord_for(ch);
-    let cols = font.columns.max(1);
-    let rows = font.rows.max(1);
-    let cell_w = (font.width / cols as u32).max(1);
-    let cell_h = (font.height / rows as u32).max(1);
-    let x_base = coord.col as u32 * cell_w;
-    let y_base = coord.row as u32 * cell_h;
-    let mut min_x = cell_w;
-    let mut max_x = 0;
-    let mut min_y = cell_h;
-    let mut max_y = 0;
-    let threshold = 32u8;
-    for y in 0..cell_h {
-        let sy = y_base + y;
-        if sy >= font.height {
-            break;
-        }
-        for x in 0..cell_w {
-            let sx = x_base + x;
-            if sx >= font.width {
-                break;
-            }
-            let idx = ((sy * font.width + sx) * 4) as usize;
-            let r = font.pixels[idx];
-            let g = font.pixels[idx + 1];
-            let b = font.pixels[idx + 2];
-            let a = font.pixels[idx + 3];
-            let luminance = ((r as u16 + g as u16 + b as u16) / 3) as u8;
-            if a < 16 && luminance < threshold {
-                continue;
-            }
-            if x < min_x {
-                min_x = x;
-            }
-            if x > max_x {
-                max_x = x;
-            }
-            if y < min_y {
-                min_y = y;
-            }
-            if y > max_y {
-                max_y = y;
-            }
-        }
-    }
-    if max_x < min_x || max_y < min_y {
-        return GlyphRect {
-            x: x_base,
-            y: y_base,
-            width: cell_w,
-            height: cell_h,
-        };
-    }
-    GlyphRect {
-        x: x_base + min_x,
-        y: y_base + min_y,
-        width: (max_x - min_x + 1).max(1),
-        height: (max_y - min_y + 1).max(1),
-    }
-}
 
-fn blit_scaled_glyph(
-    src_pixels: &[u8],
-    src_width: u32,
-    rect: GlyphRect,
-    dst_pixels: &mut [u8],
-    dst_width: u32,
-    dst_height: u32,
-    dest_x: i32,
-    dest_y: i32,
-    target_width: u32,
-    target_height: u32,
-) {
-    if rect.width == 0 || rect.height == 0 {
-        return;
-    }
-    let scale_x = rect.width as f32 / target_width.max(1) as f32;
-    let scale_y = rect.height as f32 / target_height.max(1) as f32;
-    for ty in 0..target_height {
-        let sy = rect.y
-            + ((ty as f32) * scale_y)
-                .floor()
-                .clamp(0.0, (rect.height - 1) as f32) as u32;
-        let dy = dest_y + ty as i32;
-        if dy < 0 || dy >= dst_height as i32 {
-            continue;
-        }
-        for tx in 0..target_width {
-            let sx = rect.x
-                + ((tx as f32) * scale_x)
-                    .floor()
-                    .clamp(0.0, (rect.width - 1) as f32) as u32;
-            let dx = dest_x + tx as i32;
-            if dx < 0 || dx >= dst_width as i32 {
-                continue;
-            }
-            let src_index = ((sy * src_width + sx) * 4) as usize;
-            let rgba = &src_pixels[src_index..src_index + 4];
-            if rgba[3] == 0 {
-                continue;
-            }
-            let luminance = (rgba[0] as u32 + rgba[1] as u32 + rgba[2] as u32) / 3;
-            if luminance < 48 {
-                continue;
-            }
-            let dst_index = (((dy as u32) * dst_width + dx as u32) * 4) as usize;
-            dst_pixels[dst_index..dst_index + 4].copy_from_slice(rgba);
-        }
-    }
-}
 
-/// Create empty 1x1 transparent image
 fn create_empty_image(handle: &Handle<Image>, images: &mut Assets<Image>) {
     if let Some(image) = images.get_mut(handle) {
         image.resize(Extent3d {
