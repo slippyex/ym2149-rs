@@ -43,3 +43,5 @@ full = ["effects", "digidrums"]
 effects = []
 # Enable digi-drums support
 digidrums = []
+# Enable extended parity/regression tests that require external assets
+extended-tests = []

@@ -284,6 +284,33 @@ impl ArkosPlayer {
         }
     }
 
+    /// Get mutable access to a PSG chip by index.
+    pub fn chip_mut(&mut self, index: usize) -> Option<&mut Ym2149> {
+        if index < self.psg_bank.psg_count() {
+            Some(self.psg_bank.get_chip_mut(index))
+        } else {
+            None
+        }
+    }
+
+    /// Mute or unmute a global channel (0 = PSG0:A, 1 = PSG0:B, 2 = PSG0:C, 3 = PSG1:A, ...).
+    pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        let psg_idx = channel / 3;
+        let channel_in_psg = channel % 3;
+        if let Some(chip) = self.chip_mut(psg_idx) {
+            chip.set_channel_mute(channel_in_psg, mute);
+        }
+    }
+
+    /// Check whether a global channel is muted.
+    pub fn is_channel_muted(&self, channel: usize) -> bool {
+        let psg_idx = channel / 3;
+        let channel_in_psg = channel % 3;
+        self.chip(psg_idx)
+            .map(|chip| chip.is_channel_muted(channel_in_psg))
+            .unwrap_or(false)
+    }
+
     /// Get current absolute tick (line * speed + tick)
     pub fn current_tick_index(&self) -> usize {
         let line_offset = self.calculate_line_offset();
@@ -933,7 +960,7 @@ fn frames_to_registers(psg_idx: usize, frames: &[ChannelFrame], prev: &mut [u8; 
     regs
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "extended-tests"))]
 mod tests {
     use super::*;
     use crate::parser::load_aks;
@@ -959,10 +986,8 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "..",
             "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
+            "examples",
+            "arkos",
             "Doclands - Pong Cracktro (YM).aks",
         ]
         .iter()
@@ -986,25 +1011,22 @@ mod tests {
         );
     }
 
-    fn data_path(parts: &[&str]) -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        for part in parts {
-            path.push(part);
-        }
-        path
+    fn data_path(file: &str) -> PathBuf {
+        [
+            env!("CARGO_MANIFEST_DIR"),
+            "..",
+            "..",
+            "examples",
+            "arkos",
+            file,
+        ]
+        .iter()
+        .collect()
     }
 
     #[test]
     fn at2_first_tick_is_silent() {
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker2",
-            "Excellence in Art 2018 - Just add cream.aks",
-        ]);
+        let aks_path = data_path("Excellence in Art 2018 - Just add cream.aks");
         let song_data = std::fs::read(aks_path).expect("read AT2 AKS");
         let song = load_aks(&song_data).expect("parse AT2 AKS");
         let mut player = ArkosPlayer::new(song, 0).expect("init AT2 player");
@@ -1033,28 +1055,12 @@ mod tests {
     #[test]
     #[ignore]
     fn doclands_matches_reference_ym() {
-        let ym_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).ym",
-        ]);
+        let ym_path = data_path("Doclands - Pong Cracktro (YM).ym");
         let ym_data = std::fs::read(ym_path).expect("read reference YM");
         let parser = Ym6Parser;
         let (ym_frames, header, _, _) = parser.parse_full(&ym_data).expect("parse YM");
 
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).aks",
-        ]);
+        let aks_path = data_path("Doclands - Pong Cracktro (YM).aks");
         let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
         let song = load_aks(&song_data).expect("parse Doclands AKS");
         let mut player = ArkosPlayer::new(song, 0).expect("init player");
@@ -1138,28 +1144,12 @@ mod tests {
     #[test]
     #[ignore]
     fn lop_ears_matches_reference_ym() {
-        let ym_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Andy Severn - Lop Ears.ym",
-        ]);
+        let ym_path = data_path("Andy Severn - Lop Ears.ym");
         let ym_data = std::fs::read(ym_path).expect("read Lop Ears YM");
         let parser = Ym6Parser;
         let (ym_frames, header, _, _) = parser.parse_full(&ym_data).expect("parse Lop Ears YM");
 
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Andy Severn - Lop Ears.aks",
-        ]);
+        let aks_path = data_path("Andy Severn - Lop Ears.aks");
         let song_data = std::fs::read(aks_path).expect("read Lop Ears AKS");
         let song = load_aks(&song_data).expect("parse Lop Ears AKS");
         #[cfg(test)]
@@ -1242,15 +1232,7 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_doclands_first_cell() {
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).aks",
-        ]);
+        let aks_path = data_path("Doclands - Pong Cracktro (YM).aks");
         let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
         let song = load_aks(&song_data).expect("parse Doclands AKS");
         let subsong = &song.subsongs[0];
@@ -1311,15 +1293,7 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_doclands_pattern_tracks() {
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).aks",
-        ]);
+        let aks_path = data_path("Doclands - Pong Cracktro (YM).aks");
         let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
         let song = load_aks(&song_data).expect("parse Doclands AKS");
         let subsong = &song.subsongs[0];
@@ -1337,15 +1311,7 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_doclands_track_cells() {
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).aks",
-        ]);
+        let aks_path = data_path("Doclands - Pong Cracktro (YM).aks");
         let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
         let song = load_aks(&song_data).expect("parse Doclands AKS");
         let subsong = &song.subsongs[0];
@@ -1363,28 +1329,12 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_doclands_first_frames_registers() {
-        let ym_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).ym",
-        ]);
+        let ym_path = data_path("Doclands - Pong Cracktro (YM).ym");
         let ym_data = std::fs::read(ym_path).expect("read reference YM");
         let parser = Ym6Parser;
         let (ym_frames, _, _, _) = parser.parse_full(&ym_data).expect("parse YM");
 
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).aks",
-        ]);
+        let aks_path = data_path("Doclands - Pong Cracktro (YM).aks");
         let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
         let song = load_aks(&song_data).expect("parse Doclands AKS");
         let mut player = ArkosPlayer::new(song, 0).expect("init doc player");
@@ -1419,15 +1369,7 @@ mod tests {
     #[test]
     #[ignore]
     fn debug_doclands_speed_tracks() {
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker3",
-            "Doclands - Pong Cracktro (YM).aks",
-        ]);
+        let aks_path = data_path("Doclands - Pong Cracktro (YM).aks");
         let song_data = std::fs::read(aks_path).expect("read Doclands AKS");
         let song = load_aks(&song_data).expect("parse Doclands AKS");
         let subsong = &song.subsongs[0];
@@ -1447,28 +1389,12 @@ mod tests {
     #[test]
     #[ignore]
     fn at2_matches_reference_ym() {
-        let ym_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker2",
-            "Excellence in Art 2018 - Just add cream.ym",
-        ]);
+        let ym_path = data_path("Excellence in Art 2018 - Just add cream.ym");
         let ym_data = std::fs::read(ym_path).expect("read AT2 YM");
         let parser = Ym6Parser;
         let (ym_frames, header, _, _) = parser.parse_full(&ym_data).expect("parse AT2 YM");
 
-        let aks_path = data_path(&[
-            "..",
-            "..",
-            "arkostracker3",
-            "packageFiles",
-            "songs",
-            "ArkosTracker2",
-            "Excellence in Art 2018 - Just add cream.aks",
-        ]);
+        let aks_path = data_path("Excellence in Art 2018 - Just add cream.aks");
         let song_data = std::fs::read(aks_path).expect("read AT2 AKS");
         let song = load_aks(&song_data).expect("parse AT2 AKS");
         let mut player = ArkosPlayer::new(song, 0).expect("init AT2 player");

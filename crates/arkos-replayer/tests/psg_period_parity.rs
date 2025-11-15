@@ -1,3 +1,5 @@
+#![cfg(feature = "extended-tests")]
+
 use arkos_replayer::format::Note;
 use arkos_replayer::psg;
 

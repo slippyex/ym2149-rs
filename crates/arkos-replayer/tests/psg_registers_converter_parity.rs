@@ -1,3 +1,5 @@
+#![cfg(feature = "extended-tests")]
+
 use arkos_replayer::format::{ChannelLink, InstrumentCell};
 use arkos_replayer::psg_registers::{
     DEFAULT_HARDWARE_ENVELOPE, HARDWARE_VOLUME_VALUE, PsgRegisters,

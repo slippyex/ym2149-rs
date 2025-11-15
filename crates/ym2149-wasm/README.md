@@ -1,10 +1,10 @@
 # ym2149-wasm
 
-WebAssembly bindings for the YM2149 PSG emulator - play YM chiptune files directly in your browser!
+ WebAssembly bindings for the YM2149 PSG emulator - play YM chiptunes and Arkos Tracker projects directly in your browser!
 
 ## Features
 
-- 🎵 Play YM2-YM6 format files in the browser
+- 🎵 Play YM2-YM6 and Arkos Tracker `.aks` files in the browser
 - 🎮 Full playback control (play, pause, stop, seek)
 - 🔊 Volume control and channel muting
 - 📊 Real-time waveform data for visualizations

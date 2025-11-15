@@ -31,9 +31,9 @@ Then open: **http://localhost:8000/simple-player.html**
 
 ## What to Test
 
-1. **Load a YM file:**
-   - Click "📁 Load YM File"
-   - Select any `.ym` file from the examples directory
+1. **Load a YM/AKS file:**
+   - Click "📁 Load YM / AKS File"
+   - Select any `.ym` or `.aks` file from the examples directory
    - Test files included:
      - `Ashtray.ym`
      - `Credits.ym`
@@ -41,6 +41,8 @@ Then open: **http://localhost:8000/simple-player.html**
      - `Prelude.ym`
      - `Scout.ym`
      - `Steps.ym`
+     - `Doclands-TinyThings.aks`
+     - `Digitest.aks`
 
 2. **Playback Controls:**
    - ▶️ Play - Start playback
@@ -113,6 +115,22 @@ wasm-pack build --target web
 ```bash
 cp pkg/ym2149_wasm* examples/
 ```
+
+> If the browser still shows the old UI (e.g., no AKS entries), ensure
+> the freshly built files from `pkg/` replaced the ones under
+> `examples/pkg/` before refreshing the page.
+
+#### Shortcut
+
+From the repo root you can run:
+
+```bash
+scripts/build-wasm-examples.sh --release
+```
+
+This script runs `wasm-pack`, copies the `pkg/` folder into
+`crates/ym2149-wasm/examples/pkg/`, and prints a reminder to reload the
+page.
 
 ### Re-test
 

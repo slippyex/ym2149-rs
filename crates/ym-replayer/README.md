@@ -8,6 +8,9 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
 
 - **YM Format Support**: YM2, YM3, YM5, YM6 file formats with LHA decompression
 - **Tracker Modes**: YMT1 and YMT2 tracker format support
+- **Format Profiles**: `FormatProfile` trait encapsulates format quirks (YM2 drum mixing, YM5 effect encoding, YM6 sentinel handling) so new formats plug in without bloating `Ym6PlayerGeneric`
+- **Frame Sequencer**: Dedicated `FrameSequencer` stores frames + timing and exposes seek/loop APIs
+- **Effects Pipeline**: `EffectsPipeline` wraps the low-level `EffectsManager`, tracking SID/digidrum state for visualization/metadata
 - **Hardware Effects**:
   - Mad Max digi-drums
   - YM6 SID voice effects
@@ -42,6 +45,16 @@ let frames = loader::load_file("song.ym")?;
 let data = std::fs::read("song.ym")?;
 let frames = loader::load_bytes(&data)?;
 ```
+
+### Format Profiles & Effects Pipeline
+
+Internally the player is split into three layers:
+
+1. **FrameSequencer** – Owns the register frames, loop point, and PAL/NTSC timing and offers seek/loop APIs.
+2. **FormatProfile** – Trait implemented per format (YM2/YM5/YM6/basic) so register preprocessing and effect decoding live behind `FormatMode` strategies instead of `is_ym*_mode` flags.
+3. **EffectsPipeline** – Wraps the low-level `EffectsManager`, tracks which SID/digidrum voices are active, and feeds the backend every sample.
+
+`load_song` automatically selects the right profile, and custom loaders can create a profile via `ym_replayer::player::create_profile`. Metadata and Bevy visualizers now query effect state through the pipeline.
 
 ## Architecture
 

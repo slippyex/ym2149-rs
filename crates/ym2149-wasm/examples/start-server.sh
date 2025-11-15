@@ -11,8 +11,10 @@ echo "Open your browser and go to:"
 echo "  http://localhost:8000/simple-player.html"
 echo ""
 echo "Test files available:"
-ls -1 *.ym 2>/dev/null | while read file; do
-    echo "  - $file"
+for pattern in "*.ym" "*.aks"; do
+    ls -1 $pattern 2>/dev/null | while read file; do
+        echo "  - $file"
+    done
 done
 echo ""
 echo "Press Ctrl+C to stop the server"

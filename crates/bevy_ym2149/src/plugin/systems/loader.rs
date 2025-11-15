@@ -1,7 +1,7 @@
 //! Track loading systems and helpers
 
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
-use crate::playback::TrackSource;
+use crate::playback::{TrackSource, Ym2149Playback};
 use bevy::prelude::*;
 use bevy::tasks::{IoTaskPool, Task, block_on, poll_once};
 use std::collections::hash_map::Entry;
@@ -37,6 +37,18 @@ pub(super) enum SourceLoadResult {
     Pending,
     Ready(LoadedBytes),
     Failed(String),
+}
+
+pub(super) fn current_track_source(playback: &Ym2149Playback) -> Option<TrackSource> {
+    playback
+        .source_bytes()
+        .map(TrackSource::Bytes)
+        .or_else(|| {
+            playback
+                .source_path()
+                .map(|path| TrackSource::File(path.to_owned()))
+        })
+        .or_else(|| playback.source_asset().cloned().map(TrackSource::Asset))
 }
 
 /// Load track source (file or bytes)

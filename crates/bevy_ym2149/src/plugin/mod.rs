@@ -8,7 +8,10 @@ mod systems;
 
 pub use config::Ym2149PluginConfig;
 
-use self::systems::{initialize_playback, update_playback};
+use self::systems::{
+    FrameAudioData, drive_playback_state, emit_playback_diagnostics, initialize_playback,
+    process_playback_frames, publish_bridge_audio,
+};
 use crate::audio_bridge::{
     AudioBridgeBuffers, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice, BridgeAudioSinks,
     drive_bridge_audio_buffers, handle_bridge_requests,
@@ -79,14 +82,15 @@ impl Plugin for Ym2149Plugin {
         app.add_message::<MusicStateRequest>();
         app.add_message::<PlaylistAdvanceRequest>();
         app.add_message::<AudioBridgeRequest>();
+        app.add_message::<FrameAudioData>();
 
         // Core playback lifecycle.
-        app.add_systems(PreUpdate, initialize_playback);
+        app.add_systems(PreUpdate, (initialize_playback, drive_playback_state));
         // Spatial audio removed - use Bevy's native spatial audio instead
         // if self.config.spatial_audio {
         //     app.add_systems(Update, update_spatial_audio);
         // }
-        app.add_systems(Update, update_playback);
+        app.add_systems(Update, process_playback_frames);
         // Optional playlist support.
         if self.config.playlists {
             app.init_asset::<Ym2149Playlist>();
@@ -101,6 +105,10 @@ impl Plugin for Ym2149Plugin {
             );
         }
 
+        if self.config.channel_events || self.config.diagnostics {
+            app.add_systems(Update, emit_playback_diagnostics);
+        }
+
         // Optional music state graph.
         if self.config.music_state {
             app.init_resource::<MusicStateGraph>();
@@ -113,7 +121,14 @@ impl Plugin for Ym2149Plugin {
             app.init_resource::<AudioBridgeMixes>();
             app.init_resource::<BridgeAudioDevice>();
             app.init_resource::<BridgeAudioSinks>();
-            app.add_systems(Update, (handle_bridge_requests, drive_bridge_audio_buffers));
+            app.add_systems(
+                Update,
+                (
+                    publish_bridge_audio,
+                    handle_bridge_requests,
+                    drive_bridge_audio_buffers,
+                ),
+            );
         }
 
         if self.config.diagnostics {

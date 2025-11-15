@@ -253,9 +253,9 @@
         <div class="subtitle">Atari ST Chiptune Player in your Browser</div>
 
         <div class="file-input">
-            <input type="file" id="fileInput" accept=".ym">
+            <input type="file" id="fileInput" accept=".ym,.aks">
             <label for="fileInput" class="file-label">
-                📁 Load YM File
+                📁 Load YM / AKS File
             </label>
         </div>
 
@@ -381,6 +381,23 @@
             log('✓ WASM initialized');
         }
 
+        function describeError(error) {
+            if (error instanceof Error && error.message) {
+                return error.message;
+            }
+            if (typeof error === 'string') {
+                return error;
+            }
+            if (error && typeof error === 'object' && 'message' in error) {
+                return error.message;
+            }
+            try {
+                return JSON.stringify(error);
+            } catch (_) {
+                return String(error);
+            }
+        }
+
         async function loadFile(file) {
             try {
                 log(`Loading file: ${file.name}...`);
@@ -408,8 +425,9 @@
                 log(`  Format: ${metadata.format}, Duration: ${formatTime(metadata.duration_seconds)}`);
 
             } catch (error) {
-                log(`✗ Error loading file: ${error.message}`);
-                alert(`Error loading file: ${error.message}`);
+                const message = describeError(error);
+                log(`✗ Error loading file: ${message}`);
+                alert(`Error loading file: ${message}`);
             }
         }
 
@@ -617,7 +635,8 @@
                     log(`✓ Loaded: ${metadata.title} by ${metadata.author}`);
                     log(`  Format: ${metadata.format}, Duration: ${formatTime(metadata.duration_seconds)}`);
                 } catch (error) {
-                    log(`✗ Error auto-loading file: ${error.message}`);
+                    const message = describeError(error);
+                    log(`✗ Error auto-loading file: ${message}`);
                 }
             }
         }

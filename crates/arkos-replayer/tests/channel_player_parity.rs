@@ -1,3 +1,5 @@
+#![cfg(feature = "extended-tests")]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

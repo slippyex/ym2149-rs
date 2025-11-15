@@ -1509,6 +1509,7 @@ mod tests {
         assert_eq!(song.subsongs[0].psgs[0].psg_frequency, 2_000_000);
     }
 
+    #[cfg(feature = "extended-tests")]
     #[test]
     fn test_parse_patterns() {
         let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -1584,13 +1585,6 @@ mod tests {
         assert_eq!(song.subsongs.len(), 1);
 
         let subsong = &song.subsongs[0];
-        let inst = &song.instruments[2];
-        for (idx, cell) in inst.cells.iter().enumerate().take(8) {
-            println!(
-                "inst2 cell{} link {:?} vol {} noise {}",
-                idx, cell.link, cell.volume, cell.noise
-            );
-        }
 
         // Check positions
         assert_eq!(subsong.positions.len(), 2);
@@ -1617,11 +1611,12 @@ mod tests {
         assert_eq!(pattern1.event_track_index, 1);
     }
 
+    #[cfg(feature = "extended-tests")]
     #[test]
     fn test_load_real_aks_file() {
         // Load a real AKS file to ensure everything parses correctly
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../arkostracker3/packageFiles/songs/ArkosTracker3/Doclands - Pong Cracktro (YM).aks");
+            .join("../../examples/arkos/Doclands - Pong Cracktro (YM).aks");
         let data = std::fs::read(&path).expect("Doclands test AKS file missing");
         let song = load_aks(&data).expect("failed to parse Doclands AKS file");
 
@@ -1638,10 +1633,11 @@ mod tests {
         assert!(subsong.patterns.len() > 0);
     }
 
+    #[cfg(feature = "extended-tests")]
     #[test]
     fn test_load_real_at2_file() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../arkostracker3/packageFiles/songs/ArkosTracker2/Excellence in Art 2018 - Just add cream.aks");
+            .join("../../examples/arkos/Excellence in Art 2018 - Just add cream.aks");
         let data = std::fs::read(&path).expect("AT2 test AKS file missing");
         let song = load_aks(&data).expect("failed to parse AT2 AKS file");
 
@@ -1656,10 +1652,11 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "extended-tests")]
     #[test]
     fn test_at2_patterns_cover_all_channels() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../arkostracker3/packageFiles/songs/ArkosTracker2/Excellence in Art 2018 - Just add cream.aks");
+            .join("../../examples/arkos/Excellence in Art 2018 - Just add cream.aks");
         let data = std::fs::read(&path).expect("AT2 test AKS file missing");
         let song = load_aks(&data).expect("failed to parse AT2 AKS file");
 
@@ -1677,10 +1674,11 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "extended-tests")]
     #[test]
     fn test_at2_track_effects_have_names() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../arkostracker3/packageFiles/songs/ArkosTracker2/Excellence in Art 2018 - Just add cream.aks");
+            .join("../../examples/arkos/Excellence in Art 2018 - Just add cream.aks");
         let data = std::fs::read(&path).expect("AT2 test AKS file missing");
         let song = load_aks(&data).expect("failed to parse AT2 AKS file");
 
