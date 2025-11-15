@@ -1601,6 +1601,7 @@ version = "0.6.0"
 dependencies = [
  "bevy",
  "bevy_ym2149",
+ "ym2149",
 ]
 
 [[package]]
@@ -6086,6 +6087,7 @@ dependencies = [
 name = "ym2149-wasm"
 version = "0.6.0"
 dependencies = [
+ "arkos-replayer",
  "bitflags 2.10.0",
  "console_error_panic_hook",
  "js-sys",

@@ -270,11 +270,11 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
    - Loop point handling
    - Sample generation coordination
 
-3. **Effects Processing**
-   - SID voice effects
-   - Sync Buzzer effects
-   - Mad Max DigiDrums
-   - Effect decoding from register data
+3. **Effects & Profiles**
+   - `FrameSequencer` owns register frames, loop points, and VBL timing
+   - `FormatProfile` encapsulates YM2/YM5/YM6 quirks (register munging + effect decoding)
+   - `EffectsPipeline` wraps the low-level `EffectsManager` and tracks SID/digidrum state
+   - All format-specific logic now lives behind `FormatMode` strategies instead of `is_ym*_mode` flags
 
 ### Module Organization
 
@@ -292,6 +292,8 @@ ym-replayer/src/
 ├── player/
 │   ├── ym_player.rs       # Ym6PlayerGeneric<B> implementation
 │   ├── effects_manager.rs # Effect state management
+│   ├── effects_pipeline.rs# High-level effect wrapper (SID/DigiDrum state)
+│   ├── format_profile.rs  # FormatMode trait & adapters (YM2/YM5/YM6)
 │   ├── ym6/               # YM6 format types and helpers
 │   │   ├── types.rs       # YmFileFormat, LoadSummary, Ym6Info
 │   │   ├── helpers.rs     # Binary reading utilities

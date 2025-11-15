@@ -40,11 +40,19 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 | [`ym-replayer`](crates/ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | [crates.io/crates/ym-replayer](https://crates.io/crates/ym-replayer) | [docs.rs/ym-replayer](https://docs.rs/ym-replayer) |
 | [`ym-replayer-cli`](crates/ym-replayer-cli) | Standalone CLI player with streaming and export | Workspace-only | [crates/ym-replayer-cli/README.md](crates/ym-replayer-cli/README.md) |
 | [`ym-softsynth`](crates/ym-softsynth) | Experimental software synthesizer backend (proof-of-concept) | Workspace-only | [crates/ym-softsynth/README.md](crates/ym-softsynth/README.md) |
+| [`arkos-replayer`](crates/arkos-replayer) | Arkos Tracker 3 (.aks) parser and multi-PSG player | Workspace-only | [crates/arkos-replayer/README.md](crates/arkos-replayer/README.md) |
 | [`bevy_ym2149`](crates/bevy_ym2149) | Bevy audio plugin (playback, playlists, diagnostics, audio bridge) | [crates.io/crates/bevy_ym2149](https://crates.io/crates/bevy_ym2149) | [docs.rs/bevy_ym2149](https://docs.rs/bevy_ym2149) |
 | [`bevy_ym2149_viz`](crates/bevy_ym2149_viz) | Optional visualization systems & UI builders | [crates.io/crates/bevy_ym2149_viz](https://crates.io/crates/bevy_ym2149_viz) | [docs.rs/bevy_ym2149_viz](https://docs.rs/bevy_ym2149_viz) |
 | [`bevy_ym2149_examples`](crates/bevy_ym2149_examples) | Runnable Bevy demos (basic, advanced, crossfade, feature showcase, demoscene) | Workspace-only | [crates/bevy_ym2149_examples/README.md](crates/bevy_ym2149_examples/README.md) |
 | [`ym2149-wasm`](crates/ym2149-wasm) | WebAssembly bindings for browser playback ([web demo](https://markusvelten.github.io/ym2149-rs/)) | Workspace-only | [crates/ym2149-wasm/README.md](crates/ym2149-wasm/README.md) |
 | [`ym2149-bevy`](crates/ym2149-bevy) | Legacy re-export (shim to `bevy_ym2149`) | [crates.io/crates/ym2149-bevy](https://crates.io/crates/ym2149-bevy) | – |
+
+> **Why Arkos Tracker?**  
+> It marries the classic step-sequencer workflow with modern comforts:
+> multiple YM2149/AY PSGs per song, visual instrument designers,
+> blended software/hardware envelopes, and native export pipelines (like
+> this repo). Perfect if you want authentic 8-bit character without
+> giving up on flexible tooling.
 
 <img src="docs/screenshots/advanced_example.png" alt="Advanced Bevy example" width="780">
 
@@ -147,6 +155,11 @@ Need a reference scene? `cargo run --example advanced_example -p bevy_ym2149_exa
 - `crates/bevy_ym2149_examples/README.md` – example matrix + screenshot gallery
 - [ARCHITECTURE.md](ARCHITECTURE.md) – deeper dive into the emulator internals
 - [crates/ym2149-core/STREAMING_GUIDE.md](crates/ym2149-core/STREAMING_GUIDE.md) – low-latency streaming details
+- `examples/arkos/` – curated Arkos Tracker `.ym/.aks` files for regression tests and the wasm demo
+
+Need to refresh the wasm demo bundle? Run `scripts/build-wasm-examples.sh`
+from the repo root to rebuild via `wasm-pack` and copy the output into
+`crates/ym2149-wasm/examples/pkg/`.
 
 ## Testing
 
