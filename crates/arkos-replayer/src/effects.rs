@@ -322,8 +322,10 @@ mod tests {
 
     #[test]
     fn test_glide_check_reached() {
-        let mut glide = GlideState::default();
-        glide.speed = FixedPoint::from_digits(0x10);
+        let mut glide = GlideState {
+            speed: FixedPoint::from_digits(0x10),
+            ..Default::default()
+        };
         glide.start(100, 200, 0);
 
         assert!(!glide.check_reached(150));

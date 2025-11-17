@@ -32,17 +32,17 @@ use bevy_ym2149_viz::Ym2149VizPlugin;
 use demoscene::{
     config::{PLAY_MUSIC, VisualEffectsConfig, YM_TRACK_PATH, ease_out_cubic},
     logo::{
-        animate_logo_hover, animate_orbiting_stars, setup_logo_mesh, setup_orbiting_stars,
-        update_logo_material, LogoMaterial,
+        LogoMaterial, animate_logo_hover, animate_orbiting_stars, setup_logo_mesh,
+        setup_orbiting_stars, update_logo_material,
     },
     materials::{
-        update_uniforms, CrtMaterialHandle, CrtPostMaterial, CrtState, CubeFacesMaterial,
-        MaterialHandle, SceneRenderTarget,
+        CrtMaterialHandle, CrtPostMaterial, CrtState, CubeFacesMaterial, MaterialHandle,
+        SceneRenderTarget, update_uniforms,
     },
     overlay::{
-        apply_background_swing, apply_swing_animation, feed_overlay_script, handle_push_events,
-        setup_text_overlay, spawn_spectrum_bars, typewriter_update, BeatPulse, OverlayScript,
-        TextQueue, TextWriterState,
+        BeatPulse, OverlayScript, TextQueue, TextWriterState, apply_background_swing,
+        apply_swing_animation, feed_overlay_script, handle_push_events, setup_text_overlay,
+        spawn_spectrum_bars, typewriter_update,
     },
 };
 

@@ -1,9 +1,9 @@
 use std::collections::{HashMap, VecDeque};
 
 use bevy::{
+    camera::visibility::RenderLayers,
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
-    camera::visibility::RenderLayers,
     ui::{
         AlignItems, AlignSelf, BackgroundColor, FlexDirection, GlobalZIndex, JustifyContent,
         JustifySelf, Node, PositionType, UiRect, Val,
@@ -24,7 +24,7 @@ use super::config::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum AnimationType {
     #[default]
-    Typewriter,     // Original: character by character reveal
+    Typewriter, // Original: character by character reveal
     BounceIn,       // Whole text scales from small with bounce (easeOutBounce)
     StaggeredSlide, // Characters slide in from left with staggered timing
     SimpleFade,     // Whole text fades in with alpha (easeOutCubic)

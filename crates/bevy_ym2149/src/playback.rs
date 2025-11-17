@@ -163,6 +163,8 @@ pub struct Ym2149Playback {
     /// Right channel gain used during stereo mixing.
     /// Use the [`set_stereo_gain()`](Self::set_stereo_gain) method to modify
     pub(crate) right_gain: f32,
+    /// Shared stereo gain handle used by both decoder and diagnostics.
+    pub(crate) stereo_gain: Arc<RwLock<(f32, f32)>>,
     /// Internal YM player instance (created by plugin systems)
     ///
     /// Uses `Arc<RwLock<_>>` for shared ownership with the audio decoder.
@@ -223,6 +225,7 @@ impl Ym2149Playback {
             volume: 1.0,
             left_gain: 1.0,
             right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
             player: None,
             needs_reload: false,
             song_title: String::new(),
@@ -248,6 +251,7 @@ impl Ym2149Playback {
             volume: 1.0,
             left_gain: 1.0,
             right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
             player: None,
             needs_reload: false,
             song_title: String::new(),
@@ -273,6 +277,7 @@ impl Ym2149Playback {
             volume: 1.0,
             left_gain: 1.0,
             right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
             player: None,
             needs_reload: false,
             song_title: String::new(),
@@ -305,6 +310,7 @@ impl Ym2149Playback {
             volume: 1.0,
             left_gain: 1.0,
             right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
             player: Some(player),
             needs_reload: false,
             song_title: metadata.title.clone(),
@@ -394,10 +400,15 @@ impl Ym2149Playback {
 
     /// Set stereo gains (pan/attenuation) applied during mixing.
     pub fn set_stereo_gain(&mut self, left: f32, right: f32) {
-        self.left_gain = left.clamp(0.0, 1.0);
-        self.right_gain = right.clamp(0.0, 1.0);
+        let clamped_left = left.clamp(0.0, 1.0);
+        let clamped_right = right.clamp(0.0, 1.0);
+        {
+            let mut gains = self.stereo_gain.write();
+            *gains = (clamped_left, clamped_right);
+        }
+        self.left_gain = clamped_left;
+        self.right_gain = clamped_right;
     }
-
 
     /// Replace the playback source with a new filesystem path.
     pub fn set_source_path(&mut self, path: impl Into<String>) {
@@ -534,6 +545,7 @@ impl Default for Ym2149Playback {
             volume: 1.0,
             left_gain: 1.0,
             right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
             player: None,
             needs_reload: false,
             song_title: String::new(),

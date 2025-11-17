@@ -1083,26 +1083,22 @@ mod tests {
                     "Context at position {} line {}:",
                     player.current_position, player.current_line
                 );
-                if let Some(subsong) = player.song.subsongs.get(player.subsong_index) {
-                    if let Some(pos) = subsong.positions.get(player.current_position) {
-                        if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
-                            println!("  pattern track indexes {:?}", pattern.track_indexes);
-                        }
-                    }
+                if let Some(subsong) = player.song.subsongs.get(player.subsong_index)
+                    && let Some(pos) = subsong.positions.get(player.current_position)
+                    && let Some(pattern) = subsong.patterns.get(pos.pattern_index)
+                {
+                    println!("  pattern track indexes {:?}", pattern.track_indexes);
                 }
                 for ch in 0..player.channel_players.len() {
-                    if let Some(subsong) = player.song.subsongs.get(player.subsong_index) {
-                        if let Some(pos) = subsong.positions.get(player.current_position) {
-                            if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
-                                if let Some(track_idx) = pattern.track_indexes.get(ch) {
-                                    println!("  ch{ch} uses track {}", track_idx);
-                                    if let Some(track) = subsong.tracks.get(track_idx) {
-                                        let indices: Vec<_> =
-                                            track.cells.iter().map(|c| c.index).collect();
-                                        println!("    track cells {:?}", indices);
-                                    }
-                                }
-                            }
+                    if let Some(subsong) = player.song.subsongs.get(player.subsong_index)
+                        && let Some(pos) = subsong.positions.get(player.current_position)
+                        && let Some(pattern) = subsong.patterns.get(pos.pattern_index)
+                        && let Some(track_idx) = pattern.track_indexes.get(ch)
+                    {
+                        println!("  ch{ch} uses track {}", track_idx);
+                        if let Some(track) = subsong.tracks.get(track_idx) {
+                            let indices: Vec<_> = track.cells.iter().map(|c| c.index).collect();
+                            println!("    track cells {:?}", indices);
                         }
                     }
                     let ctx = player
@@ -1186,14 +1182,12 @@ mod tests {
                     player.current_position, player.current_line
                 );
                 for ch in 0..player.channel_players.len() {
-                    if let Some(subsong) = player.song.subsongs.get(player.subsong_index) {
-                        if let Some(pos) = subsong.positions.get(player.current_position) {
-                            if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
-                                if let Some(track_idx) = pattern.track_indexes.get(ch) {
-                                    println!("  ch{ch} uses track {}", track_idx);
-                                }
-                            }
-                        }
+                    if let Some(subsong) = player.song.subsongs.get(player.subsong_index)
+                        && let Some(pos) = subsong.positions.get(player.current_position)
+                        && let Some(pattern) = subsong.patterns.get(pos.pattern_index)
+                        && let Some(track_idx) = pattern.track_indexes.get(ch)
+                    {
+                        println!("  ch{ch} uses track {}", track_idx);
                     }
                     let ctx = player
                         .effect_context
@@ -1237,7 +1231,7 @@ mod tests {
         for channel_idx in 0..3 {
             if let Some((track_index, cell)) = subsong
                 .positions
-                .get(0)
+                .first()
                 .and_then(|position| subsong.patterns.get(position.pattern_index))
                 .and_then(|pattern| {
                     pattern
@@ -1353,8 +1347,8 @@ mod tests {
                 &expected[..14],
                 &actual[..14]
             );
-            for ch in 0..3 {
-                let out = &frames[ch].psg;
+            for (ch, frame) in frames.iter().enumerate().take(3) {
+                let out = &frame.psg;
                 let state = player.channel_players[ch].debug_state();
                 println!(
                     "   ch{} vol {:>2} noise {:>2} period {:>4} inst {:?}",
@@ -1410,29 +1404,27 @@ mod tests {
                     "AT2 mismatch at frame {} position {} line {}",
                     idx, player.current_position, player.current_line
                 );
-                if let Some(subsong) = player.song.subsongs.get(player.subsong_index) {
-                    if let Some(pos) = subsong.positions.get(player.current_position) {
-                        if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
-                            println!(
-                                "  pattern {} track idx {:?} speed {} event {}",
-                                pattern.index,
-                                pattern.track_indexes,
-                                pattern.speed_track_index,
-                                pattern.event_track_index
-                            );
-                        }
-                        println!("  position transpositions {:?}", pos.transpositions);
+                if let Some(subsong) = player.song.subsongs.get(player.subsong_index)
+                    && let Some(pos) = subsong.positions.get(player.current_position)
+                {
+                    if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
+                        println!(
+                            "  pattern {} track idx {:?} speed {} event {}",
+                            pattern.index,
+                            pattern.track_indexes,
+                            pattern.speed_track_index,
+                            pattern.event_track_index
+                        );
                     }
+                    println!("  position transpositions {:?}", pos.transpositions);
                 }
                 for ch in 0..player.channel_players.len().min(3) {
-                    if let Some(subsong) = player.song.subsongs.get(player.subsong_index) {
-                        if let Some(pos) = subsong.positions.get(player.current_position) {
-                            if let Some(pattern) = subsong.patterns.get(pos.pattern_index) {
-                                if let Some(track_idx) = pattern.track_indexes.get(ch) {
-                                    println!("  ch{ch} uses track {}", track_idx);
-                                }
-                            }
-                        }
+                    if let Some(subsong) = player.song.subsongs.get(player.subsong_index)
+                        && let Some(pos) = subsong.positions.get(player.current_position)
+                        && let Some(pattern) = subsong.patterns.get(pos.pattern_index)
+                        && let Some(track_idx) = pattern.track_indexes.get(ch)
+                    {
+                        println!("  ch{ch} uses track {}", track_idx);
                     }
                     let ctx = player
                         .effect_context

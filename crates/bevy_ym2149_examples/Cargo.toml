@@ -34,7 +34,3 @@ path = "examples/feature_showcase.rs"
 [[example]]
 name = "demoscene"
 path = "examples/demoscene.rs"
-
-[[example]]
-name = "space_shooter"
-path = "examples/space_shooter.rs"

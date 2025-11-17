@@ -174,8 +174,12 @@ pub(in crate::plugin) fn initialize_playback(
                 .as_ref()
                 .map(|m| m.total_samples())
                 .unwrap_or(usize::MAX);
-            let audio_source =
-                Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
+            let audio_source = Ym2149AudioSource::from_shared_player(
+                player_arc,
+                metadata,
+                total_samples,
+                playback.stereo_gain.clone(),
+            );
             let audio_handle = audio_assets.add(audio_source);
             let settings = if playback.state == PlaybackState::Playing {
                 PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(playback.volume))
@@ -217,13 +221,14 @@ pub(in crate::plugin) fn initialize_playback(
             // Clone data for both player and audio source creation
             let data_for_audio = loaded.data.clone();
 
-            let mut load = match load_player_from_bytes(loaded.data, loaded.metadata.as_ref()) {
-                Ok(load) => load,
-                Err(err) => {
-                    error!("Failed to initialize YM2149 player: {}", err);
-                    continue;
-                }
-            };
+            let mut load =
+                match load_player_from_bytes(loaded.data.clone(), loaded.metadata.as_ref()) {
+                    Ok(load) => load,
+                    Err(err) => {
+                        error!("Failed to initialize YM2149 player: {}", err);
+                        continue;
+                    }
+                };
 
             playback.song_title = load.metadata.title.clone();
             playback.song_author = load.metadata.author.clone();
@@ -235,11 +240,16 @@ pub(in crate::plugin) fn initialize_playback(
                 error!("Failed to start player: {}", e);
             }
 
-            playback.player = Some(Arc::new(RwLock::new(load.player)));
+            let player_arc = Arc::new(RwLock::new(load.player));
+            // Diagnostics/crossfade use this player; audio playback uses the audio source below
+            playback.player = Some(player_arc);
             playback.needs_reload = false;
 
             // Create a Ym2149AudioSource asset from the loaded data
-            let audio_source = match Ym2149AudioSource::new(data_for_audio) {
+            let audio_source = match Ym2149AudioSource::new_with_gains(
+                data_for_audio,
+                playback.stereo_gain.clone(),
+            ) {
                 Ok(source) => source,
                 Err(err) => {
                     error!("Failed to create audio source: {}", err);

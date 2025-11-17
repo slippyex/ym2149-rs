@@ -215,29 +215,29 @@ fn demo_keyboard_controls(
     }
 
     // Secondary playback controls (independent)
-    if let Some(secondary) = secondary {
-        if let Ok(mut secondary_player) = playbacks.get_mut(secondary.0) {
-            if keyboard.just_pressed(KeyCode::KeyS) {
-                if secondary_player.is_playing() {
-                    secondary_player.pause();
-                    info!("Secondary playback paused");
-                } else {
-                    secondary_player.play();
-                    info!("Secondary playback started");
-                }
+    if let Some(secondary) = secondary
+        && let Ok(mut secondary_player) = playbacks.get_mut(secondary.0)
+    {
+        if keyboard.just_pressed(KeyCode::KeyS) {
+            if secondary_player.is_playing() {
+                secondary_player.pause();
+                info!("Secondary playback paused");
+            } else {
+                secondary_player.play();
+                info!("Secondary playback started");
             }
+        }
 
-            if keyboard.just_pressed(KeyCode::KeyU) {
-                let new_volume = (secondary_player.volume + 0.1).min(1.0);
-                secondary_player.set_volume(new_volume);
-                info!("Secondary volume: {:.0}%", new_volume * 100.0);
-            }
+        if keyboard.just_pressed(KeyCode::KeyU) {
+            let new_volume = (secondary_player.volume + 0.1).min(1.0);
+            secondary_player.set_volume(new_volume);
+            info!("Secondary volume: {:.0}%", new_volume * 100.0);
+        }
 
-            if keyboard.just_pressed(KeyCode::KeyO) {
-                let new_volume = (secondary_player.volume - 0.1).max(0.0);
-                secondary_player.set_volume(new_volume);
-                info!("Secondary volume: {:.0}%", new_volume * 100.0);
-            }
+        if keyboard.just_pressed(KeyCode::KeyO) {
+            let new_volume = (secondary_player.volume - 0.1).max(0.0);
+            secondary_player.set_volume(new_volume);
+            info!("Secondary volume: {:.0}%", new_volume * 100.0);
         }
     }
 }

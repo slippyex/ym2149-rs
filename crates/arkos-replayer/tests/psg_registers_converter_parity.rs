@@ -136,6 +136,7 @@ fn build_hard_to_soft(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_soft_and_hard(
     noise: u8,
     soft_note: i32,

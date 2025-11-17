@@ -10,7 +10,6 @@ description = "Bevy audio plugin for YM2149 PSG emulator"
 
 [features]
 default = []
-
 [dependencies]
 # Core YM2149 chip emulation (without streaming - we use Bevy audio instead)
 ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator"] }

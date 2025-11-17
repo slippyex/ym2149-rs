@@ -136,10 +136,13 @@ pub struct EffectContext {
 impl EffectContext {
     /// Build the context for a subsong
     pub fn build(song: &AksSong, subsong_index: usize) -> Result<Self> {
-        let subsong = song.subsongs.get(subsong_index).ok_or(ArkosError::InvalidSubsong {
-            index: subsong_index,
-            available: song.subsongs.len(),
-        })?;
+        let subsong = song
+            .subsongs
+            .get(subsong_index)
+            .ok_or(ArkosError::InvalidSubsong {
+                index: subsong_index,
+                available: song.subsongs.len(),
+            })?;
 
         let channel_count = subsong.psgs.len() * 3;
         if channel_count == 0 {
@@ -158,10 +161,12 @@ impl EffectContext {
             let pattern = subsong
                 .patterns
                 .get(position.pattern_index)
-                .ok_or_else(|| ArkosError::InvalidFormat(format!(
-                    "Pattern {} missing for position",
-                    position.pattern_index
-                )))?;
+                .ok_or_else(|| {
+                    ArkosError::InvalidFormat(format!(
+                        "Pattern {} missing for position",
+                        position.pattern_index
+                    ))
+                })?;
 
             let speed_track = subsong.speed_tracks.get(&pattern.speed_track_index);
             let (line_speeds, last_speed) =

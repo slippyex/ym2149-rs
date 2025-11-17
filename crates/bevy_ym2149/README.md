@@ -60,6 +60,11 @@ fn main() {
 }
 ```
 
+### Quick presets
+
+`bevy_ym2149::presets::add_audio_stack(&mut app)` wires the audio plugin with all subsystems enabled.  
+If you want audio + visualization in one go, `bevy_ym2149_viz::add_full_stack(&mut app)` adds both plugins.
+
 ## Subsystem Toggles
 
 Configure the plugin at runtime via `Ym2149PluginConfig`:

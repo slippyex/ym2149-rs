@@ -9,6 +9,7 @@
 mod builders;
 mod components;
 mod helpers;
+mod stack;
 mod systems;
 mod uniforms;
 
@@ -19,6 +20,7 @@ pub use builders::{
     create_song_info_display, create_status_display,
 };
 pub use components::*;
+pub use stack::add_full_stack;
 pub use systems::{
     update_detailed_channel_display, update_oscilloscope, update_song_info, update_song_progress,
     update_status_display,

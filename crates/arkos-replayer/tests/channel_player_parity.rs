@@ -407,7 +407,7 @@ fn compute_period(psg_frequency: f32, reference_frequency: f32, note: Note) -> u
     let frequency = (reference_frequency as f64)
         * 2f64.powf((octave as f64) + ((note_in_octave as f64 - 10.0) / 12.0));
     let period = ((psg_frequency as f64 / 8.0) / frequency).round();
-    period.max(0.0).min(4095.0) as u16
+    period.clamp(0.0, 4095.0) as u16
 }
 
 fn expected_hardware_period(period: u16, ratio: u8) -> u16 {
@@ -592,8 +592,8 @@ fn channel_player_glide_up_soft_only() {
     let song = build_song_with_instruments(vec![empty_instrument(), instrument]);
     let mut player = ChannelPlayer::new(0, Arc::clone(&song), 1_000_000.0, 440.0, 11_025.0);
 
-    let base_cell = test_cell(((1 * 12) + 9) as Note, 1);
-    let glide_cell = cell_with_effect(((2 * 12) + 2) as Note, 1, "pitchGlide", 0x0FFF);
+    let base_cell = test_cell(21, 1);
+    let glide_cell = cell_with_effect(26, 1, "pitchGlide", 0x0FFF);
 
     let expected_periods: &[u16] = &[
         1136, 1136, 1136, 1136, 1136, 1136, 1120, 1104, 1088, 1072, 1056, 1040, 1024, 1008, 992,
@@ -753,14 +753,14 @@ fn channel_player_decaying_software_sound_with_instrument_speed() {
     let base_volumes = [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
     let mut expected_volumes = Vec::new();
     for &value in &base_volumes {
-        expected_volumes.extend(std::iter::repeat(value).take(3));
+        expected_volumes.extend(std::iter::repeat_n(value, 3));
     }
-    expected_volumes.extend(std::iter::repeat(0).take(5));
+    expected_volumes.extend(std::iter::repeat_n(0, 5));
     let instrument = decaying_soft_instrument(&base_volumes, 2, false);
     let song = build_song_with_instruments(vec![empty_instrument(), instrument]);
     let mut player = ChannelPlayer::new(0, Arc::clone(&song), 1_000_000.0, 440.0, 11_025.0);
 
-    let note = ((3 * 12) + 5) as Note;
+    let note = 41;
     let expected_period = compute_period(1_000_000.0, 440.0, note);
     let cell = test_cell(note, 1);
     let speed = 6;

@@ -48,7 +48,9 @@ impl YmSongPlayer {
         };
         let player = ArkosPlayer::new(song, 0)
             .map_err(|e| BevyYm2149Error::Other(format!("AKS player init failed: {e}")))?;
-        Ok(Self::Arkos(Box::new(ArkosBevyPlayer::new(player, metadata))))
+        Ok(Self::Arkos(Box::new(ArkosBevyPlayer::new(
+            player, metadata,
+        ))))
     }
 
     pub(crate) fn new_synth(controller: YmSynthController) -> Self {

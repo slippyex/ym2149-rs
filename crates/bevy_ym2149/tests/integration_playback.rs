@@ -3,8 +3,13 @@
 //! These tests verify the complete playback pipeline including initialization,
 //! frame advancement, state transitions, and event emission.
 
+use std::sync::Arc;
+
 use bevy::prelude::*;
-use bevy_ym2149::{PlaybackState, Ym2149Playback, Ym2149Plugin, Ym2149Settings};
+use bevy_ym2149::{
+    AudioBridgeBuffers, AudioBridgeRequest, PlaybackState, Ym2149AudioSource, Ym2149Playback,
+    Ym2149Plugin, Ym2149Settings,
+};
 
 /// Helper to create a minimal test app with YM2149 plugin
 fn create_test_app() -> App {
@@ -413,9 +418,85 @@ fn test_stereo_gain_control() {
         playback.set_stereo_gain(0.0, 1.0);
         playback.set_stereo_gain(1.0, 1.0);
     }
+}
 
-    // If we get here without panicking, stereo gain control works
-    assert!(true, "Stereo gain control should work without panicking");
+#[test]
+fn test_audio_bridge_receives_samples() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    // Initialize playback
+    app.update();
+
+    // Start playback and request bridge publishing
+    {
+        let mut pb = app.world_mut().entity_mut(entity);
+        let mut playback = pb.get_mut::<Ym2149Playback>().unwrap();
+        playback.play();
+    }
+    {
+        let mut requests = app
+            .world_mut()
+            .resource_mut::<Messages<AudioBridgeRequest>>();
+        requests.write(AudioBridgeRequest { entity });
+    }
+
+    // Allow a few frames to be generated
+    for _ in 0..5 {
+        app.update();
+    }
+
+    let buffers = app.world().resource::<AudioBridgeBuffers>();
+    let samples = buffers.0.get(&entity);
+    assert!(
+        samples.is_some() && !samples.unwrap().is_empty(),
+        "Audio bridge should receive stereo samples"
+    );
+}
+
+#[test]
+fn test_audio_source_shares_player_instance() {
+    let mut app = create_test_app();
+    let ym_data = create_minimal_ym_file();
+
+    let entity = app
+        .world_mut()
+        .spawn(Ym2149Playback::from_bytes(ym_data))
+        .id();
+
+    app.update();
+
+    let playback = app
+        .world()
+        .entity(entity)
+        .get::<Ym2149Playback>()
+        .expect("Playback component present");
+    let player_arc = playback
+        .player_handle()
+        .expect("player should be initialized");
+
+    let handle = app
+        .world()
+        .entity(entity)
+        .get::<bevy::audio::AudioPlayer<Ym2149AudioSource>>()
+        .expect("AudioPlayer should be attached")
+        .0
+        .clone();
+
+    let assets = app.world().resource::<Assets<Ym2149AudioSource>>();
+    let source = assets
+        .get(&handle)
+        .expect("Ym2149AudioSource asset should exist");
+
+    assert!(
+        Arc::ptr_eq(&player_arc, &source.player()),
+        "Audio asset and playback should share the same player instance"
+    );
 }
 
 #[test]

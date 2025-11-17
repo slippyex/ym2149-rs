@@ -10,7 +10,6 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::error::{BevyYm2149Error, Result};
-use crate::playback::PlaybackMetrics;
 use crate::song_player::{SharedSongPlayer, load_song_from_bytes};
 
 /// A loaded YM2149 audio file ready to be played
@@ -26,6 +25,8 @@ pub struct Ym2149AudioSource {
     pub metadata: Ym2149Metadata,
     /// Shared YM player instance for audio generation
     player: SharedSongPlayer,
+    /// Shared stereo gains (left, right) applied during decoding
+    stereo_gain: Arc<RwLock<(f32, f32)>>,
     /// Sample rate for playback
     sample_rate: u32,
     /// Total number of samples in the track
@@ -48,24 +49,13 @@ pub struct Ym2149Metadata {
 }
 
 impl Ym2149AudioSource {
-    /// Create a new audio source from an existing player (for crossfade)
-    pub(crate) fn from_player(
-        player: SharedSongPlayer,
-        data: Vec<u8>,
-        metadata: Ym2149Metadata,
-        metrics: PlaybackMetrics,
-    ) -> Self {
-        Self {
-            data,
-            metadata,
-            player,
-            sample_rate: crate::playback::YM2149_SAMPLE_RATE,
-            total_samples: metrics.total_samples(),
-        }
-    }
-
     /// Create a new audio source from raw YM file data
     pub fn new(data: Vec<u8>) -> Result<Self> {
+        Self::new_with_gains(data, Arc::new(RwLock::new((1.0, 1.0))))
+    }
+
+    /// Create a new audio source from raw YM file data with shared stereo gains
+    pub fn new_with_gains(data: Vec<u8>, stereo_gain: Arc<RwLock<(f32, f32)>>) -> Result<Self> {
         // Load the song to create a player
         let (mut player, metrics, metadata) =
             load_song_from_bytes(&data).map_err(BevyYm2149Error::MetadataExtraction)?;
@@ -81,6 +71,7 @@ impl Ym2149AudioSource {
             data,
             metadata,
             player: Arc::new(RwLock::new(player)),
+            stereo_gain,
             sample_rate,
             total_samples,
         })
@@ -90,11 +81,13 @@ impl Ym2149AudioSource {
         player: SharedSongPlayer,
         metadata: Ym2149Metadata,
         total_samples: usize,
+        stereo_gain: Arc<RwLock<(f32, f32)>>,
     ) -> Self {
         Self {
             data: Vec::new(),
             metadata,
             player,
+            stereo_gain,
             sample_rate: crate::playback::YM2149_SAMPLE_RATE,
             total_samples,
         }
@@ -158,28 +151,39 @@ impl AssetLoader for Ym2149Loader {
 pub struct Ym2149Decoder {
     /// Shared reference to the YM player
     player: SharedSongPlayer,
+    /// Shared stereo gains (left, right)
+    stereo_gain: Arc<RwLock<(f32, f32)>>,
     /// Sample rate in Hz
     sample_rate: u32,
     /// Current sample position
     current_sample: usize,
-    /// Total number of samples
+    /// Total number of samples (mono frames)
     total_samples: usize,
     /// Sample buffer for batch generation
     buffer: Vec<f32>,
     /// Current position in buffer
     buffer_pos: usize,
+    /// Scratch buffer for mono samples
+    mono_buffer: Vec<f32>,
 }
 
 impl Ym2149Decoder {
     /// Create a new decoder
-    fn new(player: SharedSongPlayer, sample_rate: u32, total_samples: usize) -> Self {
+    fn new(
+        player: SharedSongPlayer,
+        stereo_gain: Arc<RwLock<(f32, f32)>>,
+        sample_rate: u32,
+        total_samples: usize,
+    ) -> Self {
         Self {
             player,
+            stereo_gain,
             sample_rate,
             current_sample: 0,
             total_samples,
             buffer: Vec::new(),
             buffer_pos: 0,
+            mono_buffer: Vec::new(),
         }
     }
 
@@ -188,14 +192,24 @@ impl Ym2149Decoder {
         // Generate 882 samples (one VBL frame at 50Hz)
         const SAMPLES_PER_FRAME: usize = 882;
 
-        // Resize buffer if needed (only allocates on first call or size change)
-        if self.buffer.len() != SAMPLES_PER_FRAME {
-            self.buffer.resize(SAMPLES_PER_FRAME, 0.0);
+        // Resize buffers if needed (only allocates on first call or size change)
+        if self.buffer.len() != SAMPLES_PER_FRAME * 2 {
+            self.buffer.resize(SAMPLES_PER_FRAME * 2, 0.0);
+        }
+        if self.mono_buffer.len() != SAMPLES_PER_FRAME {
+            self.mono_buffer.resize(SAMPLES_PER_FRAME, 0.0);
         }
 
         // Reuse existing buffer - no allocation in hot path
         let mut player = self.player.write();
-        player.generate_samples_into(&mut self.buffer);
+        player.generate_samples_into(&mut self.mono_buffer);
+
+        let (left_gain, right_gain) = *self.stereo_gain.read();
+        for (i, sample) in self.mono_buffer.iter().copied().enumerate() {
+            let base = i * 2;
+            self.buffer[base] = sample * left_gain;
+            self.buffer[base + 1] = sample * right_gain;
+        }
         self.buffer_pos = 0;
     }
 }
@@ -205,7 +219,7 @@ impl Iterator for Ym2149Decoder {
 
     fn next(&mut self) -> Option<Self::Item> {
         // Check if we've reached the end
-        if self.current_sample >= self.total_samples {
+        if self.current_sample >= self.total_samples.saturating_mul(2) {
             return None;
         }
 
@@ -230,11 +244,15 @@ impl Iterator for Ym2149Decoder {
 
 impl Source for Ym2149Decoder {
     fn current_frame_len(&self) -> Option<usize> {
-        Some(self.total_samples - self.current_sample)
+        Some(
+            self.total_samples
+                .saturating_mul(2)
+                .saturating_sub(self.current_sample),
+        )
     }
 
     fn channels(&self) -> u16 {
-        1 // Mono output
+        2 // Stereo output
     }
 
     fn sample_rate(&self) -> u32 {
@@ -256,6 +274,7 @@ impl Decodable for Ym2149AudioSource {
     fn decoder(&self) -> Self::Decoder {
         Ym2149Decoder::new(
             Arc::clone(&self.player),
+            Arc::clone(&self.stereo_gain),
             self.sample_rate,
             self.total_samples,
         )

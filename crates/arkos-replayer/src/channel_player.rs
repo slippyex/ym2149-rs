@@ -790,8 +790,8 @@ impl ChannelPlayer {
                     }
 
                     // Apply hardware desync pitch
-                    self.hardware_period = (hw_period as i32 - cell.secondary_pitch as i32)
-                        .clamp(0, 0xFFFF) as u16;
+                    self.hardware_period =
+                        (hw_period as i32 - cell.secondary_pitch as i32).clamp(0, 0xFFFF) as u16;
                 } else if matches!(cell.link, SoftwareAndHardware) {
                     // For SoftAndHard, calculate hardware period independently
                     self.hardware_period = self.calculate_hardware_period(cell);
@@ -808,8 +808,8 @@ impl ChannelPlayer {
                     let sw_period = self.hardware_period << ratio;
 
                     // Apply software desync pitch
-                    self.software_period = (sw_period as i32 - cell.primary_pitch as i32)
-                        .clamp(0, 0xFFF) as u16;
+                    self.software_period =
+                        (sw_period as i32 - cell.primary_pitch as i32).clamp(0, 0xFFF) as u16;
                 }
             }
         }

@@ -734,9 +734,7 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                                 .collect();
                             let decoded =
                                 general_purpose::STANDARD.decode(sanitized).map_err(|e| {
-                                    ArkosError::InvalidFormat(format!(
-                                        "Invalid sample data: {e}"
-                                    ))
+                                    ArkosError::InvalidFormat(format!("Invalid sample data: {e}"))
                                 })?;
                             let pcm: Vec<f32> = decoded
                                 .into_iter()
@@ -1615,7 +1613,7 @@ mod tests {
         let data = std::fs::read(&path).expect("Doclands test AKS file missing");
         let song = load_aks(&data).expect("failed to parse Doclands AKS file");
 
-        assert!(song.subsongs.len() > 0, "expected subsongs in {:?}", path);
+        assert!(!song.subsongs.is_empty(), "expected subsongs in {:?}", path);
         let subsong = &song.subsongs[0];
         eprintln!(
             "doclands subsong debug: positions {} patterns {} tracks {}",
@@ -1623,9 +1621,9 @@ mod tests {
             subsong.patterns.len(),
             subsong.tracks.len()
         );
-        assert!(subsong.psgs.len() > 0);
-        assert!(subsong.positions.len() > 0);
-        assert!(subsong.patterns.len() > 0);
+        assert!(!subsong.psgs.is_empty());
+        assert!(!subsong.positions.is_empty());
+        assert!(!subsong.patterns.is_empty());
     }
 
     #[cfg(feature = "extended-tests")]
@@ -1638,9 +1636,9 @@ mod tests {
 
         assert!(!song.subsongs.is_empty(), "expected subsongs in AT2 song");
         let subsong = &song.subsongs[0];
-        assert!(subsong.psgs.len() > 0);
-        assert!(subsong.positions.len() > 0);
-        assert!(subsong.patterns.len() > 0);
+        assert!(!subsong.psgs.is_empty());
+        assert!(!subsong.positions.is_empty());
+        assert!(!subsong.patterns.is_empty());
         assert!(
             subsong.speed_tracks.contains_key(&0),
             "expected speed track 0 in AT2 song"

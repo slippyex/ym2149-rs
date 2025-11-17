@@ -12,17 +12,17 @@ fn psg_period_cpc() {
     let freq = 1_000_000.0;
     let reference = 440.0;
 
-    assert_eq!(period(freq, reference, 0 as Note), 3822);
-    assert_eq!(period(freq, reference, 1 as Note), 3608);
-    assert_eq!(period(freq, reference, 2 as Note), 3405);
-    assert_eq!(period(freq, reference, 3 as Note), 3214);
-    assert_eq!(period(freq, reference, 11 as Note), 2025);
-    assert_eq!(period(freq, reference, (1 * 12 + 0) as Note), 1911);
-    assert_eq!(period(freq, reference, (1 * 12 + 8) as Note), 1204);
-    assert_eq!(period(freq, reference, (4 * 12 + 0) as Note), 239);
-    assert_eq!(period(freq, reference, (4 * 12 + 11) as Note), 127);
-    assert_eq!(period(freq, reference, (7 * 12 + 0) as Note), 30);
-    assert_eq!(period(freq, reference, (7 * 12 + 11) as Note), 16);
+    assert_eq!(period(freq, reference, 0), 3822);
+    assert_eq!(period(freq, reference, 1), 3608);
+    assert_eq!(period(freq, reference, 2), 3405);
+    assert_eq!(period(freq, reference, 3), 3214);
+    assert_eq!(period(freq, reference, 11), 2025);
+    assert_eq!(period(freq, reference, 12), 1911);
+    assert_eq!(period(freq, reference, 20), 1204);
+    assert_eq!(period(freq, reference, 48), 239);
+    assert_eq!(period(freq, reference, 59), 127);
+    assert_eq!(period(freq, reference, 84), 30);
+    assert_eq!(period(freq, reference, 95), 16);
 }
 
 #[test]
@@ -30,12 +30,12 @@ fn psg_period_cpc_other_ref() {
     let freq = 1_000_000.0;
     let reference = 234.0;
 
-    assert_eq!(period(freq, reference, (0 * 12 + 0) as Note), 7187);
-    assert_eq!(period(freq, reference, (0 * 12 + 11) as Note), 3807);
-    assert_eq!(period(freq, reference, (1 * 12 + 0) as Note), 3594);
-    assert_eq!(period(freq, reference, (4 * 12 + 0) as Note), 449);
-    assert_eq!(period(freq, reference, (7 * 12 + 0) as Note), 56);
-    assert_eq!(period(freq, reference, (7 * 12 + 11) as Note), 30);
+    assert_eq!(period(freq, reference, 0), 7187);
+    assert_eq!(period(freq, reference, 11), 3807);
+    assert_eq!(period(freq, reference, 12), 3594);
+    assert_eq!(period(freq, reference, 48), 449);
+    assert_eq!(period(freq, reference, 84), 56);
+    assert_eq!(period(freq, reference, 95), 30);
 }
 
 #[test]
@@ -43,9 +43,9 @@ fn psg_period_msx() {
     let freq = 1_789_773.0;
     let reference = 440.0;
 
-    assert_eq!(period(freq, reference, (0 * 12 + 0) as Note), 6841);
-    assert_eq!(period(freq, reference, (3 * 12 + 5) as Note), 641);
-    assert_eq!(period(freq, reference, (4 * 12 + 0) as Note), 428);
-    assert_eq!(period(freq, reference, (7 * 12 + 0) as Note), 53);
-    assert_eq!(period(freq, reference, (7 * 12 + 11) as Note), 28);
+    assert_eq!(period(freq, reference, 0), 6841);
+    assert_eq!(period(freq, reference, 41), 641);
+    assert_eq!(period(freq, reference, 48), 428);
+    assert_eq!(period(freq, reference, 84), 53);
+    assert_eq!(period(freq, reference, 95), 28);
 }

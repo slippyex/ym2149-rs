@@ -32,7 +32,7 @@ fn main() {
                 }),
         )
         .add_plugins(Ym2149Plugin::default())
-        .add_plugins(Ym2149VizPlugin::default())
+        .add_plugins(Ym2149VizPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, (handle_file_drop, playback_controls))
         .run();

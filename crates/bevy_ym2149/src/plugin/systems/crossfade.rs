@@ -64,14 +64,17 @@ pub(super) fn process_pending_crossfade(
     let duration = request.duration.max(0.001);
     let player_arc = Arc::new(RwLock::new(load.player));
 
-    let crossfade_metadata = loaded.metadata.unwrap_or(load.metadata.clone());
-
-    let crossfade_audio_source = Ym2149AudioSource::from_player(
-        player_arc.clone(),
+    let crossfade_audio_source = match Ym2149AudioSource::new_with_gains(
         data_for_crossfade_source,
-        crossfade_metadata,
-        load.metrics,
-    );
+        playback.stereo_gain.clone(),
+    ) {
+        Ok(source) => source,
+        Err(err) => {
+            error!("Failed to create crossfade audio source: {}", err);
+            playback.clear_crossfade_request();
+            return;
+        }
+    };
     let crossfade_handle = audio_assets.add(crossfade_audio_source);
 
     let crossfade_entity = commands

@@ -101,6 +101,7 @@ pub mod oscilloscope;
 pub mod playback;
 pub mod playlist;
 pub mod plugin;
+pub mod presets;
 pub mod song_player;
 pub mod synth;
 
