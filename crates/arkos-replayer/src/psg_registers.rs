@@ -51,7 +51,6 @@ impl PsgRegisters {
             *period = (*period).min(MAX_SOFTWARE_PERIOD);
         }
         self.noise = self.noise.min(MAX_NOISE);
-        self.hardware_period = self.hardware_period.min(MAX_HARDWARE_PERIOD);
         self.hardware_envelope = self.hardware_envelope.clamp(0, 15);
         if self.hardware_envelope < DEFAULT_HARDWARE_ENVELOPE {
             self.hardware_envelope = DEFAULT_HARDWARE_ENVELOPE;
@@ -99,7 +98,7 @@ impl PsgRegisters {
     }
 
     pub fn set_hardware_period(&mut self, period: u16) {
-        self.hardware_period = period.min(MAX_HARDWARE_PERIOD);
+        self.hardware_period = period;
     }
 
     pub fn get_hardware_period(&self) -> u16 {

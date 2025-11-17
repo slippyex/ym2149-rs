@@ -77,11 +77,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
 
     /// Advance frame counter and handle looping
     pub(in crate::player) fn advance_frame(&mut self) {
-        match self.sequencer.advance_sample() {
-            AdvanceResult::Completed => {
-                self.state = PlaybackState::Stopped;
-            }
-            _ => {}
+        if self.sequencer.advance_sample() == AdvanceResult::Completed {
+            self.state = PlaybackState::Stopped;
         }
     }
 

@@ -485,12 +485,11 @@ impl ArkosPlayer {
         self.apply_frame_samples(&frames);
         observer(&frames);
 
-        if is_first_tick {
-            if let Some(event_value) = self.read_special_track_value(subsong_index, false) {
-                if event_value > 0 {
-                    self.trigger_event_sample(event_value as usize);
-                }
-            }
+        if is_first_tick
+            && let Some(event_value) = self.read_special_track_value(subsong_index, false)
+            && event_value > 0
+        {
+            self.trigger_event_sample(event_value as usize);
         }
 
         self.write_frames_to_psg(&frames);
@@ -674,10 +673,9 @@ impl ArkosPlayer {
                 pos_idx,
                 target_line,
                 true,
-            ) {
-                if value > 0 {
-                    speed = value.clamp(1, u8::MAX as i32) as u8;
-                }
+            ) && value > 0
+            {
+                speed = value.clamp(1, u8::MAX as i32) as u8;
             }
         }
 
@@ -735,25 +733,24 @@ impl ArkosPlayer {
         track.latest_value(line)
     }
 
-    fn resolve_cell<'a>(
-        subsong: &'a crate::format::Subsong,
+    fn resolve_cell(
+        subsong: &crate::format::Subsong,
         position_idx: usize,
         line_idx: usize,
         channel_idx: usize,
-    ) -> (Option<&'a crate::format::Cell>, i8) {
+    ) -> (Option<&crate::format::Cell>, i8) {
         let mut transposition = 0;
         if let Some(position) = subsong.positions.get(position_idx) {
             if let Some(value) = position.transpositions.get(channel_idx) {
                 transposition = *value;
             }
 
-            if let Some(pattern) = subsong.patterns.get(position.pattern_index) {
-                if let Some(track_index) = pattern.track_indexes.get(channel_idx) {
-                    if let Some(track) = subsong.tracks.get(track_index) {
-                        let cell = track.cells.iter().find(|c| c.index == line_idx);
-                        return (cell, transposition);
-                    }
-                }
+            if let Some(pattern) = subsong.patterns.get(position.pattern_index)
+                && let Some(track_index) = pattern.track_indexes.get(channel_idx)
+                && let Some(track) = subsong.tracks.get(track_index)
+            {
+                let cell = track.cells.iter().find(|c| c.index == line_idx);
+                return (cell, transposition);
             }
         }
 
@@ -856,10 +853,11 @@ impl SampleVoiceMixer {
                     return;
                 }
 
-                if let Some(active) = self.active.as_ref() {
-                    if active.high_priority && !params.high_priority {
-                        return;
-                    }
+                if let Some(active) = self.active.as_ref()
+                    && active.high_priority
+                    && !params.high_priority
+                {
+                    return;
                 }
 
                 if let Some(active) = self.active.as_mut() {
@@ -1497,11 +1495,7 @@ impl ActiveSample {
 
         let mut instance = Self {
             data: Arc::clone(&params.data),
-            position: if params.play_from_start {
-                loop_start as f32
-            } else {
-                loop_start as f32
-            },
+            position: loop_start as f32,
             loop_start,
             loop_end,
             looping: params.looping,

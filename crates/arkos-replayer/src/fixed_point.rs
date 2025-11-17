@@ -88,7 +88,7 @@ impl FixedPoint {
     /// Get as u16 (for periods, clamped to 0..65535)
     #[inline]
     pub fn as_u16(self) -> u16 {
-        self.integer_part().max(0).min(65535) as u16
+        self.integer_part().clamp(0, 65535) as u16
     }
 
     /// Clamp value between 0 and max (inclusive)

@@ -13,6 +13,7 @@ This crate contains comprehensive runnable examples showing how to use the YM214
 | `advanced_example` | Tracker UI, oscilloscope, drag-and-drop, audio bridge |
 | `feature_showcase` | Multiple playbacks, playlists, music states, diagnostics |
 | `demoscene` | Shader-heavy CRT pipeline + synchronized overlays |
+| `space_shooter` | Minimal Vectronix shooter with YM music + YM SFX |
 
 ## Examples
 
@@ -71,6 +72,14 @@ Demoscene-style example featuring:
 - `C` – Toggle CRT post-processing (single-pass scene vs. CRT overlay)
 - `F` - Toggle fullscreen mode
 - `Esc` – Exit the application
+
+### space_shooter
+Minimalist 80s-inspired shooter:
+- Horizontal ship movement (←/→ or A/D) and firing with `Space`
+- YM2149 background loop plus YM-derived shot/explosion SFX
+- Simple invader-style formation with collision clean-up
+
+**Run:** `cargo run --example space_shooter -p bevy_ym2149_examples`
 
 ## Crate Structure
 

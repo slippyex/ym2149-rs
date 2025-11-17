@@ -31,9 +31,11 @@
 //! }
 //! ```
 
-use crate::audio_source::Ym2149AudioSource;
-use crate::song_player::SharedSongPlayer;
+use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
+use crate::song_player::{SharedSongPlayer, YmSongPlayer};
+use crate::synth::YmSynthController;
 use bevy::prelude::*;
+use parking_lot::RwLock;
 use std::sync::Arc;
 
 /// Fixed output sample rate used by the YM2149 mixer.
@@ -155,10 +157,10 @@ pub struct Ym2149Playback {
     pub(crate) frame_position: u32,
     /// Volume level (0.0 = mute, 1.0 = full volume)
     pub volume: f32,
-    /// Left channel gain used during spatial mixing.
+    /// Left channel gain used during stereo mixing.
     /// Use the [`set_stereo_gain()`](Self::set_stereo_gain) method to modify
     pub(crate) left_gain: f32,
-    /// Right channel gain used during spatial mixing.
+    /// Right channel gain used during stereo mixing.
     /// Use the [`set_stereo_gain()`](Self::set_stereo_gain) method to modify
     pub(crate) right_gain: f32,
     /// Internal YM player instance (created by plugin systems)
@@ -180,6 +182,10 @@ pub struct Ym2149Playback {
     pub(crate) pending_crossfade: Option<CrossfadeRequest>,
     /// Active crossfade state that mixes the next deck.
     pub(crate) crossfade: Option<ActiveCrossfade>,
+    /// Indicates that the playback uses an inline (synth) player instead of streamed assets.
+    pub(crate) inline_player: bool,
+    pub(crate) inline_audio_ready: bool,
+    pub(crate) inline_metadata: Option<Ym2149Metadata>,
 }
 
 /// The current state of YM2149 playback
@@ -225,6 +231,9 @@ impl Ym2149Playback {
             pending_playlist_index: None,
             pending_crossfade: None,
             crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
         }
     }
 
@@ -247,6 +256,9 @@ impl Ym2149Playback {
             pending_playlist_index: None,
             pending_crossfade: None,
             crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
         }
     }
 
@@ -269,6 +281,41 @@ impl Ym2149Playback {
             pending_playlist_index: None,
             pending_crossfade: None,
             crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
+        }
+    }
+
+    /// Create a playback component that drives a live YM2149 synthesizer.
+    pub fn synth(controller: YmSynthController) -> Self {
+        let synth_player = YmSongPlayer::new_synth(controller);
+        let metadata = synth_player.metadata().clone();
+        let metrics = synth_player.metrics().unwrap_or(PlaybackMetrics {
+            frame_count: metadata.frame_count,
+            samples_per_frame: YM2149_SAMPLE_RATE / 50,
+        });
+        let player = Arc::new(RwLock::new(synth_player));
+        Self {
+            source_path: None,
+            source_bytes: None,
+            source_asset: None,
+            state: PlaybackState::Idle,
+            frame_position: 0,
+            volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            player: Some(player),
+            needs_reload: false,
+            song_title: metadata.title.clone(),
+            song_author: metadata.author.clone(),
+            metrics: Some(metrics),
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
+            inline_player: true,
+            inline_audio_ready: false,
+            inline_metadata: Some(metadata),
         }
     }
 
@@ -340,18 +387,9 @@ impl Ym2149Playback {
         self.frame_position = frame;
     }
 
-    /// Set the playback volume
-    ///
-    /// The volume is clamped to the range [0.0, 1.0] where:
-    /// - 0.0 = muted (silent)
-    /// - 0.5 = half volume
-    /// - 1.0 = full volume
-    ///
-    /// # Arguments
-    ///
-    /// * `volume` - The desired volume level (will be clamped to 0.0-1.0)
+    /// Set the playback volume (global gain, unclamped upper bound).
     pub fn set_volume(&mut self, volume: f32) {
-        self.volume = volume.clamp(0.0, 1.0);
+        self.volume = volume.max(0.0);
     }
 
     /// Set stereo gains (pan/attenuation) applied during mixing.
@@ -359,6 +397,7 @@ impl Ym2149Playback {
         self.left_gain = left.clamp(0.0, 1.0);
         self.right_gain = right.clamp(0.0, 1.0);
     }
+
 
     /// Replace the playback source with a new filesystem path.
     pub fn set_source_path(&mut self, path: impl Into<String>) {
@@ -503,6 +542,9 @@ impl Default for Ym2149Playback {
             pending_playlist_index: None,
             pending_crossfade: None,
             crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
         }
     }
 }

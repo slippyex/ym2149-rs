@@ -62,7 +62,7 @@ fn load_aks_zip(data: &[u8]) -> Result<AksSong> {
 
     let mut xml_data = Vec::new();
     file.read_to_end(&mut xml_data)
-        .map_err(|e| ArkosError::IoError(e))?;
+        .map_err(ArkosError::IoError)?;
 
     load_aks_xml(&xml_data)
 }
@@ -655,30 +655,30 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     (ParseState::Instrument, "loopStartIndex") => {
                         if let Some(ref mut instr) = current_instrument {
                             instr.loop_start_index = current_text.parse().unwrap_or(0);
-                            if instr.instrument_type == InstrumentType::Digi {
-                                if let Some(ref mut builder) = current_sample_builder {
-                                    builder.loop_start_index = instr.loop_start_index;
-                                }
+                            if instr.instrument_type == InstrumentType::Digi
+                                && let Some(ref mut builder) = current_sample_builder
+                            {
+                                builder.loop_start_index = instr.loop_start_index;
                             }
                         }
                     }
                     (ParseState::Instrument, "endIndex") => {
                         if let Some(ref mut instr) = current_instrument {
                             instr.end_index = current_text.parse().unwrap_or(0);
-                            if instr.instrument_type == InstrumentType::Digi {
-                                if let Some(ref mut builder) = current_sample_builder {
-                                    builder.end_index = instr.end_index;
-                                }
+                            if instr.instrument_type == InstrumentType::Digi
+                                && let Some(ref mut builder) = current_sample_builder
+                            {
+                                builder.end_index = instr.end_index;
                             }
                         }
                     }
                     (ParseState::Instrument, "isLooping") => {
                         if let Some(ref mut instr) = current_instrument {
                             instr.is_looping = current_text == "true";
-                            if instr.instrument_type == InstrumentType::Digi {
-                                if let Some(ref mut builder) = current_sample_builder {
-                                    builder.is_looping = instr.is_looping;
-                                }
+                            if instr.instrument_type == InstrumentType::Digi
+                                && let Some(ref mut builder) = current_sample_builder
+                            {
+                                builder.is_looping = instr.is_looping;
                             }
                         }
                     }
@@ -691,63 +691,58 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         }
                     }
                     (ParseState::Instrument, "frequencyHz") => {
-                        if let (Some(ref mut builder), Some(ref instr)) =
+                        if let (Some(ref mut builder), Some(instr)) =
                             (current_sample_builder.as_mut(), current_instrument.as_ref())
+                            && instr.instrument_type == InstrumentType::Digi
                         {
-                            if instr.instrument_type == InstrumentType::Digi {
-                                builder.frequency_hz = current_text.parse().unwrap_or(44_100);
-                            }
+                            builder.frequency_hz = current_text.parse().unwrap_or(44_100);
                         }
                     }
                     (ParseState::Instrument, "amplificationRatio") => {
-                        if let (Some(ref mut builder), Some(ref instr)) =
+                        if let (Some(ref mut builder), Some(instr)) =
                             (current_sample_builder.as_mut(), current_instrument.as_ref())
+                            && instr.instrument_type == InstrumentType::Digi
                         {
-                            if instr.instrument_type == InstrumentType::Digi {
-                                builder.amplification_ratio = current_text.parse().unwrap_or(1.0);
-                            }
+                            builder.amplification_ratio = current_text.parse().unwrap_or(1.0);
                         }
                     }
                     (ParseState::Instrument, "originalFilename") => {
-                        if let (Some(ref mut builder), Some(ref instr)) =
+                        if let (Some(ref mut builder), Some(instr)) =
                             (current_sample_builder.as_mut(), current_instrument.as_ref())
+                            && instr.instrument_type == InstrumentType::Digi
                         {
-                            if instr.instrument_type == InstrumentType::Digi {
-                                builder.original_filename = Some(current_text.clone());
-                            }
+                            builder.original_filename = Some(current_text.clone());
                         }
                     }
                     (ParseState::Instrument, "digiNote") => {
-                        if let (Some(ref mut builder), Some(ref instr)) =
+                        if let (Some(ref mut builder), Some(instr)) =
                             (current_sample_builder.as_mut(), current_instrument.as_ref())
+                            && instr.instrument_type == InstrumentType::Digi
                         {
-                            if instr.instrument_type == InstrumentType::Digi {
-                                builder.digidrum_note =
-                                    current_text.parse().unwrap_or(DEFAULT_DIGIDRUM_NOTE);
-                            }
+                            builder.digidrum_note =
+                                current_text.parse().unwrap_or(DEFAULT_DIGIDRUM_NOTE);
                         }
                     }
                     (ParseState::Instrument, "sampleUnsigned8BitsBase64") => {
                         if let (Some(builder), Some(instr)) =
                             (current_sample_builder.as_mut(), current_instrument.as_ref())
+                            && instr.instrument_type == InstrumentType::Digi
                         {
-                            if instr.instrument_type == InstrumentType::Digi {
-                                let sanitized: String = current_text
-                                    .chars()
-                                    .filter(|c| !c.is_whitespace())
-                                    .collect();
-                                let decoded =
-                                    general_purpose::STANDARD.decode(sanitized).map_err(|e| {
-                                        ArkosError::InvalidFormat(format!(
-                                            "Invalid sample data: {e}"
-                                        ))
-                                    })?;
-                                let pcm: Vec<f32> = decoded
-                                    .into_iter()
-                                    .map(|byte| (byte as f32 - 128.0) / 128.0)
-                                    .collect();
-                                builder.data = Some(pcm);
-                            }
+                            let sanitized: String = current_text
+                                .chars()
+                                .filter(|c| !c.is_whitespace())
+                                .collect();
+                            let decoded =
+                                general_purpose::STANDARD.decode(sanitized).map_err(|e| {
+                                    ArkosError::InvalidFormat(format!(
+                                        "Invalid sample data: {e}"
+                                    ))
+                                })?;
+                            let pcm: Vec<f32> = decoded
+                                .into_iter()
+                                .map(|byte| (byte as f32 - 128.0) / 128.0)
+                                .collect();
+                            builder.data = Some(pcm);
                         }
                     }
 
@@ -1142,10 +1137,10 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                         }
                     }
                     (ParseState::Effect, "effect") => {
-                        if current_effect_container == Some(EffectContainer::Legacy) {
-                            if let Some(ref mut eff) = current_effect {
-                                eff.name = current_text.clone();
-                            }
+                        if current_effect_container == Some(EffectContainer::Legacy)
+                            && let Some(ref mut eff) = current_effect
+                        {
+                            eff.name = current_text.clone();
                         }
                     }
                     (ParseState::Effect, "logicalValue") => {
@@ -1262,14 +1257,14 @@ fn load_aks_xml(data: &[u8]) -> Result<AksSong> {
                     }
                     "instrument" | "fmInstrument" if current_state == ParseState::Instrument => {
                         if let Some(mut instr) = current_instrument.take() {
-                            if instr.instrument_type == InstrumentType::Digi {
-                                if let Some(builder) = current_sample_builder.take() {
-                                    let mut finalized_builder = builder;
-                                    finalized_builder.loop_start_index = instr.loop_start_index;
-                                    finalized_builder.end_index = instr.end_index;
-                                    finalized_builder.is_looping = instr.is_looping;
-                                    instr.sample = Some(finalized_builder.build()?);
-                                }
+                            if instr.instrument_type == InstrumentType::Digi
+                                && let Some(builder) = current_sample_builder.take()
+                            {
+                                let mut finalized_builder = builder;
+                                finalized_builder.loop_start_index = instr.loop_start_index;
+                                finalized_builder.end_index = instr.end_index;
+                                finalized_builder.is_looping = instr.is_looping;
+                                instr.sample = Some(finalized_builder.build()?);
                             }
                             instruments.push(instr);
                         }

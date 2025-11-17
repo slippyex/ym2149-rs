@@ -1,7 +1,7 @@
 // LEGACY: This module is being replaced with Bevy-native audio system
 // Temporarily stubbed out during migration to bevy::audio
 //
-// TODO: Rewrite using Bevy's AudioPlayer and spatial audio features
+// TODO: Rewrite using Bevy's AudioPlayer APIs once stabilized
 
 #![allow(dead_code, unused_imports)]
 

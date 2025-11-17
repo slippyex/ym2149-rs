@@ -112,9 +112,9 @@ impl EffectType {
     pub fn decode_legacy_value(self, raw_value: i32) -> i32 {
         match self.digit_count() {
             0 => 0,
-            1 => ((raw_value >> 8) & 0xF) as i32,
-            2 => ((raw_value >> 4) & 0xFF) as i32,
-            _ => (raw_value & 0xFFF) as i32,
+            1 => (raw_value >> 8) & 0xF,
+            2 => (raw_value >> 4) & 0xFF,
+            _ => raw_value & 0xFFF,
         }
     }
 }
@@ -168,7 +168,7 @@ impl VolumeSlide {
 
     /// Get current volume as u8
     pub fn get(&self) -> u8 {
-        self.current.integer_part().max(0).min(15) as u8
+        self.current.integer_part().clamp(0, 15) as u8
     }
 
     /// Reset slide
@@ -233,7 +233,7 @@ impl PitchSlide {
 }
 
 /// State for glide effect
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GlideState {
     /// Whether glide is active
     pub active: bool,
@@ -247,19 +247,6 @@ pub struct GlideState {
     pub final_pitch: i16,
     /// Direction: true if period is increasing (pitch down)
     pub period_increasing: bool,
-}
-
-impl Default for GlideState {
-    fn default() -> Self {
-        Self {
-            active: false,
-            speed: FixedPoint::default(),
-            initial_period: 0,
-            goal_period: 0,
-            final_pitch: 0,
-            period_increasing: false,
-        }
-    }
 }
 
 impl GlideState {

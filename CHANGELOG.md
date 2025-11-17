@@ -2,6 +2,22 @@
 
 All notable changes to the ym2149-rs project.
 
+## [Unreleased]
+
+### Added
+- Arkos Tracker support end-to-end: `arkos-replayer` crate, Bevy/wrapper integration, curated fixtures in `examples/arkos`, wasm auto-detection for `.aks`
+- New `scripts/build-wasm-examples.sh` helper to rebuild/copy the wasm bundle for demos & releases
+- Message-based Bevy runtime: `FrameAudioData`, split `initialize_playback` / `drive_playback_state` / `process_playback_frames` + diagnostics and bridge consumers
+
+### Changed
+- `Ym2149Plugin` now accepts `.aks` sources transparently; docs/README updated accordingly
+- wasm `Ym2149Player` automatically falls back to Arkos player when YM parsing fails, exposing the same JavaScript API
+- Documentation refresh (`README.md`, `ARCHITECTURE.md`, crate READMEs) to reflect Arkos fixtures, new Bevy systems, wasm workflow
+
+### Fixed
+- Removed dependency on the upstream `arkostracker3` repo by copying reference `.aks/.ym` fixtures into `examples/arkos`
+- Optional `extended-tests` now run against local fixtures; parser tests no longer panic when the Arkos repo is absent
+
 ## [v0.6.0] - Current Release
 
 ### New Crates
@@ -26,7 +42,7 @@ All notable changes to the ym2149-rs project.
 - Split monolithic plugin into modular structure (plugin/mod.rs, plugin/config.rs, plugin/systems.rs)
 - Extracted visualization to separate `bevy_ym2149_viz` crate for optional UI dependencies
 - Added comprehensive error handling with `Ym2149Error` enum
-- New modules: audio_bridge, diagnostics, error, events, music_state, playlist, spatial
+- New modules: audio_bridge, diagnostics, error, events, music_state, playlist
 
 ### Documentation
 

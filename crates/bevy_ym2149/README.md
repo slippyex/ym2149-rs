@@ -112,7 +112,7 @@ fn handle_input(mut query: Query<&mut Ym2149Playback>, keyboard: Res<ButtonInput
 Other helpers:
 - `Ym2149Playback::from_asset(handle)` and `::from_bytes(bytes)` for asset-server or embedded sources
 - `set_source_path / asset / bytes` to retarget an entity mid-game
-- `set_stereo_gain(left, right)` used by the spatial audio system
+- `set_stereo_gain(left, right)` for manual stereo/pan control
 
 ### Playlists & Crossfades
 

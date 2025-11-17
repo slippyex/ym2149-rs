@@ -145,10 +145,49 @@ pub(in crate::plugin) fn initialize_playback(
             commands
                 .entity(entity)
                 .insert(PlaybackRuntimeState::default());
-        } else if playback.player.is_none() || playback.needs_reload {
-            if let Some(mut rt) = runtime_state {
-                rt.reset();
-            }
+        } else if (playback.player.is_none() || playback.needs_reload)
+            && let Some(mut rt) = runtime_state
+        {
+            rt.reset();
+        }
+
+        if playback.inline_player
+            && !playback.inline_audio_ready
+            && let Some(player_arc) = playback.player.clone()
+        {
+            let metadata = playback
+                .inline_metadata
+                .clone()
+                .unwrap_or_else(|| Ym2149Metadata {
+                    title: playback.song_title.clone(),
+                    author: playback.song_author.clone(),
+                    comment: String::new(),
+                    frame_count: playback
+                        .metrics
+                        .as_ref()
+                        .map(|m| m.frame_count)
+                        .unwrap_or_default(),
+                    duration_seconds: 0.0,
+                });
+            let total_samples = playback
+                .metrics
+                .as_ref()
+                .map(|m| m.total_samples())
+                .unwrap_or(usize::MAX);
+            let audio_source =
+                Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
+            let audio_handle = audio_assets.add(audio_source);
+            let settings = if playback.state == PlaybackState::Playing {
+                PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(playback.volume))
+            } else {
+                PlaybackSettings::LOOP
+                    .paused()
+                    .with_volume(bevy::audio::Volume::Linear(playback.volume))
+            };
+            commands
+                .entity(entity)
+                .insert((AudioPlayer(audio_handle), settings));
+            playback.inline_audio_ready = true;
         }
 
         if playback.player.is_none() || playback.needs_reload {

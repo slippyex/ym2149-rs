@@ -7,6 +7,7 @@ use ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
 use crate::audio_source::Ym2149Metadata;
 use crate::error::BevyYm2149Error;
 use crate::playback::{PlaybackMetrics, YM2149_SAMPLE_RATE, YM2149_SAMPLE_RATE_F32};
+use crate::synth::{YmSynthController, YmSynthPlayer};
 
 /// Shared song player handle used throughout the plugin.
 pub type SharedSongPlayer = Arc<RwLock<YmSongPlayer>>;
@@ -14,11 +15,12 @@ pub type SharedSongPlayer = Arc<RwLock<YmSongPlayer>>;
 /// Unified song player that can handle YM or Arkos Tracker sources.
 pub enum YmSongPlayer {
     Ym {
-        player: Ym6Player,
+        player: Box<Ym6Player>,
         metrics: PlaybackMetrics,
         metadata: Ym2149Metadata,
     },
-    Arkos(ArkosBevyPlayer),
+    Arkos(Box<ArkosBevyPlayer>),
+    Synth(Box<YmSynthPlayer>),
 }
 
 impl YmSongPlayer {
@@ -29,7 +31,7 @@ impl YmSongPlayer {
     ) -> Self {
         Self::Ym {
             metrics: PlaybackMetrics::from(summary),
-            player,
+            player: Box::new(player),
             metadata,
         }
     }
@@ -46,7 +48,11 @@ impl YmSongPlayer {
         };
         let player = ArkosPlayer::new(song, 0)
             .map_err(|e| BevyYm2149Error::Other(format!("AKS player init failed: {e}")))?;
-        Ok(Self::Arkos(ArkosBevyPlayer::new(player, metadata)))
+        Ok(Self::Arkos(Box::new(ArkosBevyPlayer::new(player, metadata))))
+    }
+
+    pub(crate) fn new_synth(controller: YmSynthController) -> Self {
+        Self::Synth(Box::new(YmSynthPlayer::new(controller)))
     }
 
     pub(crate) fn play(&mut self) -> Result<(), BevyYm2149Error> {
@@ -55,6 +61,10 @@ impl YmSongPlayer {
                 .play()
                 .map_err(|e| BevyYm2149Error::Other(format!("YM play failed: {e}"))),
             Self::Arkos(p) => p.play(),
+            Self::Synth(p) => {
+                p.play();
+                Ok(())
+            }
         }
     }
 
@@ -64,6 +74,10 @@ impl YmSongPlayer {
                 .pause()
                 .map_err(|e| BevyYm2149Error::Other(format!("YM pause failed: {e}"))),
             Self::Arkos(p) => p.pause(),
+            Self::Synth(p) => {
+                p.pause();
+                Ok(())
+            }
         }
     }
 
@@ -73,6 +87,10 @@ impl YmSongPlayer {
                 .stop()
                 .map_err(|e| BevyYm2149Error::Other(format!("YM stop failed: {e}"))),
             Self::Arkos(p) => p.stop(),
+            Self::Synth(p) => {
+                p.stop();
+                Ok(())
+            }
         }
     }
 
@@ -80,6 +98,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.state(),
             Self::Arkos(p) => p.state(),
+            Self::Synth(p) => p.state(),
         }
     }
 
@@ -87,6 +106,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.get_current_frame(),
             Self::Arkos(p) => p.current_frame(),
+            Self::Synth(p) => p.current_frame(),
         }
     }
 
@@ -94,6 +114,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.samples_per_frame_value(),
             Self::Arkos(p) => p.samples_per_frame(),
+            Self::Synth(p) => p.samples_per_frame_value(),
         }
     }
 
@@ -101,6 +122,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.generate_sample(),
             Self::Arkos(p) => p.generate_sample(),
+            Self::Synth(p) => p.generate_sample(),
         }
     }
 
@@ -108,6 +130,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.generate_samples_into(buffer),
             Self::Arkos(p) => p.generate_samples_into(buffer),
+            Self::Synth(p) => p.generate_samples_into(buffer),
         }
     }
 
@@ -115,6 +138,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { metadata, .. } => metadata,
             Self::Arkos(p) => p.metadata(),
+            Self::Synth(p) => p.metadata(),
         }
     }
 
@@ -122,6 +146,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { metrics, .. } => Some(*metrics),
             Self::Arkos(p) => p.metrics(),
+            Self::Synth(p) => Some(p.metrics()),
         }
     }
 
@@ -129,6 +154,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => Some(player.get_chip()),
             Self::Arkos(p) => p.primary_chip(),
+            Self::Synth(p) => Some(p.chip()),
         }
     }
 
@@ -139,6 +165,7 @@ impl YmSongPlayer {
             Self::Arkos(p) => p
                 .primary_chip()
                 .expect("Arkos player should always expose at least one PSG"),
+            Self::Synth(p) => p.chip(),
         }
     }
 
@@ -147,6 +174,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { metrics, .. } => metrics.frame_count,
             Self::Arkos(p) => p.frame_count(),
+            Self::Synth(p) => p.metrics().frame_count,
         }
     }
 }

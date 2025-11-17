@@ -102,8 +102,7 @@ pub mod playback;
 pub mod playlist;
 pub mod plugin;
 pub mod song_player;
-// Spatial audio module removed - use Bevy's native spatial audio instead
-// pub mod spatial;
+pub mod synth;
 
 pub use ::ym2149::*;
 pub use audio_bridge::{
@@ -126,5 +125,4 @@ pub use playlist::{
     drive_crossfade_playlists, handle_playlist_requests, register_playlist_assets,
 };
 pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
-// Spatial audio types removed - use Bevy's native spatial audio instead
-// pub use spatial::{Ym2149Listener, Ym2149SpatialAudio};
+pub use synth::YmSynthController;

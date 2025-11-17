@@ -136,13 +136,10 @@ pub struct EffectContext {
 impl EffectContext {
     /// Build the context for a subsong
     pub fn build(song: &AksSong, subsong_index: usize) -> Result<Self> {
-        let subsong =
-            song.subsongs
-                .get(subsong_index)
-                .ok_or_else(|| ArkosError::InvalidSubsong {
-                    index: subsong_index,
-                    available: song.subsongs.len(),
-                })?;
+        let subsong = song.subsongs.get(subsong_index).ok_or(ArkosError::InvalidSubsong {
+            index: subsong_index,
+            available: song.subsongs.len(),
+        })?;
 
         let channel_count = subsong.psgs.len() * 3;
         if channel_count == 0 {
@@ -161,12 +158,10 @@ impl EffectContext {
             let pattern = subsong
                 .patterns
                 .get(position.pattern_index)
-                .ok_or_else(|| {
-                    ArkosError::InvalidFormat(format!(
-                        "Pattern {} missing for position",
-                        position.pattern_index
-                    ))
-                })?;
+                .ok_or_else(|| ArkosError::InvalidFormat(format!(
+                    "Pattern {} missing for position",
+                    position.pattern_index
+                )))?;
 
             let speed_track = subsong.speed_tracks.get(&pattern.speed_track_index);
             let (line_speeds, last_speed) =
@@ -224,6 +219,7 @@ impl EffectContext {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_track(
     track: Option<&Track>,
     height: usize,
@@ -352,11 +348,11 @@ fn build_line_speeds(
             }
         }
 
-        if let Some(cell) = iter.peek() {
-            if cell.index == line {
-                current_speed = sanitize_speed_value(cell.value, current_speed);
-                iter.next();
-            }
+        if let Some(cell) = iter.peek()
+            && cell.index == line
+        {
+            current_speed = sanitize_speed_value(cell.value, current_speed);
+            iter.next();
         }
 
         speeds.push(current_speed);
@@ -394,7 +390,7 @@ fn clamp_u16(value: i32) -> u16 {
     value.clamp(0, u16::MAX as i32) as u16
 }
 
-fn find_effect<'a>(cell: &'a Cell, effect_type: EffectType) -> Option<&'a CellEffect> {
+fn find_effect(cell: &Cell, effect_type: EffectType) -> Option<&CellEffect> {
     cell.effects
         .iter()
         .find(|effect| EffectType::from_name(&effect.name) == effect_type)

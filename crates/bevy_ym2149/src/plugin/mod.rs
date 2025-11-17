@@ -29,7 +29,6 @@ use crate::playlist::{
     register_playlist_assets,
 };
 // Spatial audio removed - use Bevy's native spatial audio instead
-// use crate::spatial::update_spatial_audio;
 use bevy::audio::AddAudioSource;
 use bevy::prelude::*;
 
@@ -86,10 +85,6 @@ impl Plugin for Ym2149Plugin {
 
         // Core playback lifecycle.
         app.add_systems(PreUpdate, (initialize_playback, drive_playback_state));
-        // Spatial audio removed - use Bevy's native spatial audio instead
-        // if self.config.spatial_audio {
-        //     app.add_systems(Update, update_spatial_audio);
-        // }
         app.add_systems(Update, process_playback_frames);
         // Optional playlist support.
         if self.config.playlists {

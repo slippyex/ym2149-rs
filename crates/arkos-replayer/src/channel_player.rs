@@ -25,7 +25,7 @@ use crate::format::{AksSong, Cell, ChannelLink, InstrumentType, Note, SongFormat
 use crate::psg;
 
 /// Output from channel player (PSG parameters for one channel)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ChannelOutput {
     /// Volume (0-15 for software, 16 for hardware envelope)
     pub volume: u8,
@@ -73,20 +73,15 @@ pub struct SamplePlaybackParams {
 }
 
 /// Sample command emitted by a channel for this tick
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum SampleCommand {
     /// No change
+    #[default]
     None,
     /// Play or update a sample voice
     Play(SamplePlaybackParams),
     /// Stop any currently playing sample
     Stop,
-}
-
-impl Default for SampleCommand {
-    fn default() -> Self {
-        SampleCommand::None
-    }
 }
 
 /// Complete channel frame result (PSG + optional sample)
@@ -103,20 +98,6 @@ impl Default for ChannelFrame {
         Self {
             psg: ChannelOutput::default(),
             sample: SampleCommand::None,
-        }
-    }
-}
-
-impl Default for ChannelOutput {
-    fn default() -> Self {
-        Self {
-            volume: 0,
-            noise: 0,
-            sound_open: false,
-            software_period: 0,
-            hardware_period: 0,
-            hardware_envelope: 0,
-            hardware_retrig: false,
         }
     }
 }
@@ -230,28 +211,28 @@ impl ChannelPlayer {
 
     /// Apply effect context for the current line
     pub fn apply_line_context(&mut self, context: &LineContext) {
-        if let Some(pitch_id) = context.pitch_table() {
-            if self.pitch_table_id != Some(pitch_id) {
-                self.pitch_table_id = Some(pitch_id);
-                self.update_pitch_metadata(true);
-                self.pitch_reader.reset();
-            }
+        if let Some(pitch_id) = context.pitch_table()
+            && self.pitch_table_id != Some(pitch_id)
+        {
+            self.pitch_table_id = Some(pitch_id);
+            self.update_pitch_metadata(true);
+            self.pitch_reader.reset();
         }
 
-        if let Some(inline) = context.inline_arpeggio() {
-            if !self.use_inline_arpeggio || self.inline_arpeggio != *inline {
-                self.inline_arpeggio = inline.clone();
-                self.use_inline_arpeggio = true;
-                self.update_arpeggio_metadata(true);
-                self.arpeggio_reader.reset();
-            }
-        } else if let Some(arpeggio_id) = context.arpeggio_table() {
-            if self.use_inline_arpeggio || self.table_arpeggio_id != Some(arpeggio_id) {
-                self.use_inline_arpeggio = false;
-                self.table_arpeggio_id = Some(arpeggio_id);
-                self.update_arpeggio_metadata(true);
-                self.arpeggio_reader.reset();
-            }
+        if let Some(inline) = context.inline_arpeggio()
+            && (!self.use_inline_arpeggio || self.inline_arpeggio != *inline)
+        {
+            self.inline_arpeggio = inline.clone();
+            self.use_inline_arpeggio = true;
+            self.update_arpeggio_metadata(true);
+            self.arpeggio_reader.reset();
+        } else if let Some(arpeggio_id) = context.arpeggio_table()
+            && (self.use_inline_arpeggio || self.table_arpeggio_id != Some(arpeggio_id))
+        {
+            self.use_inline_arpeggio = false;
+            self.table_arpeggio_id = Some(arpeggio_id);
+            self.update_arpeggio_metadata(true);
+            self.arpeggio_reader.reset();
         }
 
         self.volume_slide.set_fixed(context.volume());
@@ -279,17 +260,17 @@ impl ChannelPlayer {
         let mut frame = ChannelFrame::default();
 
         // Read cell if provided (first tick)
-        if let Some(cell) = cell {
-            if is_first_tick {
-                #[cfg(test)]
-                if cell.index == 38 && self._channel_index == 2 {
-                    println!(
-                        "[dbg] channel {} reading cell idx {} note {} instrument {}",
-                        self._channel_index, cell.index, cell.note, cell.instrument
-                    );
-                }
-                self.read_cell_and_set_states(cell, transposition);
+        if let Some(cell) = cell
+            && is_first_tick
+        {
+            #[cfg(test)]
+            if cell.index == 38 && self._channel_index == 2 {
+                println!(
+                    "[dbg] channel {} reading cell idx {} note {} instrument {}",
+                    self._channel_index, cell.index, cell.note, cell.instrument
+                );
             }
+            self.read_cell_and_set_states(cell, transposition);
         }
 
         // Apply trailing effects (arpeggio, pitch, volume slides)
@@ -381,7 +362,7 @@ impl ChannelPlayer {
         for effect in &cell.effects {
             let effect_type = EffectType::from_name(&effect.name);
             if effect_type == EffectType::PitchGlide {
-                let speed = effect.logical_value.max(0).min(0xFFFF) as u16;
+                let speed = effect.logical_value.clamp(0, 0xFFFF) as u16;
                 // Store speed but don't activate yet (needs goal note)
                 self.glide.speed = FixedPoint::from_digits(speed);
                 return true;
@@ -425,7 +406,7 @@ impl ChannelPlayer {
     /// Process a single effect
     fn process_effect(&mut self, effect: &crate::format::Effect) {
         let effect_type = EffectType::from_name(&effect.name);
-        let raw_value = effect.logical_value.max(0).min(0xFFFF) as u16;
+        let raw_value = effect.logical_value.clamp(0, 0xFFFF) as u16;
         let value_u8 = raw_value.min(u8::MAX as u16) as u8;
 
         match effect_type {
@@ -753,7 +734,7 @@ impl ChannelPlayer {
             let inst_vol = self.instrument_cell_volume as i16;
             let track_vol = self.volume_slide.get() as i16;
             let combined = inst_vol - (15 - track_vol);
-            self.instrument_cell_volume = combined.max(0).min(15) as u8;
+            self.instrument_cell_volume = combined.clamp(0, 15) as u8;
         }
 
         let speed = self.forced_instrument_speed.unwrap_or(instrument_speed);
@@ -781,7 +762,6 @@ impl ChannelPlayer {
         match cell.link {
             NoSoftwareNoHardware => {
                 // Arkos keeps the previous periods to avoid register glitches.
-                return;
             }
 
             SoftwareOnly | SoftwareAndHardware | SoftwareToHardware => {
@@ -811,8 +791,7 @@ impl ChannelPlayer {
 
                     // Apply hardware desync pitch
                     self.hardware_period = (hw_period as i32 - cell.secondary_pitch as i32)
-                        .max(0)
-                        .min(0xFFFF) as u16;
+                        .clamp(0, 0xFFFF) as u16;
                 } else if matches!(cell.link, SoftwareAndHardware) {
                     // For SoftAndHard, calculate hardware period independently
                     self.hardware_period = self.calculate_hardware_period(cell);
@@ -830,8 +809,7 @@ impl ChannelPlayer {
 
                     // Apply software desync pitch
                     self.software_period = (sw_period as i32 - cell.primary_pitch as i32)
-                        .max(0)
-                        .min(0xFFF) as u16;
+                        .clamp(0, 0xFFF) as u16;
                 }
             }
         }
@@ -924,7 +902,7 @@ impl ChannelPlayer {
         period -= self.pitch_from_pitch_table as i32;
         period -= cell.primary_pitch as i32;
 
-        period.max(0).min(0xFFF) as u16
+        period.clamp(0, 0xFFF) as u16
     }
 
     /// Calculate hardware period from cell
@@ -952,7 +930,7 @@ impl ChannelPlayer {
         period -= self.pitch_from_pitch_table as i32;
         period -= cell.secondary_pitch as i32;
 
-        period.max(0).min(0xFFFF) as u16
+        period.clamp(0, 0xFFFF) as u16
     }
 
     // ============================================================================

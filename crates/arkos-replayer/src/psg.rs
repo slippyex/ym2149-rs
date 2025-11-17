@@ -8,7 +8,7 @@ const NOTES_IN_OCTAVE: i32 = 12;
 
 /// Clamp a note index to Arkos Tracker's valid range (0-127, 255 = off)
 pub fn clamp_note(note: i32) -> Note {
-    note.max(0).min(127) as Note
+    note.clamp(0, 127) as Note
 }
 
 /// Calculate PSG period for a given note using Arkos Tracker's formula
@@ -28,7 +28,7 @@ pub fn calculate_period(psg_frequency: f64, reference_frequency: f64, note: Note
     let period_divider = psg_frequency / 8.0;
     let period = (period_divider / frequency).round();
 
-    period.max(0.0).min(65535.0) as u16
+    period.clamp(0.0, 65535.0) as u16
 }
 
 /// Precomputed period table and helpers for reverse conversions
@@ -49,12 +49,9 @@ impl PsgPeriodTable {
         for note in 0..=127 {
             let period = calculate_period(psg_frequency, reference_frequency, note as Note);
             note_to_period.push(period);
-            period_to_note.entry(period).or_insert(note as i32);
+            period_to_note.entry(period).or_insert(note);
         }
-        let period_entries = period_to_note
-            .into_iter()
-            .map(|(period, note)| (period, note))
-            .collect();
+        let period_entries = period_to_note.into_iter().collect();
         Self {
             note_to_period,
             period_entries,

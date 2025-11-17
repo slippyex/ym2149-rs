@@ -113,10 +113,10 @@ pub(super) fn finalize_crossfade(
         commands.entity(cf_entity).despawn();
     }
 
-    if let Some(old_player) = playback.player.take() {
-        if let Err(err) = old_player.write().stop() {
-            error!("Failed to stop outgoing deck: {}", err);
-        }
+    if let Some(old_player) = playback.player.take()
+        && let Err(err) = old_player.write().stop()
+    {
+        error!("Failed to stop outgoing deck: {}", err);
     }
 
     let new_player = crossfade.player.clone();

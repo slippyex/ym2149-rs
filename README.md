@@ -8,7 +8,7 @@
 
 - 🧠 **Core emulator**: integer-accurate PSG with YM1-YM6 (final format) + YMT1/YMT2 tracker support
 - 🪕 **Audio workflows**: real-time streaming, WAV/MP3 export, playlist & music-state automation
-- 🕹️ **Game-ready**: Bevy plugins with spatial audio, diagnostics, visual components, and full example scenes
+- 🕹️ **Game-ready**: Bevy plugins with diagnostics, visual components, and full example scenes
 - 🌐 **Browser-ready**: WebAssembly player with full LHA decompression support
 - 📦 **Monorepo cohesion**: shared workspace versioning, consistent docs, cross-crate testing (`cargo test --workspace`)
 
@@ -145,7 +145,8 @@ fn main() {
 }
 ```
 
-Need a reference scene? `cargo run --example advanced_example -p bevy_ym2149_examples`.
+Need a reference scene? `cargo run --example advanced_example -p bevy_ym2149_examples`.  
+Want to try the browser demo? Open https://slippyex.github.io/ym2149-rs/web/simple-player.html (auto-built via GitHub Pages).
 
 ## Documentation & Guides
 

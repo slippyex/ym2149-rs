@@ -18,7 +18,6 @@ pub struct Ym2149PluginConfig {
     pub playlists: bool,
     pub channel_events: bool,
     // Spatial audio removed - use Bevy's native spatial audio instead
-    // pub spatial_audio: bool,
     pub music_state: bool,
     pub diagnostics: bool,
     pub bevy_audio_bridge: bool,

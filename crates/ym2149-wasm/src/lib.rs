@@ -108,8 +108,8 @@ impl YmMetadata {
 }
 
 enum BrowserSongPlayer {
-    Ym(ym_replayer::Ym6Player),
-    Arkos(ArkosWasmPlayer),
+    Ym(Box<ym_replayer::Ym6Player>),
+    Arkos(Box<ArkosWasmPlayer>),
 }
 
 struct ArkosWasmPlayer {
@@ -142,7 +142,13 @@ impl ArkosWasmPlayer {
             duration_seconds,
         };
 
-        (Self { player, estimated_frames }, metadata)
+        (
+            Self {
+                player,
+                estimated_frames,
+            },
+            metadata,
+        )
     }
 
     fn play(&mut self) -> Result<(), String> {
@@ -473,14 +479,14 @@ impl Ym2149Player {
 fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), String> {
     if let Ok((player, summary)) = load_song(data) {
         let metadata = metadata_from_summary(&player, &summary);
-        return Ok((BrowserSongPlayer::Ym(player), metadata));
+        return Ok((BrowserSongPlayer::Ym(Box::new(player)), metadata));
     }
 
     let song = load_aks(data).map_err(|e| format!("Failed to parse AKS file: {e}"))?;
     let arkos_player =
         ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to init Arkos player: {e}"))?;
     let (wrapper, metadata) = ArkosWasmPlayer::new(arkos_player);
-    Ok((BrowserSongPlayer::Arkos(wrapper), metadata))
+    Ok((BrowserSongPlayer::Arkos(Box::new(wrapper)), metadata))
 }
 
 fn metadata_from_summary(player: &ym_replayer::Ym6Player, summary: &LoadSummary) -> YmMetadata {

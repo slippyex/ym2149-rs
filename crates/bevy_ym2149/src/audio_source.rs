@@ -86,6 +86,20 @@ impl Ym2149AudioSource {
         })
     }
 
+    pub(crate) fn from_shared_player(
+        player: SharedSongPlayer,
+        metadata: Ym2149Metadata,
+        total_samples: usize,
+    ) -> Self {
+        Self {
+            data: Vec::new(),
+            metadata,
+            player,
+            sample_rate: crate::playback::YM2149_SAMPLE_RATE,
+            total_samples,
+        }
+    }
+
     /// Get the duration of this audio source in seconds
     pub fn duration(&self) -> f32 {
         self.metadata.duration_seconds
