@@ -675,6 +675,20 @@ impl Ym2149Backend for Ym2149 {
     fn set_color_filter(&mut self, enabled: bool) {
         self.set_color_filter(enabled);
     }
+
+    fn trigger_envelope(&mut self) {
+        Ym2149::trigger_envelope(self);
+    }
+
+    fn set_drum_sample_override(&mut self, channel: usize, sample: Option<f32>) {
+        // Digi-drum path injects raw PCM-like values; keep scale and clamp to i32 range
+        let sample_i32 = sample.map(|s| s as i32);
+        Ym2149::set_drum_sample_override(self, channel, sample_i32);
+    }
+
+    fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
+        Ym2149::set_mixer_overrides(self, force_tone, force_noise_mute);
+    }
 }
 
 #[cfg(test)]

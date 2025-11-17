@@ -1,12 +1,4 @@
-// LEGACY: This module is being replaced with Bevy-native audio system
-// Temporarily stubbed out during migration to bevy::audio
-//
-// TODO: Rewrite using Bevy's AudioPlayer APIs once stabilized
-
-#![allow(dead_code, unused_imports)]
-
 use crate::events::AudioBridgeRequest;
-use crate::playback::YM2149_SAMPLE_RATE;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::FRAC_PI_2;
@@ -162,14 +154,27 @@ impl AudioBridgeMixes {
     }
 }
 
-/// Stubbed out during migration to Bevy audio
 pub fn drive_bridge_audio_buffers(
-    _config: Res<crate::plugin::Ym2149PluginConfig>,
-    _device: Res<BridgeAudioDevice>,
-    _targets: Res<AudioBridgeTargets>,
-    _buffers: ResMut<AudioBridgeBuffers>,
-    _sinks: ResMut<BridgeAudioSinks>,
-    _mixes: Res<AudioBridgeMixes>,
+    config: Res<crate::plugin::Ym2149PluginConfig>,
+    targets: Res<AudioBridgeTargets>,
+    mut buffers: ResMut<AudioBridgeBuffers>,
+    mixes: Res<AudioBridgeMixes>,
 ) {
-    // TODO: Reimplement using Bevy's audio system
+    if !config.bevy_audio_bridge {
+        return;
+    }
+
+    for (entity, samples) in buffers.0.iter_mut() {
+        if !targets.0.contains(entity) {
+            continue;
+        }
+        let mix = mixes.get(*entity);
+        let (left_gain, right_gain) = mix.gains();
+        for stereo_pair in samples.chunks_mut(2) {
+            if stereo_pair.len() == 2 {
+                stereo_pair[0] *= left_gain;
+                stereo_pair[1] *= right_gain;
+            }
+        }
+    }
 }
