@@ -1799,8 +1799,6 @@ fn get_font_data(font: &BitmapFont, images: &Assets<Image>) -> Option<(u32, u32,
     ))
 }
 
-
-
 fn create_empty_image(handle: &Handle<Image>, images: &mut Assets<Image>) {
     if let Some(image) = images.get_mut(handle) {
         image.resize(Extent3d {
