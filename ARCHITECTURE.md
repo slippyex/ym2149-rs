@@ -294,6 +294,12 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
    - Exposed through the Bevy plugin as an alternate backend for playlists and the wasm player
    - CLI wrapper (`ArkosPlayerWrapper`) implements the shared `RealtimeChip` trait for feature parity (mute, position, color filter no-op)
 
+### Crossfade Lifecycle (Bevy plugin)
+- **Request**: `Ym2149PlaylistPlayer` sets `pending_crossfade` with target index/duration once the trigger point is hit or a manual advance is requested.
+- **Loading**: `process_pending_crossfade` spawns a second `AudioPlayer` entity with the incoming track muted.
+- **Active**: `drive_playback_state` mixes the two sinks by ramping sink volumes over the window while keeping the existing player running.
+- **Finalize**: once elapsed >= window, the outgoing deck is stopped, state/metadata are swapped over, and the old crossfade entity is removed.
+
 ### Module Organization
 
 ```
