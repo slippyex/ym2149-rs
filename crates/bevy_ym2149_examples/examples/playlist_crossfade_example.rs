@@ -169,7 +169,7 @@ fn update_ui(
         .unwrap_or(ui.playing_display);
 
     let mut lines = Vec::new();
-    lines.push("ArrowUp/ArrowDown: select • Enter: play (crossfade)".to_string());
+    lines.push("Up/Down: select | Enter: play (crossfade)".to_string());
     lines.push("".into());
     for (idx, entry) in ui.entries.iter().enumerate() {
         let marker = if idx == current { "*" } else { " " };
