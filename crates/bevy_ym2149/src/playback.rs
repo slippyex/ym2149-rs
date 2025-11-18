@@ -377,6 +377,9 @@ impl Ym2149Playback {
     pub fn restart(&mut self) {
         self.state = PlaybackState::Idle;
         self.frame_position = 0;
+        self.metrics = None;
+        self.player = None;
+        self.inline_audio_ready = false;
         self.needs_reload = true;
         self.crossfade = None;
         self.pending_crossfade = None;

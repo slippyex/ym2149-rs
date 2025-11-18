@@ -50,3 +50,8 @@ visualization = []
 [[bench]]
 name = "chip"
 harness = false
+
+[[example]]
+name = "chip_demo"
+path = "examples/chip_demo.rs"
+required-features = ["streaming"]

@@ -79,15 +79,6 @@ impl Ym2149Backend for SoftSynth {
         self.get_sample()
     }
 
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        let mut samples = Vec::with_capacity(count);
-        for _ in 0..count {
-            self.clock();
-            samples.push(self.get_sample());
-        }
-        samples
-    }
-
     fn get_channel_outputs(&self) -> (f32, f32, f32) {
         // SoftSynth doesn't separate channels in the same way
         // Return the mixed sample on all channels

@@ -10,7 +10,7 @@ Bevy plugin that embeds the cycle-accurate [`ym2149`](../ym2149-core) emulator, 
 
 ## Why Use This Plugin?
 
-- 🎵 **Accurate playback**: YM2–YM6/YMT files rendered with the same core as the CLI/exporter
+- 🎵 **Accurate playback**: YM2–YM6/YMT + AKS files rendered with the same cores as the CLI/exporter (YM6 via `ym-replayer`, AKS via `arkos-replayer`)
 - 🎚️ **ECS-native control**: `Ym2149Playback` component (play/pause/seek/volume/stereo gain)
 - 🧭 **Music systems**: playlists with seamless crossfades, `.ymplaylist` loader, music state graphs
 - 🔊 **Audio bridge**: mirror samples into Bevy's audio graph or your own sinks
@@ -116,8 +116,8 @@ fn handle_input(mut query: Query<&mut Ym2149Playback>, keyboard: Res<ButtonInput
 ```
 
 Other helpers:
-- `Ym2149Playback::from_asset(handle)` and `::from_bytes(bytes)` for asset-server or embedded sources
-- `set_source_path / asset / bytes` to retarget an entity mid-game
+- `Ym2149Playback::from_asset(handle)` and `::from_bytes(bytes)` for asset-server or embedded sources (auto-detects YM vs AKS)
+- `set_source_path / asset / bytes` to retarget an entity mid-game (supports `.ym`/`.aks`)
 - `set_stereo_gain(left, right)` for manual stereo/pan control
 - `PlaybackFrameMarker` event stream for 50Hz markers (frame, elapsed_seconds, looped)
 - `AudioReactiveState` resource for smoothed channel avg/peak/frequency per playback entity

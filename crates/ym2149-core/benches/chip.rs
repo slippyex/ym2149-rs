@@ -4,7 +4,7 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
-use ym2149::Ym2149;
+use ym2149::{Ym2149, Ym2149Backend};
 
 fn bench_clock_iterations(c: &mut Criterion) {
     let mut group = c.benchmark_group("clock");

@@ -17,6 +17,7 @@ use crate::error::{ArkosError, Result};
 use crate::format::{AksSong, InstrumentType, SongMetadata};
 use ym2149::ym2149::PsgBank;
 use ym2149::ym2149::Ym2149;
+use ym2149::Ym2149Backend;
 
 /// Arkos Tracker song player
 ///

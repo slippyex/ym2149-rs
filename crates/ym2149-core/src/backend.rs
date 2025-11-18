@@ -110,12 +110,23 @@ pub trait Ym2149Backend: Send {
     ///
     /// Vector of normalized audio samples in range [-1.0, 1.0]
     fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        let mut samples = Vec::with_capacity(count);
-        for _ in 0..count {
-            self.clock();
-            samples.push(self.get_sample());
-        }
+        let mut samples = vec![0.0; count];
+        self.generate_samples_into(&mut samples);
         samples
+    }
+
+    /// Generate multiple audio samples into a caller-provided buffer
+    ///
+    /// This avoids per-call allocations; prefer this in hot paths.
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer` - Output slice to fill with normalized audio samples in range [-1.0, 1.0]
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        for sample in buffer.iter_mut() {
+            self.clock();
+            *sample = self.get_sample();
+        }
     }
 
     /// Get individual channel outputs

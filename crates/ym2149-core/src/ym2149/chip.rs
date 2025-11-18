@@ -383,16 +383,6 @@ impl Ym2149 {
         self.cycle_counter = self.cycle_counter.wrapping_add(1);
     }
 
-    /// Generate a block of samples.
-    pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        let mut samples = Vec::with_capacity(count);
-        for _ in 0..count {
-            self.clock();
-            samples.push(self.get_sample());
-        }
-        samples
-    }
-
     /// Current audio sample (-1.0..1.0).
     pub fn get_sample(&self) -> f32 {
         self.current_sample
@@ -654,10 +644,6 @@ impl Ym2149Backend for Ym2149 {
 
     fn get_sample(&self) -> f32 {
         self.get_sample()
-    }
-
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        self.generate_samples(count)
     }
 
     fn get_channel_outputs(&self) -> (f32, f32, f32) {

@@ -10,19 +10,22 @@ YM2149-RS is a modular Rust workspace providing cycle-accurate YM2149 PSG emulat
 
 ```mermaid
 graph TB
-    subgraph "Layer 4: Game Engine Integration"
+    subgraph "Layer 4: Integrations & Apps"
         BEVY_EX["bevy_ym2149_examples<br/>Demo Applications"]
         BEVY_VIZ["bevy_ym2149_viz<br/>Visualization Components"]
-        BEVY["bevy_ym2149<br/>Audio Plugin"]
+        BEVY["bevy_ym2149<br/>Bevy Audio Plugin"]
+        WASM["ym2149-wasm<br/>WASM/Browser"]
+        CLI["ym-replayer-cli<br/>CLI / Export"]
     end
 
-    subgraph "Layer 3: Music Playback"
-        REPLAYER["ym-replayer<br/>YM File Parser & Player"]
+    subgraph "Layer 3: Playback Engines"
+        REPLAYER["ym-replayer<br/>YM Parser & Player"]
+        ARKOS["arkos-replayer<br/>AKS Parser & Player"]
     end
 
-    subgraph "Layer 2: Chip Emulation"
+    subgraph "Layer 2: Chip Backends"
         YM2149["ym2149-core<br/>Hardware Emulator"]
-        SOFTSYNTH["ym-softsynth<br/>Experimental Backend"]
+        SOFTSYNTH["ym-softsynth<br/>Alt Synth Backend"]
     end
 
     subgraph "Layer 1: Backend Trait"
@@ -33,9 +36,14 @@ graph TB
     BEVY_EX --> BEVY
     BEVY_VIZ --> BEVY
     BEVY --> REPLAYER
-    BEVY --> YM2149
+    BEVY --> ARKOS
+    WASM --> REPLAYER
+    WASM --> ARKOS
+    CLI --> REPLAYER
     REPLAYER --> YM2149
     REPLAYER -.optional.-> SOFTSYNTH
+    ARKOS --> YM2149
+    ARKOS -.optional.-> SOFTSYNTH
     YM2149 --> TRAIT
     SOFTSYNTH --> TRAIT
 ```
@@ -48,7 +56,7 @@ graph TB
 | **ym-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` (implements `Ym2149Backend`) | None (library only) |
 | **ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()`, parsers, loader | `ym-replayer` CLI |
 | **arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Uses curated songs in [`examples/arkos`](examples/arkos) |
-| **bevy_ym2149** | 4 | Bevy audio plugin with playback management | `Ym2149Plugin`, `Ym2149Playback` component | None (library only) |
+| **bevy_ym2149** | 4 | Bevy audio plugin with playback management (YM + AKS via `ym-replayer`/`arkos-replayer`) | `Ym2149Plugin`, `Ym2149Playback` component | None (library only) |
 | **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization components & systems | None (library only) |
 | **bevy_ym2149_examples** | 4 | Runnable demo applications | None (examples only) | 5 example scenes |
 | **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | [`crates/ym2149-wasm/examples`](crates/ym2149-wasm/examples) |
@@ -60,29 +68,28 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant File as YM File
-    participant Loader as ym-replayer::loader
-    participant Parser as ym-replayer::parser
-    participant Player as Ym6Player
-    participant Chip as Ym2149
+    participant File as YM/AKS File
+    participant Loader as loader (YM/AKS)
+    participant Parser as parser (YM/AKS)
+    participant Player as Ym6/Arkos Player
+    participant Chip as Backend (Ym2149/SoftSynth)
     participant Audio as Audio Device
 
     File->>Loader: read bytes
     Loader->>Loader: detect LHA compression
     Loader-->>Parser: decompressed bytes
-    Parser->>Parser: detect format (YM1-YM6 final, YMT1/YMT2)
+    Parser->>Parser: detect format (YMx/YMT or AKS)
     Parser->>Parser: parse frames & metadata
-    Parser-->>Player: frames + LoadSummary
+    Parser-->>Player: frames + LoadSummary/Metadata
 
-    loop Every frame (50Hz / 882 samples)
-        Player->>Player: decode effects
+    loop Every frame/tick (~50Hz)
+        Player->>Player: apply effects (SID/DigiDrum/Buzzer)
         Player->>Chip: load_registers(regs)
-        Player->>Chip: apply effects (SID/DigiDrum/Buzzer)
 
-        loop 882 samples
+        loop samples in frame
             Player->>Chip: clock()
             Chip->>Chip: update generators
-            Chip-->>Player: get_sample() returns f32
+            Chip-->>Player: get_sample()
         end
 
         Player-->>Audio: send samples
@@ -689,11 +696,13 @@ graph LR
     end
 
     subgraph "Shared State"
-        PLAYER["Shared Ym6Player<br/>YM2149 Emulator"]
+        PLAYER["Shared Player<br/>Ym6Player / ArkosPlayer"]
+        CF["Crossfade Player<br/>optional"]
     end
 
     SINK -->|requests samples| DEC
     DEC -->|locks and generates| PLAYER
+    CF --> DEC
     PLAYER -->|returns samples| DEC
     DEC -->|provides samples| SINK
 ```
@@ -701,9 +710,10 @@ graph LR
 **Key Differences:**
 - **Pull-based:** Audio thread requests samples on-demand (no ring buffer needed)
 - **Bevy-managed:** Audio device lifecycle handled by Bevy
-- **Asset integration:** YM files loaded via Bevy's asset system
-- **Shared player:** `Arc<RwLock<Ym6Player>>` (using `parking_lot::RwLock`) allows concurrent read access for audio thread and visualization systems with reduced lock contention
+- **Asset integration:** YM/AKS files loaded via Bevy's asset system (auto-detected)
+- **Shared player:** `Arc<RwLock<Ym6Player>>` or `ArkosBevyPlayer` (using `parking_lot::RwLock`) allows concurrent read access for audio thread and visualization systems with reduced lock contention
 - **Lower latency:** No intermediate buffer, direct sample generation
+- **Crossfade deck:** Secondary decoder/player spun up during crossfades and mixed with the primary deck
 
 ### Why RwLock Instead of Mutex?
 
@@ -845,17 +855,3 @@ cargo test --workspace
 - [Streaming Guide](crates/ym2149-core/STREAMING_GUIDE.md) - Real-time audio architecture
 - [ym-replayer README](crates/ym-replayer/README.md) - Playback layer API
 - [bevy_ym2149 README](crates/bevy_ym2149/README.md) - Bevy integration guide
-
----
-
-## Future Considerations
-
-### Potential Enhancements
-- WASM support for web playback
-- Additional backends (e.g., FPGA cores)
-- YM7 format support
-- MIDI export capabilities
-- Advanced DSP effects
-
-### Architectural Stability
-The current layer separation provides a stable foundation for these enhancements without requiring major refactoring.

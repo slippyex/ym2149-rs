@@ -25,6 +25,7 @@
 //! ```
 
 use super::chip::Ym2149;
+use crate::backend::Ym2149Backend;
 
 const DEFAULT_SAMPLE_RATE: u32 = 44_100;
 
@@ -257,11 +258,13 @@ impl PsgBank {
             *sample = 0.0;
         }
 
+        let mut temp = vec![0.0f32; buffer.len()];
+
         // Mix all PSGs into the buffer
         for chip in &mut self.chips {
-            let samples = chip.generate_samples(buffer.len());
-            for (out, &sample) in buffer.iter_mut().zip(&samples) {
-                *out += sample;
+            chip.generate_samples_into(&mut temp);
+            for (out, sample) in buffer.iter_mut().zip(&temp) {
+                *out += *sample;
             }
         }
 
@@ -306,8 +309,7 @@ impl PsgBank {
         );
 
         for (chip, buffer) in self.chips.iter_mut().zip(buffers.iter_mut()) {
-            let samples = chip.generate_samples(buffer.len());
-            buffer.copy_from_slice(&samples);
+            chip.generate_samples_into(buffer);
         }
     }
 
