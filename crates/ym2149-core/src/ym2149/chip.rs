@@ -7,6 +7,7 @@
 
 use super::constants::VOLUME_TABLE;
 use super::registers::RegisterBank;
+use crate::backend::Ym2149Backend;
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -112,6 +113,7 @@ pub struct Ym2149 {
     current_sample: f32,
     cycle_counter: u32,
     trace: Option<TraceState>,
+    debug_sample_counter: u32, // DEBUG: for periodic output
 }
 
 impl Ym2149 {
@@ -157,21 +159,22 @@ impl Ym2149 {
             current_sample: 0.0,
             cycle_counter: 0,
             trace: None,
+            debug_sample_counter: 0,
         };
         chip.recompute_all_steps();
         chip.update_mixer_masks();
-        if let Ok(path) = env::var("YM2149_TRACE") {
-            if let Ok(file) = File::create(path) {
-                let mut writer = BufWriter::new(file);
-                let _ = writeln!(
-                    writer,
-                    "sample,volA,volB,volC,volE,env_idx,env_phase,env_pos,noise,vol,in,out"
-                );
-                chip.trace = Some(TraceState {
-                    writer,
-                    sample_index: 0,
-                });
-            }
+        if let Ok(path) = env::var("YM2149_TRACE")
+            && let Ok(file) = File::create(path)
+        {
+            let mut writer = BufWriter::new(file);
+            let _ = writeln!(
+                writer,
+                "sample,volA,volB,volC,volE,env_idx,env_phase,env_pos,noise,vol,in,out"
+            );
+            chip.trace = Some(TraceState {
+                writer,
+                sample_index: 0,
+            });
         }
         chip
     }
@@ -203,6 +206,7 @@ impl Ym2149 {
         self.last_channel_output = [0; 3];
         self.current_sample = 0.0;
         self.cycle_counter = 0;
+        self.debug_sample_counter = 0;
         self.update_mixer_masks();
         self.recompute_all_steps();
     }
@@ -303,13 +307,18 @@ impl Ym2149 {
                 self.last_channel_output[ch] = 0;
                 continue;
             }
+            if let Some(sample) = self.drum_sample_overrides[ch] {
+                channel_outputs[ch] = sample;
+                self.last_channel_output[ch] = sample;
+                mixed += sample;
+                continue;
+            }
+
             let tone_state = ((self.tone_pos[ch] as i32) >> 31) as u32;
             let bt =
                 (tone_state | self.mixer_tone_mask[ch]) & (noise_mask | self.mixer_noise_mask[ch]);
 
-            let base_volume = if let Some(sample) = self.drum_sample_overrides[ch] {
-                sample
-            } else if self.tone_use_envelope[ch] {
+            let base_volume = if self.tone_use_envelope[ch] {
                 self.env_volume
             } else {
                 self.tone_volume[ch]
@@ -351,6 +360,7 @@ impl Ym2149 {
 
         let clamped = out_value.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
         self.current_sample = (clamped as f32) * (1.0 / i16::MAX as f32);
+
         if let Some(trace) = self.trace.as_mut() {
             let _ = writeln!(
                 trace.writer,
@@ -371,16 +381,6 @@ impl Ym2149 {
             trace.sample_index += 1;
         }
         self.cycle_counter = self.cycle_counter.wrapping_add(1);
-    }
-
-    /// Generate a block of samples.
-    pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        let mut samples = Vec::with_capacity(count);
-        for _ in 0..count {
-            self.clock();
-            samples.push(self.get_sample());
-        }
-        samples
     }
 
     /// Current audio sample (-1.0..1.0).
@@ -431,17 +431,15 @@ impl Ym2149 {
         *self.registers.as_slice()
     }
 
-    pub(crate) fn set_mixer_overrides(
-        &mut self,
-        force_tone: [bool; 3],
-        force_noise_mute: [bool; 3],
-    ) {
+    /// Set mixer overrides for effects (used by EffectsManager in ym-replayer)
+    pub fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
         self.mixer_overrides.force_tone = force_tone;
         self.mixer_overrides.force_noise_mute = force_noise_mute;
         self.update_mixer_masks();
     }
 
-    pub(crate) fn set_drum_sample_override(&mut self, voice: usize, sample: Option<i32>) {
+    /// Set drum sample override for a voice (used by EffectsManager in ym-replayer)
+    pub fn set_drum_sample_override(&mut self, voice: usize, sample: Option<i32>) {
         if voice >= 3 {
             return;
         }
@@ -503,11 +501,7 @@ impl Ym2149 {
     fn rnd_compute(&mut self) -> u32 {
         let r_bit = (self.rnd_rack & 1) ^ ((self.rnd_rack >> 2) & 1);
         self.rnd_rack = (self.rnd_rack >> 1) | (r_bit << 16);
-        if r_bit != 0 {
-            0
-        } else {
-            0xffff
-        }
+        if r_bit != 0 { 0 } else { 0xffff }
     }
 }
 
@@ -612,6 +606,75 @@ fn build_envelope_data() -> [[[u8; 32]; 2]; 16] {
         }
     }
     data
+}
+
+// Implement the Ym2149Backend trait for the hardware-accurate chip
+impl Ym2149Backend for Ym2149 {
+    fn new() -> Self {
+        Ym2149::new()
+    }
+
+    fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
+        Ym2149::with_clocks(master_clock, sample_rate)
+    }
+
+    fn reset(&mut self) {
+        self.reset();
+    }
+
+    fn write_register(&mut self, addr: u8, value: u8) {
+        self.write_register(addr, value);
+    }
+
+    fn read_register(&self, addr: u8) -> u8 {
+        self.read_register(addr)
+    }
+
+    fn load_registers(&mut self, regs: &[u8; 16]) {
+        self.load_registers(regs);
+    }
+
+    fn dump_registers(&self) -> [u8; 16] {
+        self.dump_registers()
+    }
+
+    fn clock(&mut self) {
+        self.clock();
+    }
+
+    fn get_sample(&self) -> f32 {
+        self.get_sample()
+    }
+
+    fn get_channel_outputs(&self) -> (f32, f32, f32) {
+        self.get_channel_outputs()
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.set_channel_mute(channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.is_channel_muted(channel)
+    }
+
+    fn set_color_filter(&mut self, enabled: bool) {
+        self.set_color_filter(enabled);
+    }
+
+    fn trigger_envelope(&mut self) {
+        Ym2149::trigger_envelope(self);
+    }
+
+    fn set_drum_sample_override(&mut self, channel: usize, sample: Option<f32>) {
+        // Digi-drum path injects raw PCM-like values; keep scale and clamp to i32 range
+        let sample_i32 = sample.map(|s| s as i32);
+        Ym2149::set_drum_sample_override(self, channel, sample_i32);
+    }
+
+    fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
+        Ym2149::set_mixer_overrides(self, force_tone, force_noise_mute);
+    }
 }
 
 #[cfg(test)]

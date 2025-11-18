@@ -1,0 +1,34 @@
+name: Build wasm demo
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "crates/ym2149-wasm/**"
+      - "scripts/build-wasm-examples.sh"
+      - ".github/workflows/wasm-demo.yml"
+
+jobs:
+  build-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build wasm demo
+        run: ./scripts/build-wasm-examples.sh --release
+
+      - name: Copy demo into docs/web
+        run: |
+          rm -rf docs/web
+          mkdir -p docs/web
+          cp -R crates/ym2149-wasm/examples/* docs/web/
+
+      - name: Commit updated docs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update wasm demo"
+          branch: ${{ github.ref_name }}
+          file_pattern: docs/web/**

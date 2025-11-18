@@ -29,7 +29,7 @@
 //! fn main() {
 //!     App::new()
 //!         .add_plugins(DefaultPlugins)
-//!         .add_plugins(Ym2149Plugin)
+//!         .add_plugins(Ym2149Plugin::default())
 //!         .add_systems(Startup, setup)
 //!         .run();
 //! }
@@ -70,23 +70,9 @@
 //!
 //! # Visualization
 //!
-//! The plugin provides helper functions to create UI displays:
-//!
-//! ```no_run
-//! use bevy::prelude::*;
-//! use bevy_ym2149::{create_status_display, create_detailed_channel_display, create_channel_visualization};
-//!
-//! fn setup_ui(mut commands: Commands) {
-//!     // Top panel with song info and playback status
-//!     create_status_display(&mut commands);
-//!
-//!     // Detailed channel information (flags, frequency, notes)
-//!     create_detailed_channel_display(&mut commands);
-//!
-//!     // Interactive visualization bars for 3 channels
-//!     create_channel_visualization(&mut commands, 3);
-//! }
-//! ```
+//! Visualization widgets now live in the companion crate `bevy_ym2149_viz`. Add
+//! [`Ym2149VizPlugin`](https://docs.rs/bevy_ym2149_viz) alongside this crate's
+//! [`Ym2149Plugin`] and use the helpers provided there to build UI components.
 //!
 //! # Architecture
 //!
@@ -102,23 +88,44 @@
 //!
 //! - [`playback`] - Core playback component and state management
 //! - [`plugin`] - Bevy plugin integration and systems
-//! - [`audio_sink`] - Trait-based audio output abstraction (pluggable implementations)
-//! - [`audio_source`] - YM file loading and metadata extraction
-//! - [`visualization`] - UI components and display helpers
+//! - [`audio_source`] - YM file loading and Bevy audio integration via Decodable
+//! - [`bevy_ym2149_viz`](https://crates.io/crates/bevy_ym2149_viz) - Optional UI components and display helpers
 
-pub mod audio_sink;
+pub mod audio_bridge;
+pub mod audio_reactive;
 pub mod audio_source;
+pub mod diagnostics;
+pub mod error;
+pub mod events;
+pub mod music_state;
+pub mod oscilloscope;
 pub mod playback;
+pub mod playlist;
 pub mod plugin;
-pub mod visualization;
+pub mod presets;
+pub mod song_player;
+pub mod synth;
 
-pub use audio_sink::{AudioSink, BoxedAudioSink};
-pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
-pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
-pub use plugin::Ym2149Plugin;
-pub use visualization::{
-    create_channel_visualization, create_detailed_channel_display, create_oscilloscope,
-    create_song_info_display, create_status_display, update_channel_bars, update_oscilloscope,
-    ChannelBar, ChannelVisualization, DetailedChannelDisplay, Oscilloscope, OscilloscopeBuffer,
-    PlaybackStatusDisplay, SongInfoDisplay,
+pub use ::ym2149::*;
+pub use audio_bridge::{
+    AudioBridgeBuffers, AudioBridgeMix, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice,
+    BridgeAudioSinks,
 };
+pub use audio_reactive::{AudioReactiveState, ReactiveMetrics};
+pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
+pub use diagnostics::{BUFFER_FILL_PATH, FRAME_POSITION_PATH, update_diagnostics};
+pub use error::{BevyYm2149Error, Result};
+pub use events::{
+    AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaybackFrameMarker,
+    PlaylistAdvanceRequest, TrackFinished, TrackStarted, YmSfxRequest,
+};
+pub use music_state::{MusicStateDefinition, MusicStateGraph, process_music_state_requests};
+pub use oscilloscope::OscilloscopeBuffer;
+pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+pub use playlist::{
+    CrossfadeConfig, CrossfadeTrigger, CrossfadeWindow, PlaylistMode, PlaylistSource,
+    Ym2149Playlist, Ym2149PlaylistLoader, Ym2149PlaylistPlayer, advance_playlist_players,
+    drive_crossfade_playlists, handle_playlist_requests, register_playlist_assets,
+};
+pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
+pub use synth::YmSynthController;

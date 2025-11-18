@@ -11,9 +11,11 @@ pub mod chip;
 pub mod constants;
 pub mod envelope;
 pub mod mixer;
+pub mod psg_bank;
 pub mod registers;
 
 // Re-export public API
 pub use chip::Ym2149;
 pub use constants::get_volume;
+pub use psg_bank::PsgBank;
 pub use registers::RegisterBank;

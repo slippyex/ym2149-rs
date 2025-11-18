@@ -1,0 +1,62 @@
+[package]
+name = "ym2149-wasm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WebAssembly bindings for YM2149 PSG emulator - play YM files in the browser"
+readme = "README.md"
+keywords = ["ym2149", "wasm", "webassembly", "chiptune", "browser"]
+categories = ["multimedia::audio", "wasm"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Core YM2149 emulation and playback
+ym2149 = { path = "../ym2149-core", version = "0.6", default-features = false }
+ym-replayer = { path = "../ym-replayer", version = "0.6", default-features = false }
+arkos-replayer = { path = "../arkos-replayer", version = "0.6", default-features = false }
+
+# WASM bindings
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "console",
+    "AudioContext",
+    "AudioBuffer",
+    "AudioBufferSourceNode",
+    "AudioDestinationNode",
+    "AudioNode",
+    "Window",
+] }
+
+# Serialization for JS interop
+serde = { workspace = true, features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+
+# Error handling
+thiserror.workspace = true
+
+# Utilities
+bitflags.workspace = true
+
+# Optional: Better panic messages in the console
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O4", "--enable-bulk-memory"]
+
+[features]
+default = ["console_error_panic_hook"]
+# Enable YM6 effects (SID, Sync Buzzer)
+effects = ["ym-replayer/effects"]
+# Enable tracker support
+tracker = ["ym-replayer/tracker"]
+# Enable digi-drums
+digidrums = ["ym-replayer/digidrums"]

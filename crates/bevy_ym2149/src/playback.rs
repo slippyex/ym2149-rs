@@ -31,11 +31,85 @@
 //! }
 //! ```
 
-use crate::audio_sink::AudioSink;
+use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
+use crate::song_player::{SharedSongPlayer, YmSongPlayer};
+use crate::synth::YmSynthController;
 use bevy::prelude::*;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use std::sync::Arc;
-use ym2149::replayer::Ym6Player;
+
+/// Fixed output sample rate used by the YM2149 mixer.
+pub const YM2149_SAMPLE_RATE: u32 = 44_100;
+/// Convenience f32 representation of [`YM2149_SAMPLE_RATE`].
+pub const YM2149_SAMPLE_RATE_F32: f32 = YM2149_SAMPLE_RATE as f32;
+
+/// Summary of a loaded track used for progress/duration calculations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlaybackMetrics {
+    pub frame_count: usize,
+    pub samples_per_frame: u32,
+}
+
+impl PlaybackMetrics {
+    pub fn total_samples(&self) -> usize {
+        self.frame_count
+            .saturating_mul(self.samples_per_frame as usize)
+    }
+
+    pub fn duration_seconds(&self) -> f32 {
+        self.total_samples() as f32 / YM2149_SAMPLE_RATE_F32
+    }
+}
+
+impl From<&ym_replayer::LoadSummary> for PlaybackMetrics {
+    fn from(summary: &ym_replayer::LoadSummary) -> Self {
+        Self {
+            frame_count: summary.frame_count,
+            samples_per_frame: summary.samples_per_frame,
+        }
+    }
+}
+
+/// Source descriptor used when queueing a crossfade request.
+#[derive(Clone)]
+pub(crate) enum TrackSource {
+    File(String),
+    Asset(Handle<Ym2149AudioSource>),
+    Bytes(Arc<Vec<u8>>),
+}
+
+/// Pending crossfade to be loaded by the playback systems.
+#[derive(Clone)]
+pub(crate) struct CrossfadeRequest {
+    pub source: TrackSource,
+    pub duration: f32,
+    pub target_index: usize,
+}
+
+/// Active crossfade layer being mixed alongside the primary player.
+///
+/// Note: Uses Arc<RwLock<...>> to enable shared ownership between the crossfade
+/// state and the audio source decoder. This is necessary because:
+/// 1. Crossfade needs simultaneous access to both primary and secondary players
+/// 2. The audio decoder holds a reference that must outlive individual system calls
+/// 3. Bevy's audio system requires thread-safe shared access
+///
+/// RwLock allows multiple concurrent readers while ensuring exclusive write access
+/// during sample generation. This reduces lock contention compared to Mutex.
+pub(crate) struct ActiveCrossfade {
+    pub player: SharedSongPlayer,
+    pub metrics: PlaybackMetrics,
+    pub song_title: String,
+    pub song_author: String,
+    pub elapsed: f32,
+    pub duration: f32,
+    pub target_index: usize,
+    pub audio_handle: Handle<crate::audio_source::Ym2149AudioSource>,
+    /// Raw YM data for recreating the AudioPlayer after crossfade completes
+    pub data: Arc<Vec<u8>>,
+    /// Entity of the separate AudioPlayer playing the incoming track during crossfade
+    pub crossfade_entity: Option<Entity>,
+}
 
 /// Component for managing YM2149 playback on an entity
 ///
@@ -45,7 +119,8 @@ use ym2149::replayer::Ym6Player;
 ///
 /// # Fields
 ///
-/// - `source_path`: Path to the YM file to play
+/// - `source_path`: Optional filesystem path to a YM file
+/// - `source_asset`: Optional Bevy asset handle referencing a YM file
 /// - `state`: Current playback state (Idle, Playing, Paused, Finished)
 /// - `frame_position`: Current frame in the song
 /// - `volume`: Volume multiplier (0.0 = silent, 1.0 = full)
@@ -61,7 +136,7 @@ use ym2149::replayer::Ym6Player;
 /// fn my_system(mut playbacks: Query<&mut Ym2149Playback>) {
 ///     for mut pb in playbacks.iter_mut() {
 ///         if pb.is_playing() {
-///             println!("Frame: {}", pb.frame_position);
+///             println!("Frame: {}", pb.frame_position());
 ///             println!("Title: {}", pb.song_title);
 ///             pb.set_volume(0.5);
 ///         }
@@ -71,23 +146,49 @@ use ym2149::replayer::Ym6Player;
 #[derive(Component)]
 pub struct Ym2149Playback {
     /// Path to the YM file to load and play
-    pub source_path: String,
+    pub source_path: Option<String>,
+    /// In-memory YM data buffer
+    pub source_bytes: Option<Arc<Vec<u8>>>,
+    /// Handle to a YM2149 asset
+    pub source_asset: Option<Handle<crate::audio_source::Ym2149AudioSource>>,
     /// Current playback state
     pub state: PlaybackState,
     /// Current frame position in the song
-    pub frame_position: u32,
+    /// Use the [`frame_position()`](Self::frame_position) getter or [`seek()`](Self::seek) method to access/modify
+    pub(crate) frame_position: u32,
     /// Volume level (0.0 = mute, 1.0 = full volume)
     pub volume: f32,
+    /// Left channel gain used during stereo mixing.
+    /// Use the [`set_stereo_gain()`](Self::set_stereo_gain) method to modify
+    pub(crate) left_gain: f32,
+    /// Right channel gain used during stereo mixing.
+    /// Use the [`set_stereo_gain()`](Self::set_stereo_gain) method to modify
+    pub(crate) right_gain: f32,
+    /// Shared stereo gain handle used by both decoder and diagnostics.
+    pub(crate) stereo_gain: Arc<RwLock<(f32, f32)>>,
     /// Internal YM player instance (created by plugin systems)
-    pub(crate) player: Option<Arc<Mutex<Ym6Player>>>,
-    /// Audio output device (created by plugin systems)
-    pub(crate) audio_device: Option<Arc<dyn AudioSink>>,
+    ///
+    /// Uses `Arc<RwLock<_>>` for shared ownership with the audio decoder.
+    /// See [`ActiveCrossfade`] documentation for rationale.
+    pub(crate) player: Option<SharedSongPlayer>,
     /// Flag to trigger reloading the player on next play
     pub(crate) needs_reload: bool,
     /// Song title extracted from YM file metadata
     pub song_title: String,
     /// Song author extracted from YM file metadata
     pub song_author: String,
+    /// Summary of the currently loaded song (if available).
+    pub(crate) metrics: Option<PlaybackMetrics>,
+    /// Pending playlist index update once a crossfade completed.
+    pub(crate) pending_playlist_index: Option<usize>,
+    /// Requested crossfade that is waiting for the secondary deck to load.
+    pub(crate) pending_crossfade: Option<CrossfadeRequest>,
+    /// Active crossfade state that mixes the next deck.
+    pub(crate) crossfade: Option<ActiveCrossfade>,
+    /// Indicates that the playback uses an inline (synth) player instead of streamed assets.
+    pub(crate) inline_player: bool,
+    pub(crate) inline_audio_ready: bool,
+    pub(crate) inline_metadata: Option<Ym2149Metadata>,
 }
 
 /// The current state of YM2149 playback
@@ -117,15 +218,111 @@ impl Ym2149Playback {
     /// * `source_path` - Path to a YM file (YM2-YM6 formats supported)
     pub fn new(source_path: impl Into<String>) -> Self {
         Self {
-            source_path: source_path.into(),
+            source_path: Some(source_path.into()),
+            source_bytes: None,
+            source_asset: None,
             state: PlaybackState::Idle,
             frame_position: 0,
             volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
             player: None,
-            audio_device: None,
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
+        }
+    }
+
+    /// Create a new playback component that will stream from a loaded Bevy asset.
+    pub fn from_asset(handle: Handle<crate::audio_source::Ym2149AudioSource>) -> Self {
+        Self {
+            source_path: None,
+            source_bytes: None,
+            source_asset: Some(handle),
+            state: PlaybackState::Idle,
+            frame_position: 0,
+            volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
+            player: None,
+            needs_reload: false,
+            song_title: String::new(),
+            song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
+        }
+    }
+
+    /// Create a new playback component backed by an in-memory YM buffer.
+    pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
+        Self {
+            source_path: None,
+            source_bytes: Some(Arc::new(bytes.into())),
+            source_asset: None,
+            state: PlaybackState::Idle,
+            frame_position: 0,
+            volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
+            player: None,
+            needs_reload: false,
+            song_title: String::new(),
+            song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
+        }
+    }
+
+    /// Create a playback component that drives a live YM2149 synthesizer.
+    pub fn synth(controller: YmSynthController) -> Self {
+        let synth_player = YmSongPlayer::new_synth(controller);
+        let metadata = synth_player.metadata().clone();
+        let metrics = synth_player.metrics().unwrap_or(PlaybackMetrics {
+            frame_count: metadata.frame_count,
+            samples_per_frame: YM2149_SAMPLE_RATE / 50,
+        });
+        let player = Arc::new(RwLock::new(synth_player));
+        Self {
+            source_path: None,
+            source_bytes: None,
+            source_asset: None,
+            state: PlaybackState::Idle,
+            frame_position: 0,
+            volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
+            player: Some(player),
+            needs_reload: false,
+            song_title: metadata.title.clone(),
+            song_author: metadata.author.clone(),
+            metrics: Some(metrics),
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
+            inline_player: true,
+            inline_audio_ready: false,
+            inline_metadata: Some(metadata),
         }
     }
 
@@ -168,6 +365,8 @@ impl Ym2149Playback {
     pub fn stop(&mut self) {
         self.state = PlaybackState::Idle;
         self.frame_position = 0;
+        self.crossfade = None;
+        self.pending_crossfade = None;
     }
 
     /// Restart playback from the beginning
@@ -178,7 +377,12 @@ impl Ym2149Playback {
     pub fn restart(&mut self) {
         self.state = PlaybackState::Idle;
         self.frame_position = 0;
+        self.metrics = None;
+        self.player = None;
+        self.inline_audio_ready = false;
         self.needs_reload = true;
+        self.crossfade = None;
+        self.pending_crossfade = None;
     }
 
     /// Seek to a specific frame
@@ -193,18 +397,72 @@ impl Ym2149Playback {
         self.frame_position = frame;
     }
 
-    /// Set the playback volume
-    ///
-    /// The volume is clamped to the range [0.0, 1.0] where:
-    /// - 0.0 = muted (silent)
-    /// - 0.5 = half volume
-    /// - 1.0 = full volume
-    ///
-    /// # Arguments
-    ///
-    /// * `volume` - The desired volume level (will be clamped to 0.0-1.0)
+    /// Set the playback volume (global gain, unclamped upper bound).
     pub fn set_volume(&mut self, volume: f32) {
-        self.volume = volume.clamp(0.0, 1.0);
+        self.volume = volume.max(0.0);
+    }
+
+    /// Set stereo gains (pan/attenuation) applied during mixing.
+    pub fn set_stereo_gain(&mut self, left: f32, right: f32) {
+        let clamped_left = left.clamp(0.0, 1.0);
+        let clamped_right = right.clamp(0.0, 1.0);
+        {
+            let mut gains = self.stereo_gain.write();
+            *gains = (clamped_left, clamped_right);
+        }
+        self.left_gain = clamped_left;
+        self.right_gain = clamped_right;
+    }
+
+    /// Replace the playback source with a new filesystem path.
+    pub fn set_source_path(&mut self, path: impl Into<String>) {
+        self.source_path = Some(path.into());
+        self.source_bytes = None;
+        self.source_asset = None;
+        self.needs_reload = true;
+        self.metrics = None;
+        self.pending_playlist_index = None;
+        self.pending_crossfade = None;
+        self.crossfade = None;
+    }
+
+    /// Replace the playback source with a Bevy asset handle.
+    pub fn set_source_asset(&mut self, handle: Handle<crate::audio_source::Ym2149AudioSource>) {
+        self.source_asset = Some(handle);
+        self.source_path = None;
+        self.source_bytes = None;
+        self.needs_reload = true;
+        self.metrics = None;
+        self.pending_playlist_index = None;
+        self.pending_crossfade = None;
+        self.crossfade = None;
+    }
+
+    /// Replace the playback source with in-memory bytes.
+    pub fn set_source_bytes(&mut self, bytes: impl Into<Vec<u8>>) {
+        self.source_bytes = Some(Arc::new(bytes.into()));
+        self.source_path = None;
+        self.source_asset = None;
+        self.needs_reload = true;
+        self.metrics = None;
+        self.pending_playlist_index = None;
+        self.pending_crossfade = None;
+        self.crossfade = None;
+    }
+
+    /// Access the configured filesystem path, if any.
+    pub fn source_path(&self) -> Option<&str> {
+        self.source_path.as_deref()
+    }
+
+    /// Access the configured asset handle, if any.
+    pub fn source_asset(&self) -> Option<&Handle<crate::audio_source::Ym2149AudioSource>> {
+        self.source_asset.as_ref()
+    }
+
+    /// Access the configured in-memory bytes, if any.
+    pub fn source_bytes(&self) -> Option<Arc<Vec<u8>>> {
+        self.source_bytes.as_ref().map(Arc::clone)
     }
 
     /// Check if currently playing
@@ -220,20 +478,89 @@ impl Ym2149Playback {
     pub fn frame_position(&self) -> u32 {
         self.frame_position
     }
+
+    /// Clone the internal YM player handle for read-only inspection.
+    ///
+    /// Returns a shared reference to the player wrapped in Arc<RwLock<>>.
+    /// This is primarily useful for debugging or advanced use cases that need
+    /// direct access to the player state.
+    ///
+    /// Note: Use read() for concurrent read access or write() for exclusive access:
+    /// ```ignore
+    /// if let Some(player_arc) = playback.player_handle() {
+    ///     let player = player_arc.read();  // Concurrent reads allowed
+    ///     let frame = player.get_current_frame();
+    /// }
+    /// ```
+    pub fn player_handle(&self) -> Option<SharedSongPlayer> {
+        self.player.as_ref().map(Arc::clone)
+    }
+
+    /// Query the current audio sink buffer fill percentage (0.0 - 1.0).
+    ///
+    /// Note: This method is deprecated with Bevy audio and always returns None.
+    /// Audio buffering is now handled internally by Bevy's audio system.
+    pub fn audio_buffer_fill(&self) -> Option<f32> {
+        None
+    }
+
+    /// Access the metrics of the currently loaded track, if known.
+    pub(crate) fn metrics(&self) -> Option<PlaybackMetrics> {
+        self.metrics
+    }
+
+    /// Returns whether a crossfade (pending or active) is already configured.
+    pub(crate) fn is_crossfade_pending(&self) -> bool {
+        self.pending_crossfade.is_some() || self.crossfade.is_some()
+    }
+
+    pub(crate) fn is_crossfade_active(&self) -> bool {
+        self.crossfade.is_some()
+    }
+
+    /// Replace the existing crossfade request (if any).
+    pub(crate) fn set_crossfade_request(&mut self, request: CrossfadeRequest) {
+        self.pending_crossfade = Some(request);
+    }
+
+    /// Clear the crossfade request if one exists.
+    pub(crate) fn clear_crossfade_request(&mut self) {
+        self.pending_crossfade = None;
+    }
+
+    /// Access and clear the pending playlist index update produced by a crossfade.
+    pub(crate) fn take_pending_playlist_index(&mut self) -> Option<usize> {
+        self.pending_playlist_index.take()
+    }
+
+    pub(crate) fn has_pending_playlist_index(&self) -> bool {
+        self.pending_playlist_index.is_some()
+    }
 }
 
 impl Default for Ym2149Playback {
     fn default() -> Self {
         Self {
-            source_path: String::new(),
+            source_path: None,
+            source_bytes: None,
+            source_asset: None,
             state: PlaybackState::Idle,
             frame_position: 0,
             volume: 1.0,
+            left_gain: 1.0,
+            right_gain: 1.0,
+            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
             player: None,
-            audio_device: None,
             needs_reload: false,
             song_title: String::new(),
             song_author: String::new(),
+            metrics: None,
+            pending_playlist_index: None,
+            pending_crossfade: None,
+            crossfade: None,
+            inline_player: false,
+            inline_audio_ready: false,
+            inline_metadata: None,
         }
     }
 }
