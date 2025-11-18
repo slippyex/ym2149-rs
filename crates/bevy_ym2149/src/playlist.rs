@@ -231,6 +231,7 @@ pub(crate) fn apply_playlist_entry(
 
 /// Process explicit playlist advance requests (e.g. from UI input).
 pub fn handle_playlist_requests(
+    mut commands: Commands,
     mut requests: MessageReader<PlaylistAdvanceRequest>,
     mut players: Query<(&mut Ym2149Playback, &mut Ym2149PlaylistPlayer)>,
     playlists: Res<Assets<Ym2149Playlist>>,
@@ -268,9 +269,58 @@ pub fn handle_playlist_requests(
             }
         }
 
+        // If nothing is loaded yet, load immediately (first play).
+        if playback.player.is_none() {
+            controller.current_index = target_index;
+            controller.crossfade_stage = CrossfadeStage::Idle;
+            if let Some(entry) = playlist_asset.tracks.get(target_index) {
+                apply_playlist_entry(entry, &mut playback, &asset_server);
+                playback.restart();
+                playback.play();
+            }
+            continue;
+        }
+
+        if let Some(cfg) = controller.crossfade.clone() {
+            // Cancel any pending/active crossfade and enqueue a fresh one.
+            if let Some(cf) = playback.crossfade.take()
+                && let Some(cf_entity) = cf.crossfade_entity
+            {
+                commands.entity(cf_entity).despawn();
+            }
+            playback.clear_crossfade_request();
+            playback.pending_playlist_index = None;
+
+            if let Some(entry) = playlist_asset.tracks.get(target_index) {
+                let source = resolve_track_source(entry, &asset_server);
+                let desired = match cfg.window {
+                    CrossfadeWindow::FixedSeconds(sec) => sec,
+                    CrossfadeWindow::UntilSongEnd => {
+                        if let Some(metrics) = playback.metrics() {
+                            let elapsed = frames_to_seconds(
+                                playback.frame_position,
+                                metrics.samples_per_frame,
+                            );
+                            (metrics.duration_seconds() - elapsed).max(0.1)
+                        } else {
+                            5.0
+                        }
+                    }
+                };
+                playback.set_crossfade_request(CrossfadeRequest {
+                    source,
+                    duration: desired.max(0.1),
+                    target_index,
+                });
+                controller.crossfade_stage = CrossfadeStage::Loading { target_index };
+                continue;
+            }
+        }
+
         controller.current_index = target_index;
         controller.crossfade_stage = CrossfadeStage::Idle;
         playback.clear_crossfade_request();
+        playback.pending_playlist_index = None;
 
         if let Some(entry) = playlist_asset.tracks.get(target_index) {
             apply_playlist_entry(entry, &mut playback, &asset_server);

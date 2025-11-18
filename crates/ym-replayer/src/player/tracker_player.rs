@@ -212,6 +212,19 @@ impl TrackerState {
         true
     }
 
+    /// Jump to a specific tracker frame (clamped) and reset voice state.
+    pub(crate) fn seek_frame(&mut self, frame: usize) {
+        if self.total_frames == 0 {
+            self.current_frame = 0;
+        } else {
+            self.current_frame = frame.min(self.total_frames.saturating_sub(1));
+        }
+        self.samples_until_update = 0.0;
+        for voice in &mut self.voices {
+            *voice = TrackerVoiceState::new();
+        }
+    }
+
     /// Mix all active voices into a single sample
     pub(crate) fn mix_sample(&mut self) -> f32 {
         let mut accumulator: i32 = 0;

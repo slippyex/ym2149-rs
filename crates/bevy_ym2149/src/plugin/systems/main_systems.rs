@@ -1,17 +1,22 @@
 use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
+use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
-use crate::events::{ChannelSnapshot, TrackFinished, TrackStarted};
+use crate::events::{
+    BeatHit, ChannelSnapshot, PlaybackFrameMarker, TrackFinished, TrackStarted, YmSfxRequest,
+};
 use crate::oscilloscope::OscilloscopeBuffer;
 use crate::playback::{
     PlaybackMetrics, PlaybackState, YM2149_SAMPLE_RATE_F32, Ym2149Playback, Ym2149Settings,
 };
 use crate::plugin::Ym2149PluginConfig;
 use crate::song_player::{YmSongPlayer, load_song_from_bytes};
+use crate::synth::{YmSynthController, YmSynthPlayer};
 use bevy::audio::{AudioPlayer, AudioSink, PlaybackSettings};
 use bevy::prelude::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use ym2149::util::PSG_MASTER_CLOCK_HZ;
 
 // Import from sibling modules
 use super::crossfade::{finalize_crossfade, process_pending_crossfade};
@@ -20,13 +25,14 @@ use super::loader::{
 };
 use ym2149::util::channel_frequencies;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component)]
 pub(in crate::plugin) struct PlaybackRuntimeState {
     time_since_last_frame: f32,
     last_state: PlaybackState,
     last_volume: f32,
     frames_rendered: u64,
     emitted_finished: bool,
+    sfx: Option<SfxLayer>,
 }
 
 impl Default for PlaybackRuntimeState {
@@ -37,6 +43,47 @@ impl Default for PlaybackRuntimeState {
             last_state: PlaybackState::Idle,
             frames_rendered: 0,
             emitted_finished: false,
+            sfx: None,
+        }
+    }
+}
+
+struct SfxLayer {
+    player: YmSynthPlayer,
+    controller: YmSynthController,
+    remaining_frames: [u32; 3],
+}
+
+impl SfxLayer {
+    fn new() -> Self {
+        let controller = YmSynthController::new();
+        let player = YmSynthPlayer::new(controller.clone());
+        Self {
+            player,
+            controller,
+            remaining_frames: [0; 3],
+        }
+    }
+
+    fn ensure_playing(&mut self) {
+        self.player.play();
+    }
+
+    fn silence_channel(&self, channel: usize) {
+        self.controller.set_volume(channel, 0);
+    }
+
+    fn tick_frame(&mut self) {
+        for idx in 0..self.remaining_frames.len() {
+            let remaining = &mut self.remaining_frames[idx];
+            if *remaining == 0 {
+                self.silence_channel(idx);
+                continue;
+            }
+            *remaining = remaining.saturating_sub(1);
+            if *remaining == 0 {
+                self.silence_channel(idx);
+            }
         }
     }
 }
@@ -100,6 +147,95 @@ pub(in crate::plugin) fn publish_bridge_audio(
     }
 }
 
+pub(in crate::plugin) fn emit_frame_markers(
+    mut frames: MessageReader<FrameAudioData>,
+    mut markers: MessageWriter<PlaybackFrameMarker>,
+) {
+    for frame in frames.read() {
+        markers.write(PlaybackFrameMarker {
+            entity: frame.entity,
+            frame: frame.frame_index,
+            elapsed_seconds: frame.elapsed_seconds,
+            looped: frame.looped,
+        });
+    }
+}
+
+pub(in crate::plugin) fn update_audio_reactive_state(
+    mut frames: MessageReader<FrameAudioData>,
+    mut state: ResMut<AudioReactiveState>,
+) {
+    const SMOOTHING: f32 = 0.25;
+    for frame in frames.read() {
+        let entry = state.metrics.entry(frame.entity).or_default();
+
+        let inv_len = 1.0 / frame.samples_per_frame.max(1) as f32;
+        for channel in 0..3 {
+            let avg = (frame.channel_energy[channel] * inv_len).clamp(0.0, 1.0);
+            entry.average[channel] = entry.average[channel] * (1.0 - SMOOTHING) + avg * SMOOTHING;
+
+            let mut peak: f32 = 0.0;
+            for sample in frame.channel_samples.iter() {
+                peak = peak.max(sample[channel].abs());
+            }
+            entry.peak[channel] = entry.peak[channel] * (1.0 - SMOOTHING) + peak * SMOOTHING;
+        }
+        entry.frequencies = frame.frequencies;
+    }
+}
+
+pub(in crate::plugin) fn emit_beat_hits(
+    mut frames: MessageReader<PlaybackFrameMarker>,
+    mut beats: MessageWriter<BeatHit>,
+    config: Res<Ym2149PluginConfig>,
+) {
+    // Derive beats from frame markers; defaults to 50Hz frame rate => set bpm in config later
+    let frames_per_beat = (config.frames_per_beat.unwrap_or(50)).max(1);
+    for marker in frames.read() {
+        if marker.frame % frames_per_beat == 0 {
+            beats.write(BeatHit {
+                entity: marker.entity,
+                beat_index: marker.frame / frames_per_beat,
+                elapsed_seconds: marker.elapsed_seconds,
+            });
+        }
+    }
+}
+
+fn tone_period_from_hz(freq_hz: f32) -> u16 {
+    if freq_hz <= 0.0 {
+        return 0;
+    }
+    let period = (PSG_MASTER_CLOCK_HZ / (16.0 * freq_hz)).round();
+    period.clamp(1.0, 0x0FFF as f32).abs() as u16
+}
+
+pub(in crate::plugin) fn process_sfx_requests(
+    mut requests: MessageReader<YmSfxRequest>,
+    mut playbacks: Query<(Entity, &Ym2149Playback, &mut PlaybackRuntimeState)>,
+) {
+    for request in requests.read() {
+        for (entity, _pb, mut runtime) in playbacks.iter_mut() {
+            if let Some(target) = request.target
+                && target != entity
+            {
+                continue;
+            }
+            let sfx = runtime.sfx.get_or_insert_with(SfxLayer::new);
+            let channel = request.channel.min(2);
+            let volume = request.volume.clamp(0.0, 1.0);
+            let period = tone_period_from_hz(request.freq_hz);
+
+            sfx.controller.set_mixer(0x38); // enable all tones, mute all noise
+            sfx.controller.set_tone_period(channel, period);
+            let vol_reg = (volume * 15.0).round().clamp(0.0, 15.0) as u8;
+            sfx.controller.set_volume(channel, vol_reg);
+            sfx.remaining_frames[channel] = request.duration_frames.max(1);
+            sfx.ensure_playing();
+        }
+    }
+}
+
 impl PlaybackRuntimeState {
     pub(super) fn reset(&mut self) {
         self.time_since_last_frame = 0.0;
@@ -118,6 +254,9 @@ impl PlaybackRuntimeState {
 #[derive(Clone, Message)]
 pub(crate) struct FrameAudioData {
     pub entity: Entity,
+    pub frame_index: u64,
+    pub elapsed_seconds: f32,
+    pub looped: bool,
     pub stereo: Arc<[f32]>,
     pub channel_samples: Arc<[[f32; 3]]>,
     pub channel_energy: [f32; 3],
@@ -192,6 +331,53 @@ pub(in crate::plugin) fn initialize_playback(
                 .entity(entity)
                 .insert((AudioPlayer(audio_handle), settings));
             playback.inline_audio_ready = true;
+        }
+
+        // If a new player is already prepared (e.g., crossfade finalized), refresh only the audio source.
+        if playback.needs_reload
+            && playback.player.is_some()
+            && playback.metrics.is_some()
+            && !playback.inline_player
+        {
+            let player_arc = playback.player.clone().unwrap();
+            let metrics = playback.metrics.unwrap();
+            let metadata = Ym2149Metadata {
+                title: playback.song_title.clone(),
+                author: playback.song_author.clone(),
+                comment: String::new(),
+                frame_count: metrics.frame_count,
+                duration_seconds: metrics.duration_seconds(),
+            };
+            let total_samples = metrics.total_samples();
+
+            let audio_source = Ym2149AudioSource::from_shared_player(
+                player_arc,
+                metadata,
+                total_samples,
+                playback.stereo_gain.clone(),
+            );
+            let audio_handle = audio_assets.add(audio_source);
+
+            // Remove old AudioPlayer and AudioSink components if they exist
+            commands
+                .entity(entity)
+                .remove::<AudioPlayer>()
+                .remove::<bevy::audio::AudioSink>();
+
+            let settings = if playback.state == PlaybackState::Playing {
+                PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(playback.volume))
+            } else {
+                PlaybackSettings::LOOP
+                    .paused()
+                    .with_volume(bevy::audio::Volume::Linear(playback.volume))
+            };
+
+            commands
+                .entity(entity)
+                .insert((AudioPlayer(audio_handle), settings));
+
+            playback.needs_reload = false;
+            continue;
         }
 
         if playback.player.is_none() || playback.needs_reload {
@@ -443,6 +629,7 @@ pub(in crate::plugin) fn process_playback_frames(
             runtime.time_since_last_frame -= frame_duration;
             runtime.frames_rendered += 1;
 
+            let prev_frame = playback.frame_position;
             playback.frame_position = player.get_current_frame() as u32;
 
             let mut stereo_samples = Vec::with_capacity(samples_per_frame * 2);
@@ -493,6 +680,9 @@ pub(in crate::plugin) fn process_playback_frames(
                 {
                     mixed += secondary.generate_sample() * secondary_mix;
                 }
+                if let Some(sfx) = runtime.sfx.as_mut() {
+                    mixed += sfx.player.generate_sample();
+                }
 
                 let scaled = mixed * gain;
                 stereo_samples.push(scaled * left_gain);
@@ -504,14 +694,22 @@ pub(in crate::plugin) fn process_playback_frames(
                 .map(|chip| channel_frequencies(&chip.dump_registers()))
                 .unwrap_or([None; 3]);
 
+            let elapsed_seconds = runtime.frames_rendered as f32 * frame_duration;
+            let looped = playback.frame_position < prev_frame;
             frame_events.write(FrameAudioData {
                 entity,
+                frame_index: runtime.frames_rendered,
+                elapsed_seconds,
+                looped,
                 stereo: Arc::<[f32]>::from(stereo_samples.into_boxed_slice()),
                 channel_samples: Arc::<[[f32; 3]]>::from(channel_samples.into_boxed_slice()),
                 channel_energy,
                 frequencies,
                 samples_per_frame,
             });
+            if let Some(sfx) = runtime.sfx.as_mut() {
+                sfx.tick_frame();
+            }
 
             if let Some(state) = playback.crossfade.as_mut() {
                 state.elapsed = (state.elapsed + frame_duration).min(state.duration);

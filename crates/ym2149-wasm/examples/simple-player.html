@@ -448,11 +448,8 @@
                 const source = audioContext.createBufferSource();
                 source.buffer = buffer;
 
-                // Apply volume control
-                const gainNode = audioContext.createGain();
-                gainNode.gain.value = volumeSlider.value / 100;
-                source.connect(gainNode);
-                gainNode.connect(audioContext.destination);
+                // Volume is applied in WASM; keep the graph simple.
+                source.connect(audioContext.destination);
 
                 source.start(nextAudioTime);
                 nextAudioTime += bufferDuration;

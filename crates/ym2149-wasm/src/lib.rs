@@ -112,6 +112,18 @@ enum BrowserSongPlayer {
     Arkos(Box<ArkosWasmPlayer>),
 }
 
+impl BrowserSongPlayer {
+    fn seek_frame(&mut self, frame: usize) -> bool {
+        match self {
+            BrowserSongPlayer::Ym(player) => {
+                player.seek_frame(frame);
+                true
+            }
+            BrowserSongPlayer::Arkos(_) => false,
+        }
+    }
+}
+
 struct ArkosWasmPlayer {
     player: ArkosPlayer,
     estimated_frames: usize,
@@ -324,6 +336,7 @@ impl BrowserSongPlayer {
 pub struct Ym2149Player {
     player: BrowserSongPlayer,
     metadata: YmMetadata,
+    volume: f32,
 }
 
 #[wasm_bindgen]
@@ -348,7 +361,11 @@ impl Ym2149Player {
         console_log!("  Title: {}", metadata.title);
         console_log!("  Format: {}", metadata.format);
 
-        Ok(Ym2149Player { player, metadata })
+        Ok(Ym2149Player {
+            player,
+            metadata,
+            volume: 1.0,
+        })
     }
 
     /// Get metadata about the loaded YM file
@@ -394,17 +411,14 @@ impl Ym2149Player {
         format!("{:?}", self.player.state())
     }
 
-    /// Set volume (0.0 to 1.0)
-    /// Note: Volume control is done in JavaScript via Web Audio API gain node
-    pub fn set_volume(&mut self, _volume: f32) {
-        // Volume is typically handled by Web Audio API gain nodes
-        // If needed, this could scale the generated samples
+    /// Set volume (0.0 to 1.0). Applied to generated samples.
+    pub fn set_volume(&mut self, volume: f32) {
+        self.volume = volume.clamp(0.0, 1.0);
     }
 
-    /// Get current volume
-    /// Note: Always returns 1.0 as volume is handled in JavaScript
+    /// Get current volume (0.0 to 1.0)
     pub fn volume(&self) -> f32 {
-        1.0
+        self.volume
     }
 
     /// Get current frame position
@@ -422,18 +436,17 @@ impl Ym2149Player {
         self.player.playback_position()
     }
 
-    /// Seek to a specific frame
-    /// Note: Seeking is implemented by stopping and restarting playback
-    pub fn seek_to_frame(&mut self, _frame: u32) {
-        // TODO: Implement proper seeking when player API supports it
-        // For now, seeking is not supported in WASM
+    /// Seek to a specific frame (silently ignored for Arkos backend).
+    pub fn seek_to_frame(&mut self, frame: u32) {
+        let _ = self.player.seek_frame(frame as usize);
     }
 
-    /// Seek to a percentage of the song (0.0 to 1.0)
-    /// Note: Seeking is implemented by stopping and restarting playback
-    pub fn seek_to_percentage(&mut self, _percentage: f32) {
-        // TODO: Implement proper seeking when player API supports it
-        // For now, seeking is not supported in WASM
+    /// Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos backend).
+    pub fn seek_to_percentage(&mut self, percentage: f32) {
+        let total_frames = self.player.frame_count().max(1);
+        let clamped = percentage.clamp(0.0, 1.0);
+        let target = ((total_frames as f32 - 1.0) * clamped).round() as usize;
+        let _ = self.player.seek_frame(target);
     }
 
     /// Mute or unmute a channel (0-2)
@@ -454,7 +467,13 @@ impl Ym2149Player {
     /// For 44.1kHz at 50Hz frame rate: 882 samples per frame
     #[wasm_bindgen(js_name = generateSamples)]
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        self.player.generate_samples(count)
+        let mut samples = self.player.generate_samples(count);
+        if self.volume != 1.0 {
+            for sample in &mut samples {
+                *sample *= self.volume;
+            }
+        }
+        samples
     }
 
     /// Generate samples into a pre-allocated buffer (zero-allocation)
@@ -463,6 +482,11 @@ impl Ym2149Player {
     #[wasm_bindgen(js_name = generateSamplesInto)]
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         self.player.generate_samples_into(buffer);
+        if self.volume != 1.0 {
+            for sample in buffer.iter_mut() {
+                *sample *= self.volume;
+            }
+        }
     }
 
     /// Get the current register values (for visualization)

@@ -14,7 +14,8 @@ Bevy plugin that embeds the cycle-accurate [`ym2149`](../ym2149-core) emulator, 
 - 🎚️ **ECS-native control**: `Ym2149Playback` component (play/pause/seek/volume/stereo gain)
 - 🧭 **Music systems**: playlists with seamless crossfades, `.ymplaylist` loader, music state graphs
 - 🔊 **Audio bridge**: mirror samples into Bevy's audio graph or your own sinks
-- 📈 **Diagnostics & events**: buffer fill metrics + `TrackStarted/TrackFinished`/`ChannelSnapshot` messages
+- 📈 **Diagnostics & events**: buffer fill metrics + `TrackStarted/TrackFinished`/`ChannelSnapshot`/`PlaybackFrameMarker`
+- 🪄 **Gameplay hooks**: audio-reactive state (avg/peak/freq per channel) and PSG one-shot SFX via `YmSfxRequest`
 - 🖥️ **Visualization**: drop in `Ym2149VizPlugin` for oscilloscope, spectrum, progress HUD (kept in a separate crate so headless builds stay lean)
 
 ## Getting Started
@@ -118,6 +119,9 @@ Other helpers:
 - `Ym2149Playback::from_asset(handle)` and `::from_bytes(bytes)` for asset-server or embedded sources
 - `set_source_path / asset / bytes` to retarget an entity mid-game
 - `set_stereo_gain(left, right)` for manual stereo/pan control
+- `PlaybackFrameMarker` event stream for 50Hz markers (frame, elapsed_seconds, looped)
+- `AudioReactiveState` resource for smoothed channel avg/peak/frequency per playback entity
+- `YmSfxRequest` to trigger short PSG tones mixed into playback (channel/freq/volume/duration)
 
 ### Playlists & Crossfades
 

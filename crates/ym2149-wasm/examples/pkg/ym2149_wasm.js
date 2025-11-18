@@ -169,12 +169,11 @@ export class Ym2149Player {
         return ret !== 0;
     }
     /**
-     * Set volume (0.0 to 1.0)
-     * Note: Volume control is done in JavaScript via Web Audio API gain node
-     * @param {number} _volume
+     * Set volume (0.0 to 1.0). Applied to generated samples.
+     * @param {number} volume
      */
-    set_volume(_volume) {
-        wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, _volume);
+    set_volume(volume) {
+        wasm.ym2149player_set_volume(this.__wbg_ptr, volume);
     }
     /**
      * Get total frame count
@@ -195,12 +194,11 @@ export class Ym2149Player {
         return v1;
     }
     /**
-     * Seek to a specific frame
-     * Note: Seeking is implemented by stopping and restarting playback
-     * @param {number} _frame
+     * Seek to a specific frame (silently ignored for Arkos backend).
+     * @param {number} frame
      */
-    seek_to_frame(_frame) {
-        wasm.ym2149player_seek_to_frame(this.__wbg_ptr, _frame);
+    seek_to_frame(frame) {
+        wasm.ym2149player_seek_to_frame(this.__wbg_ptr, frame);
     }
     /**
      * Get current frame position
@@ -251,12 +249,11 @@ export class Ym2149Player {
         wasm.ym2149player_set_color_filter(this.__wbg_ptr, enabled);
     }
     /**
-     * Seek to a percentage of the song (0.0 to 1.0)
-     * Note: Seeking is implemented by stopping and restarting playback
-     * @param {number} _percentage
+     * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos backend).
+     * @param {number} percentage
      */
-    seek_to_percentage(_percentage) {
-        wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, _percentage);
+    seek_to_percentage(percentage) {
+        wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, percentage);
     }
     /**
      * Get playback position as percentage (0.0 to 1.0)
@@ -341,8 +338,7 @@ export class Ym2149Player {
         }
     }
     /**
-     * Get current volume
-     * Note: Always returns 1.0 as volume is handled in JavaScript
+     * Get current volume (0.0 to 1.0)
      * @returns {number}
      */
     volume() {

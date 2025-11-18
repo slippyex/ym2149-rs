@@ -18,10 +18,9 @@ export class Ym2149Player {
    */
   is_playing(): boolean;
   /**
-   * Set volume (0.0 to 1.0)
-   * Note: Volume control is done in JavaScript via Web Audio API gain node
+   * Set volume (0.0 to 1.0). Applied to generated samples.
    */
-  set_volume(_volume: number): void;
+  set_volume(volume: number): void;
   /**
    * Get total frame count
    */
@@ -31,10 +30,9 @@ export class Ym2149Player {
    */
   get_registers(): Uint8Array;
   /**
-   * Seek to a specific frame
-   * Note: Seeking is implemented by stopping and restarting playback
+   * Seek to a specific frame (silently ignored for Arkos backend).
    */
-  seek_to_frame(_frame: number): void;
+  seek_to_frame(frame: number): void;
   /**
    * Get current frame position
    */
@@ -61,10 +59,9 @@ export class Ym2149Player {
    */
   set_color_filter(enabled: boolean): void;
   /**
-   * Seek to a percentage of the song (0.0 to 1.0)
-   * Note: Seeking is implemented by stopping and restarting playback
+   * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos backend).
    */
-  seek_to_percentage(_percentage: number): void;
+  seek_to_percentage(percentage: number): void;
   /**
    * Get playback position as percentage (0.0 to 1.0)
    */
@@ -104,8 +101,7 @@ export class Ym2149Player {
    */
   state(): string;
   /**
-   * Get current volume
-   * Note: Always returns 1.0 as volume is handled in JavaScript
+   * Get current volume (0.0 to 1.0)
    */
   volume(): number;
   /**
@@ -177,6 +173,7 @@ export interface InitOutput {
   readonly ym2149player_seek_to_percentage: (a: number, b: number) => void;
   readonly ym2149player_set_channel_mute: (a: number, b: number, c: number) => void;
   readonly ym2149player_set_color_filter: (a: number, b: number) => void;
+  readonly ym2149player_set_volume: (a: number, b: number) => void;
   readonly ym2149player_state: (a: number) => [number, number];
   readonly ym2149player_stop: (a: number) => [number, number];
   readonly ym2149player_volume: (a: number) => number;
@@ -188,7 +185,6 @@ export interface InitOutput {
   readonly ymmetadata_frame_rate: (a: number) => number;
   readonly ymmetadata_title: (a: number) => [number, number];
   readonly init_panic_hook: () => void;
-  readonly ym2149player_set_volume: (a: number, b: number) => void;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

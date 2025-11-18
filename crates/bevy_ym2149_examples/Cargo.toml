@@ -15,9 +15,11 @@ path = "src/lib.rs"
 [dependencies]
 bevy_ym2149 = { path = "../bevy_ym2149" }
 bevy_ym2149_viz = { path = "../bevy_ym2149_viz" }
-bevy = { version = "0.17", features = ["bevy_audio"] }
+bevy = { version = "0.17", features = ["bevy_audio", "bevy_sprite", "bevy_ui", "bevy_core_pipeline", "bevy_render", "bevy_asset", "bevy_scene", "bevy_text", "bevy_winit", "png"] }
+bevy_sprite = "0.17"
 bevy_mesh = "0.17"
 ym2149 = { path = "../ym2149-core", version = "0.6", features = ["emulator", "streaming"] }
+ym-replayer = { path = "../ym-replayer" }
 
 [[example]]
 name = "basic_example"

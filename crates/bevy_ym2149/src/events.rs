@@ -21,6 +21,15 @@ pub struct TrackFinished {
     pub entity: Entity,
 }
 
+/// Fired every VBL-frame (50Hz) with timestamp and loop info.
+#[derive(Event, Message, Clone, Debug)]
+pub struct PlaybackFrameMarker {
+    pub entity: Entity,
+    pub frame: u64,
+    pub elapsed_seconds: f32,
+    pub looped: bool,
+}
+
 /// Request to switch to a named music state.
 #[derive(Event, Message, Clone, Debug)]
 pub struct MusicStateRequest {
@@ -39,4 +48,22 @@ pub struct PlaylistAdvanceRequest {
 #[derive(Event, Message, Clone, Debug)]
 pub struct AudioBridgeRequest {
     pub entity: Entity,
+}
+
+/// Trigger a lightweight YM2149 SFX tone on a playback entity (or all entities if `target` is `None`).
+#[derive(Event, Message, Clone, Debug)]
+pub struct YmSfxRequest {
+    pub target: Option<Entity>,
+    pub channel: usize,
+    pub freq_hz: f32,
+    pub volume: f32,
+    pub duration_frames: u32,
+}
+
+/// Beat marker derived from frame markers (e.g. every N frames/BPM-grid).
+#[derive(Event, Message, Clone, Debug)]
+pub struct BeatHit {
+    pub entity: Entity,
+    pub beat_index: u64,
+    pub elapsed_seconds: f32,
 }

@@ -9,18 +9,20 @@ mod systems;
 pub use config::Ym2149PluginConfig;
 
 use self::systems::{
-    FrameAudioData, drive_playback_state, emit_playback_diagnostics, initialize_playback,
-    process_playback_frames, publish_bridge_audio,
+    FrameAudioData, drive_playback_state, emit_beat_hits, emit_frame_markers,
+    emit_playback_diagnostics, initialize_playback, process_playback_frames, process_sfx_requests,
+    publish_bridge_audio, update_audio_reactive_state,
 };
 use crate::audio_bridge::{
     AudioBridgeBuffers, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice, BridgeAudioSinks,
     drive_bridge_audio_buffers, handle_bridge_requests,
 };
+use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Loader};
 use crate::diagnostics::{register as register_diagnostics, update_diagnostics};
 use crate::events::{
-    AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, TrackFinished,
-    TrackStarted,
+    AudioBridgeRequest, BeatHit, ChannelSnapshot, MusicStateRequest, PlaybackFrameMarker,
+    PlaylistAdvanceRequest, TrackFinished, TrackStarted, YmSfxRequest,
 };
 use crate::music_state::{MusicStateGraph, process_music_state_requests};
 use crate::playback::Ym2149Settings;
@@ -82,10 +84,23 @@ impl Plugin for Ym2149Plugin {
         app.add_message::<PlaylistAdvanceRequest>();
         app.add_message::<AudioBridgeRequest>();
         app.add_message::<FrameAudioData>();
+        app.add_message::<PlaybackFrameMarker>();
+        app.add_message::<BeatHit>();
+        app.add_message::<YmSfxRequest>();
+        app.init_resource::<AudioReactiveState>();
 
         // Core playback lifecycle.
         app.add_systems(PreUpdate, (initialize_playback, drive_playback_state));
-        app.add_systems(Update, process_playback_frames);
+        app.add_systems(
+            Update,
+            (
+                process_sfx_requests.before(process_playback_frames),
+                process_playback_frames,
+                emit_frame_markers.after(process_playback_frames),
+                update_audio_reactive_state.after(process_playback_frames),
+                emit_beat_hits.after(emit_frame_markers),
+            ),
+        );
         // Optional playlist support.
         if self.config.playlists {
             app.init_asset::<Ym2149Playlist>();

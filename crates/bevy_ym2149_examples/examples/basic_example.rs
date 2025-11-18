@@ -7,7 +7,7 @@
 
 use bevy::log::info;
 use bevy::prelude::*;
-use bevy_ym2149::{Ym2149Playback, Ym2149Plugin};
+use bevy_ym2149::{Ym2149Playback, Ym2149Plugin, YmSfxRequest};
 use bevy_ym2149_examples::example_plugins;
 
 fn main() {
@@ -54,6 +54,7 @@ fn setup(mut commands: Commands) {
 fn playback_control(
     mut playbacks: Query<&mut Ym2149Playback>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    mut sfx: MessageWriter<YmSfxRequest>,
 ) {
     if let Some(mut playback) = playbacks.iter_mut().next() {
         // Play/Pause toggle on spacebar
@@ -85,6 +86,35 @@ fn playback_control(
             let new_volume = (playback.volume - 0.1).max(0.0);
             playback.set_volume(new_volume);
             info!("Volume: {:.0}%", new_volume * 100.0);
+        }
+
+        // Quick SFX demo (PSG one-shots) on Q/W/E
+        if keyboard.just_pressed(KeyCode::KeyQ) {
+            sfx.write(YmSfxRequest {
+                target: None,
+                channel: 0,
+                freq_hz: 440.0,
+                volume: 0.8,
+                duration_frames: 12,
+            });
+        }
+        if keyboard.just_pressed(KeyCode::KeyW) {
+            sfx.write(YmSfxRequest {
+                target: None,
+                channel: 1,
+                freq_hz: 660.0,
+                volume: 0.7,
+                duration_frames: 12,
+            });
+        }
+        if keyboard.just_pressed(KeyCode::KeyE) {
+            sfx.write(YmSfxRequest {
+                target: None,
+                channel: 2,
+                freq_hz: 880.0,
+                volume: 0.6,
+                duration_frames: 12,
+            });
         }
     }
 }

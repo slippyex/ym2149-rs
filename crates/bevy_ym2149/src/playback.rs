@@ -104,6 +104,7 @@ pub(crate) struct ActiveCrossfade {
     pub elapsed: f32,
     pub duration: f32,
     pub target_index: usize,
+    pub audio_handle: Handle<crate::audio_source::Ym2149AudioSource>,
     /// Raw YM data for recreating the AudioPlayer after crossfade completes
     pub data: Arc<Vec<u8>>,
     /// Entity of the separate AudioPlayer playing the incoming track during crossfade

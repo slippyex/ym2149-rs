@@ -79,7 +79,7 @@ pub(super) fn process_pending_crossfade(
 
     let crossfade_entity = commands
         .spawn((
-            AudioPlayer(crossfade_handle),
+            AudioPlayer(crossfade_handle.clone()),
             PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(0.0)),
         ))
         .id();
@@ -92,6 +92,7 @@ pub(super) fn process_pending_crossfade(
         elapsed: 0.0,
         duration,
         target_index: request.target_index,
+        audio_handle: crossfade_handle,
         data: data_for_audio,
         crossfade_entity: Some(crossfade_entity),
     });
@@ -101,7 +102,7 @@ pub(super) fn process_pending_crossfade(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn finalize_crossfade(
     commands: &mut Commands,
-    entity: Entity,
+    _entity: Entity,
     playback: &mut Ym2149Playback,
     runtime: &mut PlaybackRuntimeState,
     config: &Ym2149PluginConfig,
@@ -111,6 +112,8 @@ pub(super) fn finalize_crossfade(
     let Some(crossfade) = playback.crossfade.take() else {
         return;
     };
+
+    let _ = (config, started_events, finished_events);
 
     if let Some(cf_entity) = crossfade.crossfade_entity {
         commands.entity(cf_entity).despawn();
@@ -123,24 +126,28 @@ pub(super) fn finalize_crossfade(
     }
 
     let new_player = crossfade.player.clone();
-    playback.player = Some(new_player.clone());
+    playback.player = Some(new_player);
     playback.song_title = crossfade.song_title;
     playback.song_author = crossfade.song_author;
     playback.metrics = Some(crossfade.metrics);
     playback.pending_playlist_index = Some(crossfade.target_index);
-    playback.frame_position = new_player.read().get_current_frame() as u32;
-
-    playback.source_bytes = Some(crossfade.data);
     playback.source_path = None;
     playback.source_asset = None;
-    playback.needs_reload = true;
+    playback.needs_reload = false;
+    // Keep position as-is; the player already advanced during crossfade.
+
+    playback.source_bytes = Some(crossfade.data);
 
     playback.volume = 1.0;
-
     runtime.reset_for_crossfade();
 
-    if config.channel_events {
-        finished_events.write(TrackFinished { entity });
-        started_events.write(TrackStarted { entity });
-    }
+    // Swap audio output to the crossfade deck handle.
+    commands
+        .entity(_entity)
+        .remove::<bevy::audio::AudioSink>()
+        .remove::<bevy::audio::AudioPlayer>()
+        .insert((
+            bevy::audio::AudioPlayer(crossfade.audio_handle.clone()),
+            bevy::audio::PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(1.0)),
+        ));
 }

@@ -116,6 +116,23 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             (self.sequencer.current_frame() as f32) / (self.sequencer.frame_count() as f32)
         }
     }
+
+    /// Seek to a specific frame (clamped).
+    ///
+    /// Resets effect state so the next frame is applied cleanly.
+    pub fn seek_frame(&mut self, frame: usize) {
+        if self.is_tracker_mode {
+            if let Some(tracker) = self.tracker.as_mut() {
+                tracker.seek_frame(frame);
+            }
+        } else {
+            self.sequencer.seek(frame);
+        }
+        self.effects.reset();
+        self.first_frame_pre_loaded = false;
+        self.prev_r13 = None;
+        self.vbl.reset();
+    }
 }
 
 impl<B: Ym2149Backend> PlaybackController for Ym6PlayerGeneric<B> {
