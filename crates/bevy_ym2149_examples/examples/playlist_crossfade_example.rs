@@ -185,22 +185,21 @@ fn update_ui(
 
 fn load_metadata(path: &str) -> (String, String) {
     let data = std::fs::read(path);
-    if let Ok(bytes) = data {
-        if let Ok((player, _summary)) = ym_replayer::load_song(&bytes) {
-            if let Some(info) = player.info() {
-                let title = if info.song_name.trim().is_empty() {
-                    "Unknown title".to_string()
-                } else {
-                    info.song_name.clone()
-                };
-                let author = if info.author.trim().is_empty() {
-                    "Unknown author".to_string()
-                } else {
-                    info.author.clone()
-                };
-                return (title, author);
-            }
-        }
+    if let Ok(bytes) = data
+        && let Ok((player, _summary)) = ym_replayer::load_song(&bytes)
+        && let Some(info) = player.info()
+    {
+        let title = if info.song_name.trim().is_empty() {
+            "Unknown title".to_string()
+        } else {
+            info.song_name.clone()
+        };
+        let author = if info.author.trim().is_empty() {
+            "Unknown author".to_string()
+        } else {
+            info.author.clone()
+        };
+        return (title, author);
     }
     ("Unknown title".to_string(), "Unknown author".to_string())
 }

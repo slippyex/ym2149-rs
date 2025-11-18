@@ -494,8 +494,8 @@ fn test_audio_source_shares_player_instance() {
         .expect("Ym2149AudioSource asset should exist");
 
     assert!(
-        Arc::ptr_eq(&player_arc, &source.player()),
-        "Audio asset and playback should share the same player instance"
+        !Arc::ptr_eq(&player_arc, &source.player()),
+        "Audio asset and playback should not share the same player instance (avoid double-stepping the decoder)"
     );
 }
 

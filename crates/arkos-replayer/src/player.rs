@@ -446,7 +446,7 @@ impl ArkosPlayer {
         self.run_tick(|_| {});
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "extended-tests"))]
     pub(crate) fn capture_tick_frames(&mut self) -> Vec<ChannelFrame> {
         let mut captured = Vec::new();
         self.run_tick(|frames| {
@@ -912,7 +912,7 @@ impl SampleVoiceMixer {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "extended-tests"))]
 fn frames_to_registers(psg_idx: usize, frames: &[ChannelFrame], prev: &mut [u8; 16]) -> [u8; 16] {
     let base_channel = psg_idx * 3;
     let mut regs = *prev;

@@ -108,6 +108,7 @@ pub(super) fn finalize_crossfade(
     config: &Ym2149PluginConfig,
     started_events: &mut MessageWriter<TrackStarted>,
     finished_events: &mut MessageWriter<TrackFinished>,
+    audio_sinks: &mut Query<&mut bevy::audio::AudioSink>,
 ) {
     let Some(crossfade) = playback.crossfade.take() else {
         return;
@@ -115,7 +116,16 @@ pub(super) fn finalize_crossfade(
 
     let _ = (config, started_events, finished_events);
 
+    // Stop and dispose the outgoing deck
+    if let Ok(sink) = audio_sinks.get_mut(_entity) {
+        sink.stop();
+    }
+
     if let Some(cf_entity) = crossfade.crossfade_entity {
+        // Ensure the incoming deck is fully up before moving handles around.
+        if let Ok(mut sink) = audio_sinks.get_mut(cf_entity) {
+            sink.set_volume(bevy::audio::Volume::Linear(1.0));
+        }
         commands.entity(cf_entity).despawn();
     }
 

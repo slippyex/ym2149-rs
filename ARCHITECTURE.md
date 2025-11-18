@@ -276,8 +276,23 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
 3. **Effects & Profiles**
    - `FrameSequencer` owns register frames, loop points, and VBL timing
    - `FormatProfile` encapsulates YM2/YM5/YM6 quirks (register munging + effect decoding)
-   - `EffectsPipeline` wraps the low-level `EffectsManager` and tracks SID/digidrum state
-   - All format-specific logic now lives behind `FormatMode` strategies instead of `is_ym*_mode` flags
+- `EffectsPipeline` wraps the low-level `EffectsManager` and tracks SID/digidrum state
+- All format-specific logic now lives behind `FormatMode` strategies instead of `is_ym*_mode` flags
+
+### Responsibilities (arkos-replayer)
+
+1. **Arkos Tracker Project Parsing**
+   - Parses `.aks` subsongs, position tables, speed tracks, instruments, pitch/arpeggio tables
+   - Validates pattern bounds and loop markers, clamps tracker note ranges to AT3 semantics
+
+2. **Realtime Playback**
+   - Tick-by-tick pattern walker with glide, pitch slides, inline/arpeggio tables, hardware envelope
+   - Digidrum/sample playback pipeline with loop points and priority handling
+   - PSG register conversion via shared `psg` helpers for parity with YM core
+
+3. **Interoperability**
+   - Exposed through the Bevy plugin as an alternate backend for playlists and the wasm player
+   - CLI wrapper (`ArkosPlayerWrapper`) implements the shared `RealtimeChip` trait for feature parity (mute, position, color filter no-op)
 
 ### Module Organization
 

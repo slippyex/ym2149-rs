@@ -154,8 +154,8 @@ Want to try the browser demo? Open https://slippyex.github.io/ym2149-rs/web/simp
 - `crates/ym2149-core/README.md` – emulator architecture, feature flags, CLI/export instructions
 - `crates/bevy_ym2149/README.md` – plugin subsystems, playlists, music state graph, audio bridge, diagnostics
 - `crates/bevy_ym2149_viz/README.md` – visualization builders and systems
-- `crates/bevy_ym2149_examples/README.md` – example matrix + screenshot gallery
-- [ARCHITECTURE.md](ARCHITECTURE.md) – deeper dive into the emulator internals
+- `crates/bevy_ym2149_examples/README.md` – example matrix + screenshot gallery (incl. playlist crossfade UI)
+- [ARCHITECTURE.md](ARCHITECTURE.md) – YM + Arkos playback pipelines and layering details
 - [crates/ym2149-core/STREAMING_GUIDE.md](crates/ym2149-core/STREAMING_GUIDE.md) – low-latency streaming details
 - `examples/arkos/` – curated Arkos Tracker `.ym/.aks` files for regression tests and the wasm demo
 

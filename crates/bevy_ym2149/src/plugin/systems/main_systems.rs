@@ -753,6 +753,7 @@ pub(in crate::plugin) fn process_playback_frames(
                 &config,
                 &mut started_events,
                 &mut finished_events,
+                &mut audio_sinks,
             );
             continue;
         }

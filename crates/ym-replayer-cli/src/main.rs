@@ -48,10 +48,6 @@ pub trait RealtimeChip: PlaybackController + Send {
     /// Get current chip state for visualization.
     fn visual_snapshot(&self) -> VisualSnapshot;
 
-    /// Enable or disable ST-style color filter.
-    #[allow(dead_code)]
-    fn set_color_filter(&mut self, enabled: bool);
-
     /// Mute or unmute a channel.
     fn set_channel_mute(&mut self, channel: usize, mute: bool);
 
@@ -60,6 +56,9 @@ pub trait RealtimeChip: PlaybackController + Send {
 
     /// Get playback position as percentage (0.0 to 1.0).
     fn get_playback_position(&self) -> f32;
+
+    /// Enable/disable ST color filter when supported.
+    fn set_color_filter(&mut self, enabled: bool);
 }
 
 impl RealtimeChip for Ym6Player {
@@ -82,10 +81,6 @@ impl RealtimeChip for Ym6Player {
         }
     }
 
-    fn set_color_filter(&mut self, enabled: bool) {
-        self.get_chip_mut().set_color_filter(enabled);
-    }
-
     fn set_channel_mute(&mut self, channel: usize, mute: bool) {
         self.set_channel_mute(channel, mute);
     }
@@ -96,6 +91,10 @@ impl RealtimeChip for Ym6Player {
 
     fn get_playback_position(&self) -> f32 {
         Ym6Player::get_playback_position(self)
+    }
+
+    fn set_color_filter(&mut self, enabled: bool) {
+        self.get_chip_mut().set_color_filter(enabled);
     }
 }
 
@@ -158,10 +157,6 @@ impl RealtimeChip for ArkosPlayerWrapper {
         }
     }
 
-    fn set_color_filter(&mut self, _enabled: bool) {
-        // Not applicable for Arkos
-    }
-
     fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {
         // TODO: Implement channel muting in PsgBank
     }
@@ -173,6 +168,10 @@ impl RealtimeChip for ArkosPlayerWrapper {
     fn get_playback_position(&self) -> f32 {
         // TODO: Calculate based on current_position / end_position
         0.0
+    }
+
+    fn set_color_filter(&mut self, _enabled: bool) {
+        // Not applicable for Arkos
     }
 }
 

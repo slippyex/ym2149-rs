@@ -33,6 +33,14 @@ Focused demonstration of the playlist crossfade feature:
 
 **Run:** `cargo run --example crossfade_example -p bevy_ym2149_examples`
 
+### playlist_crossfade_example
+Selectable playlist UI with manual crossfades:
+- Reads all bundled songs in `assets/music`, displays title/author plus filename
+- Arrow Up/Down to select, `Enter` starts a 5s crossfade to the highlighted song, `Esc` quits
+- Highlights the currently playing entry while fading so you always see the active deck
+
+**Run:** `cargo run --example playlist_crossfade_example -p bevy_ym2149_examples`
+
 ### advanced_example
 Advanced features including:
 - Real-time visualization (oscilloscope, channel display, spectrum analysis)

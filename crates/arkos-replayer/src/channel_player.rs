@@ -102,6 +102,28 @@ impl Default for ChannelFrame {
     }
 }
 
+// Helper type for tests to introspect channel state
+#[cfg(all(test, feature = "extended-tests"))]
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ChannelDebugState {
+    pub instrument_id: Option<usize>,
+    pub instrument_line: usize,
+    pub instrument_tick: u8,
+    pub noise: u8,
+    pub volume: u8,
+    pub sound_open: bool,
+    pub base_note: u8,
+    pub track_note: u8,
+    pub pitch_from_pitch_table: i16,
+    pub track_pitch: i16,
+    pub volume_slide: u8,
+    pub use_inline_arpeggio: bool,
+    pub table_arpeggio_id: Option<usize>,
+    pub inline_arpeggio_len: usize,
+    pub arpeggio_index: usize,
+    pub pitch_table_id: Option<usize>,
+}
+
 /// Complete state for one channel
 pub struct ChannelPlayer {
     /// Channel index in song
@@ -165,6 +187,28 @@ pub struct ChannelPlayer {
 }
 
 impl ChannelPlayer {
+    #[cfg(all(test, feature = "extended-tests"))]
+    pub(crate) fn debug_state(&self) -> ChannelDebugState {
+        ChannelDebugState {
+            instrument_id: self.current_instrument_id,
+            instrument_line: self.instrument_current_line,
+            instrument_tick: self.instrument_current_tick,
+            noise: self.noise,
+            volume: self.instrument_cell_volume,
+            sound_open: self.sound_open,
+            base_note: self.base_note,
+            track_note: self.track_note,
+            pitch_from_pitch_table: self.pitch_from_pitch_table,
+            track_pitch: self.pitch_slide.get(),
+            volume_slide: self.volume_slide.get(),
+            use_inline_arpeggio: self.use_inline_arpeggio,
+            table_arpeggio_id: self.table_arpeggio_id,
+            inline_arpeggio_len: self.inline_arpeggio.len(),
+            arpeggio_index: self.arpeggio_reader.current_index(),
+            pitch_table_id: self.pitch_table_id,
+        }
+    }
+
     /// Create new channel player
     pub fn new(
         channel_index: usize,
@@ -982,52 +1026,6 @@ impl ChannelPlayer {
 
         let adjusted = note as i32 + transposition as i32;
         self.wrap_note(adjusted) as Note
-    }
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub(crate) struct ChannelDebugState {
-    pub instrument_id: Option<usize>,
-    pub instrument_line: usize,
-    pub instrument_tick: u8,
-    pub noise: u8,
-    pub volume: u8,
-    pub sound_open: bool,
-    pub base_note: Note,
-    pub track_note: Note,
-    pub pitch_from_pitch_table: i16,
-    pub track_pitch: i16,
-    pub volume_slide: u8,
-    pub use_inline_arpeggio: bool,
-    pub table_arpeggio_id: Option<usize>,
-    pub inline_arpeggio_len: usize,
-    pub arpeggio_index: usize,
-    pub pitch_table_id: Option<usize>,
-}
-
-#[cfg(test)]
-impl ChannelPlayer {
-    pub(crate) fn debug_state(&self) -> ChannelDebugState {
-        ChannelDebugState {
-            instrument_id: self.current_instrument_id,
-            instrument_line: self.instrument_current_line,
-            instrument_tick: self.instrument_current_tick,
-            noise: self.noise,
-            volume: self.instrument_cell_volume,
-            sound_open: self.sound_open,
-            base_note: self.base_note,
-            track_note: self.track_note,
-            pitch_from_pitch_table: self.pitch_from_pitch_table,
-            track_pitch: self.pitch_slide.get(),
-            volume_slide: self.volume_slide.get(),
-            use_inline_arpeggio: self.use_inline_arpeggio,
-            table_arpeggio_id: self.table_arpeggio_id,
-            inline_arpeggio_len: self.inline_arpeggio.len(),
-            arpeggio_index: self.arpeggio_reader.current_index(),
-            pitch_table_id: self.pitch_table_id,
-        }
     }
 }
 
