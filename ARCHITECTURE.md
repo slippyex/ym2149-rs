@@ -259,7 +259,7 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
 
 ## Layer 3: Music Playback (ym-replayer & arkos-replayer)
 
-### Responsibilities
+### Responsibilities (ym-replayer)
 
 1. **YM File Parsing**
    - Format detection (YM1/2/3/3b/4/5/6 final, YMT1/YMT2 tracker)
@@ -311,7 +311,7 @@ ym-replayer/src/
 └── lib.rs                 # Public exports
 ```
 
-### Playback Algorithm
+### Playback Algorithm (ym-replayer)
 
 ```
 initialize(ym_file):
@@ -342,7 +342,7 @@ generate_samples(count):
           stop()
 ```
 
-### Generic Backend with Hardware-Specific Effects
+### Generic Backend with Hardware-Specific Effects (ym-replayer)
 
 **Implementation:** `Ym6Player` is implemented as a generic struct `Ym6PlayerGeneric<B: Ym2149Backend>`, allowing it to work with any backend that implements the `Ym2149Backend` trait.
 
@@ -364,6 +364,31 @@ pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
 **Design Rationale:** The trait provides default no-op implementations for hardware-specific methods, allowing generic code to compile while preserving effect functionality when using the concrete `Ym2149` type. This approach provides both flexibility (generic) and accuracy (hardware-specific features when needed).
 
 ---
+
+### arkos-replayer (Arkos Tracker 3)
+
+**Purpose:** Parse and play Arkos Tracker 3 (`.aks`) projects, including multi-PSG songs.
+
+**Capabilities:**
+- XML-based `.aks` parser with subsong selection and per-PSG reference frequency
+- Multi-PSG mixing via `PsgBank` (mute per PSG/channel, shared clocks)
+- Digidrum/sample playback with loop handling
+- Tick/line counters for progress reporting (used by wasm)
+
+**Module Organization (crates/arkos-replayer):**
+- `parser.rs` – XML parsing, subsong selection, frequency/loop extraction
+- `psg.rs` / `psg_bank.rs` – Period math + multiple `Ym2149` chips
+- `channel_player.rs` – Per-voice envelopes, digidrums, pitch handling
+- `player.rs` – Main ArkosPlayer (ticks/lines, speed changes, mixing)
+- `tests/` – PSG period parity + fixture parity vs. reference YM exports
+
+**Integration Points:**
+- CLI wraps it via `ArkosPlayerWrapper` (streaming path)
+- WASM binding `ArkosWasmPlayer` exposes play/pause/stop, metadata, estimated ticks
+
+**Limitations / TODOs:**
+- CLI path lacks live PSG dump/mute/position (placeholders in `ArkosPlayerWrapper`)
+- Seeking unsupported; wasm seek calls are ignored for Arkos backend
 
 ## Layer 4: Integration Targets
 
@@ -626,7 +651,7 @@ graph LR
 
 **Latency:** ~120-150ms end-to-end (configurable buffer size)
 
-**See:** [STREAMING_GUIDE.md](STREAMING_GUIDE.md)
+**See:** [STREAMING_GUIDE.md](crates/ym2149-core/STREAMING_GUIDE.md)
 
 ### Bevy Integration (Native Audio System)
 
@@ -796,7 +821,7 @@ cargo test --workspace
 ## Related Documentation
 
 - [ym2149-core Architecture](crates/ym2149-core/ARCHITECTURE.md) - Chip emulation details
-- [Streaming Guide](STREAMING_GUIDE.md) - Real-time audio architecture
+- [Streaming Guide](crates/ym2149-core/STREAMING_GUIDE.md) - Real-time audio architecture
 - [ym-replayer README](crates/ym-replayer/README.md) - Playback layer API
 - [bevy_ym2149 README](crates/bevy_ym2149/README.md) - Bevy integration guide
 

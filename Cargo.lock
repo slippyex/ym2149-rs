@@ -1589,8 +1589,10 @@ version = "0.6.0"
 dependencies = [
  "bevy",
  "bevy_mesh",
+ "bevy_sprite",
  "bevy_ym2149",
  "bevy_ym2149_viz",
+ "ym-replayer",
  "ym2149",
 ]
 
