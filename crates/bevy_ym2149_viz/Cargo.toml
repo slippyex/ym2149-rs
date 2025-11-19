@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+description = "Visualization systems for the bevy_ym2149 plugin (oscilloscope, spectrum, HUD)"
 
 [dependencies]
 bevy = { version = "0.17", features = ["bevy_ui"] }
