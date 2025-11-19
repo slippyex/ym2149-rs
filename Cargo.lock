@@ -204,21 +204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arkos-replayer"
-version = "0.6.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "bitflags 2.10.0",
- "quick-xml 0.36.2",
- "serde",
- "thiserror 1.0.69",
- "ym-replayer",
- "ym2149",
- "zip",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1572,15 +1557,15 @@ name = "bevy_ym2149"
 version = "0.6.0"
 dependencies = [
  "anyhow",
- "arkos-replayer",
  "bevy",
  "bevy_mesh",
  "parking_lot",
  "ron 0.8.1",
  "serde",
  "thiserror 1.0.69",
- "ym-replayer",
  "ym2149",
+ "ym2149-arkos-replayer",
+ "ym2149-ym-replayer",
 ]
 
 [[package]]
@@ -1592,8 +1577,8 @@ dependencies = [
  "bevy_sprite",
  "bevy_ym2149",
  "bevy_ym2149_viz",
- "ym-replayer",
  "ym2149",
+ "ym2149-ym-replayer",
 ]
 
 [[package]]
@@ -6031,41 +6016,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
-name = "ym-replayer"
-version = "0.6.0"
-dependencies = [
- "approx",
- "bitflags 2.10.0",
- "delharc",
- "hound",
- "mp3lame-encoder",
- "parking_lot",
- "tempfile",
- "thiserror 1.0.69",
- "ym-softsynth",
- "ym2149",
-]
-
-[[package]]
-name = "ym-replayer-cli"
-version = "0.6.0"
-dependencies = [
- "arkos-replayer",
- "parking_lot",
- "ym-replayer",
- "ym-softsynth",
- "ym2149",
-]
-
-[[package]]
-name = "ym-softsynth"
-version = "0.6.0"
-dependencies = [
- "approx",
- "ym2149",
-]
-
-[[package]]
 name = "ym2149"
 version = "0.6.0"
 dependencies = [
@@ -6078,6 +6028,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ym2149-arkos-replayer"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bitflags 2.10.0",
+ "quick-xml 0.36.2",
+ "serde",
+ "thiserror 1.0.69",
+ "ym2149",
+ "ym2149-ym-replayer",
+ "zip",
+]
+
+[[package]]
 name = "ym2149-bevy"
 version = "0.6.0"
 dependencies = [
@@ -6085,10 +6050,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ym2149-softsynth"
+version = "0.6.0"
+dependencies = [
+ "approx",
+ "ym2149",
+]
+
+[[package]]
 name = "ym2149-wasm"
 version = "0.6.0"
 dependencies = [
- "arkos-replayer",
  "bitflags 2.10.0",
  "console_error_panic_hook",
  "js-sys",
@@ -6098,8 +6070,36 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-test",
  "web-sys",
- "ym-replayer",
  "ym2149",
+ "ym2149-arkos-replayer",
+ "ym2149-ym-replayer",
+]
+
+[[package]]
+name = "ym2149-ym-replayer"
+version = "0.6.0"
+dependencies = [
+ "approx",
+ "bitflags 2.10.0",
+ "delharc",
+ "hound",
+ "mp3lame-encoder",
+ "parking_lot",
+ "tempfile",
+ "thiserror 1.0.69",
+ "ym2149",
+ "ym2149-softsynth",
+]
+
+[[package]]
+name = "ym2149-ym-replayer-cli"
+version = "0.6.0"
+dependencies = [
+ "parking_lot",
+ "ym2149",
+ "ym2149-arkos-replayer",
+ "ym2149-softsynth",
+ "ym2149-ym-replayer",
 ]
 
 [[package]]

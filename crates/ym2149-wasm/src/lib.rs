@@ -30,9 +30,9 @@
 
 #![warn(missing_docs)]
 
-use arkos_replayer::{ArkosPlayer, load_aks};
 use wasm_bindgen::prelude::*;
-use ym_replayer::{LoadSummary, PlaybackController, PlaybackState, load_song};
+use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
+use ym2149_ym_replayer::{LoadSummary, PlaybackController, PlaybackState, load_song};
 
 const YM_SAMPLE_RATE_F32: f32 = 44_100.0;
 
@@ -108,7 +108,7 @@ impl YmMetadata {
 }
 
 enum BrowserSongPlayer {
-    Ym(Box<ym_replayer::Ym6Player>),
+    Ym(Box<ym2149_ym_replayer::Ym6Player>),
     Arkos(Box<ArkosWasmPlayer>),
 }
 
@@ -513,7 +513,10 @@ fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), S
     Ok((BrowserSongPlayer::Arkos(Box::new(wrapper)), metadata))
 }
 
-fn metadata_from_summary(player: &ym_replayer::Ym6Player, summary: &LoadSummary) -> YmMetadata {
+fn metadata_from_summary(
+    player: &ym2149_ym_replayer::Ym6Player,
+    summary: &LoadSummary,
+) -> YmMetadata {
     let (title, author, comments, frame_rate) = if let Some(info) = player.info() {
         (
             info.song_name.clone(),

@@ -19,7 +19,7 @@
 //! - `visualization` (optional): Terminal visualization helpers (for CLI tools)
 //!
 //! # Backend Trait
-//! The `Ym2149Backend` trait allows alternative implementations (e.g., `ym-softsynth` crate)
+//! The `Ym2149Backend` trait allows alternative implementations (e.g., `ym2149-softsynth` crate)
 //! to be used interchangeably with the hardware-accurate emulation.
 //!
 //! # Quick start
@@ -55,7 +55,7 @@
 //! # }
 //! ```
 //!
-//! For YM file playback, use the `ym-replayer` crate which provides YM2-YM6 format support.
+//! For YM file playback, use the `ym2149-ym-replayer` crate which provides YM2-YM6 format support.
 
 #![warn(missing_docs)]
 
@@ -74,7 +74,7 @@ pub mod visualization; // Terminal UI Helpers
 /// Error types for YM2149 chip emulator operations
 ///
 /// This enum only contains errors that can occur in the core chip emulation.
-/// File parsing and decompression errors are handled by the `ym-replayer` crate.
+/// File parsing and decompression errors are handled by the `ym2149-ym-replayer` crate.
 #[derive(thiserror::Error, Debug)]
 pub enum Ym2149Error {
     /// IO error from filesystem or device

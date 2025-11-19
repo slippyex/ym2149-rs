@@ -186,7 +186,7 @@ fn update_ui(
 fn load_metadata(path: &str) -> (String, String) {
     let data = std::fs::read(path);
     if let Ok(bytes) = data
-        && let Ok((player, _summary)) = ym_replayer::load_song(&bytes)
+        && let Ok((player, _summary)) = ym2149_ym_replayer::load_song(&bytes)
         && let Some(info) = player.info()
     {
         let title = if info.song_name.trim().is_empty() {

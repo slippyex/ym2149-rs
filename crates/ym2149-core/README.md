@@ -11,8 +11,8 @@ Hardware-accurate emulation of the Yamaha YM2149 Programmable Sound Generator (P
 This crate provides the core YM2149 chip emulation with cycle-accurate behavior. For YM file parsing and playback, see the companion crates:
 
 - **ym2149** (this crate): Pure chip emulation
-- **[ym-replayer](../ym-replayer)**: YM file parsing and music playback
-- **[ym-softsynth](../ym-softsynth)**: Experimental synthesizer backend
+- **[ym2149-ym-replayer](../ym2149-ym-replayer)**: YM file parsing and music playback
+- **[ym2149-softsynth](../ym2149-softsynth)**: Experimental synthesizer backend
 - **[bevy_ym2149](../bevy_ym2149)**: Bevy game engine integration
 
 ## Feature Highlights
@@ -36,7 +36,7 @@ ym2149 = { version = "0.6", features = ["emulator"] }
 For YM file playback, add:
 
 ```toml
-ym-replayer = "0.6"
+ym2149-ym-replayer = "0.6"
 ```
 
 ## Quick Start
@@ -58,10 +58,10 @@ let sample = chip.get_sample();
 
 ### YM File Playback
 
-For playing YM music files, use the `ym-replayer` crate:
+For playing YM music files, use the `ym2149-ym-replayer` crate:
 
 ```rust
-use ym_replayer::{load_song, PlaybackController};
+use ym2149_ym_replayer::{load_song, PlaybackController};
 
 let data = std::fs::read("song.ym")?;
 let (mut player, summary) = load_song(&data)?;
@@ -113,7 +113,7 @@ fn play_note<B: Ym2149Backend>(chip: &mut B) {
 ## Migration from < 0.6.0
 
 Version 0.6.0 reorganized the crate structure for better separation of concerns.
-All YM file parsing and playback functionality has been moved to the `ym-replayer` crate:
+All YM file parsing and playback functionality has been moved to the `ym2149-ym-replayer` crate:
 
 ```rust
 // Old (< 0.6)
@@ -121,8 +121,8 @@ use ym2149::replayer::Ym6Player;
 use ym2149::ym_loader;
 
 // New (>= 0.6)
-use ym_replayer::Ym6Player;
-use ym_replayer::loader;
+use ym2149_ym_replayer::Ym6Player;
+use ym2149_ym_replayer::loader;
 ```
 
 The `ym2149` crate now focuses exclusively on chip emulation, streaming, and visualization.
@@ -154,8 +154,8 @@ See [ARCHITECTURE.md](../../ARCHITECTURE.md) for implementation details.
 
 ## Related Crates
 
-- **[ym-replayer](../ym-replayer)**: YM file parsing and playback
-- **[ym-softsynth](../ym-softsynth)**: Experimental synthesizer backend
+- **[ym2149-ym-replayer](../ym2149-ym-replayer)**: YM file parsing and playback
+- **[ym2149-softsynth](../ym2149-softsynth)**: Experimental synthesizer backend
 - **[bevy_ym2149](../bevy_ym2149)**: Bevy game engine plugin
 
 ## Contributing

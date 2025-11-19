@@ -16,7 +16,7 @@
 //!
 //! ```no_run
 //! use ym2149::Ym2149Backend;
-//! use ym_softsynth::SoftSynth;
+//! use ym2149_softsynth::SoftSynth;
 //!
 //! let mut synth = SoftSynth::new();
 //! synth.write_register(0x00, 0xF0); // Channel A period
@@ -33,9 +33,9 @@ pub use ym2149::Ym2149Backend;
 mod softsynth_impl;
 pub use softsynth_impl::SoftSynth;
 
-// Note: SoftPlayer is not exported to avoid circular dependency with ym-replayer.
+// Note: SoftPlayer is not exported to avoid circular dependency with ym2149-ym-replayer.
 // SoftSynth (the backend) is the primary export. If a player is needed,
-// use Ym6Player from ym-replayer with the SoftSynth backend (when implemented).
+// use Ym6Player from ym2149-ym-replayer with the SoftSynth backend (when implemented).
 
 // Implement the backend trait
 impl Ym2149Backend for SoftSynth {

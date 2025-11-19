@@ -2,11 +2,14 @@ name: Build wasm demo
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - "crates/ym2149-wasm/**"
       - "scripts/build-wasm-examples.sh"
       - ".github/workflows/wasm-demo.yml"
+
+permissions:
+  contents: write
 
 jobs:
   build-and-sync:

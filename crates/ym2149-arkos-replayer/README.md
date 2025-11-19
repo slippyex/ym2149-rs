@@ -1,9 +1,10 @@
-# Arkos Replayer
+# ym2149-arkos-replayer
 
-Rust bindings for **Arkos Tracker 2 & 3** songs. This crate understands
-the .aks XML format, builds a multi-PSG timeline, and offers a
-high-level [`ArkosPlayer`](src/player.rs) that can be embedded in desktop
-tools, Bevy apps, or audio export pipelines.
+Native Rust implementation of **Arkos Tracker 2 & 3** playback (no C++
+bindings). This crate parses `.aks` tracker projects, builds a
+multi-PSG timeline, and exposes a high-level
+[`ArkosPlayer`](src/player.rs) for desktop tools, Bevy apps, audio
+exports, and the wasm/CLI stacks.
 
 > **What is Arkos Tracker?**  
 > A modern, cross-platform tracker for YM2149/AY-3-8910 chips with all
@@ -15,6 +16,8 @@ tools, Bevy apps, or audio export pipelines.
 
 ## Highlights
 
+- 🦀 **Pure Rust replayer** – plays Arkos Tracker projects directly (no
+  external tracker binaries or FFI bindings)
 - ✅ **Full AKS parser** – metadata, instruments, arpeggios, patterns,
   speed tracks, subsongs, and Digi-Drums
 - 🎛 **Multi-PSG playback** – arbitrary chip counts with independent
@@ -30,12 +33,12 @@ tools, Bevy apps, or audio export pipelines.
 
 ```toml
 [dependencies]
-arkos-replayer = { path = "crates/arkos-replayer" }
+ym2149-arkos-replayer = "0.6"
 ym2149 = "0.6"              # required by ArkosPlayer for PSG backends
 ```
 
 ```rust
-use arkos_replayer::{load_aks, ArkosPlayer};
+use ym2149_arkos_replayer::{load_aks, ArkosPlayer};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = std::fs::read("music/Perseverance.aks")?;
@@ -91,10 +94,10 @@ runs: it downloads/reads test assets and therefore stays opt-in.
 
 ```bash
 # Fast unit tests
-cargo test -p arkos-replayer
+cargo test -p ym2149-arkos-replayer
 
 # Include parity tests that rely on tracker assets
-cargo test -p arkos-replayer --features extended-tests
+cargo test -p ym2149-arkos-replayer --features extended-tests
 ```
 
 The parity suite mirrors Arkos Tracker’s own replayer output so we can
@@ -106,7 +109,7 @@ converters.
 - `bevy_ym2149` automatically consumes Arkos songs via
   `YmSongPlayer::Arkos`, so Bevy apps can spawn `.aks` files alongside
   YM playbacks.
-- `ym-replayer-cli` ships an Arkos demo mode where the CLI exposes both
+- `ym2149-ym-replayer-cli` ships an Arkos demo mode where the CLI exposes both
   YM and AKS playback through the same visualization stack.
 - All PSG backends in the workspace implement `Ym2149Backend`, so the
   Arkos player can share the execution path with YM files, exports, and

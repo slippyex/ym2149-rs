@@ -15,9 +15,9 @@ use crate::channel_player::{
 use crate::effect_context::EffectContext;
 use crate::error::{ArkosError, Result};
 use crate::format::{AksSong, InstrumentType, SongMetadata};
+use ym2149::Ym2149Backend;
 use ym2149::ym2149::PsgBank;
 use ym2149::ym2149::Ym2149;
-use ym2149::Ym2149Backend;
 
 /// Arkos Tracker song player
 ///
@@ -964,7 +964,7 @@ mod tests {
     use super::*;
     use crate::parser::load_aks;
     use std::path::PathBuf;
-    use ym_replayer::parser::ym6::Ym6Parser;
+    use ym2149_ym_replayer::parser::ym6::Ym6Parser;
 
     fn normalize_ym_registers(frame: &[u8], prev: &mut [u8; 16]) -> [u8; 16] {
         let mut regs = [0u8; 16];

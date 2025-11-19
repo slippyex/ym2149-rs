@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use arkos_replayer::channel_player::{ChannelPlayer, SampleCommand};
-use arkos_replayer::format::{
+use ym2149_arkos_replayer::channel_player::{ChannelPlayer, SampleCommand};
+use ym2149_arkos_replayer::format::{
     AksSong, Arpeggio, Cell, ChannelLink, Effect, Instrument, InstrumentCell, InstrumentType, Note,
     Pattern, Position, PsgConfig, PsgType, SongFormat, Subsong, Track,
 };
@@ -162,7 +162,7 @@ fn build_song_with_data(instruments: Vec<Instrument>, extra_arps: Vec<Arpeggio>)
             psg_frequency: 1_000_000,
             reference_frequency: 440.0,
             sample_player_frequency: 11_025,
-            mixing_output: arkos_replayer::format::MixingOutput::ABC,
+            mixing_output: ym2149_arkos_replayer::format::MixingOutput::ABC,
         }],
         digi_channel: 0,
         highlight_spacing: 4,
@@ -199,7 +199,7 @@ fn build_song_with_data(instruments: Vec<Instrument>, extra_arps: Vec<Arpeggio>)
 
     Arc::new(AksSong {
         format: SongFormat::Modern,
-        metadata: arkos_replayer::format::SongMetadata::default(),
+        metadata: ym2149_arkos_replayer::format::SongMetadata::default(),
         instruments,
         arpeggios,
         pitch_tables: Vec::new(),
@@ -252,7 +252,7 @@ fn soft_to_hard_instrument_with_period(
 }
 
 fn sample_instrument(frequency_hz: u32, digidrum_note: i32) -> Instrument {
-    use arkos_replayer::format::SampleInstrument;
+    use ym2149_arkos_replayer::format::SampleInstrument;
     Instrument {
         name: "Sample".into(),
         color_argb: 0,
@@ -367,7 +367,7 @@ fn run_single_tick(
     cell: Option<&Cell>,
     is_first_tick: bool,
     still_within_line: bool,
-) -> arkos_replayer::channel_player::ChannelFrame {
+) -> ym2149_arkos_replayer::channel_player::ChannelFrame {
     player.play_frame(cell, 0, is_first_tick, still_within_line)
 }
 

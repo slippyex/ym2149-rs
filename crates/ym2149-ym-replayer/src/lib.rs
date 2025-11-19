@@ -16,7 +16,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use ym_replayer::{load_song, PlaybackController};
+//! use ym2149_ym_replayer::{load_song, PlaybackController};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let data = std::fs::read("song.ym")?;

@@ -1,4 +1,4 @@
-# ym-softsynth
+# ym2149-softsynth
 
 ⚠️ **Workspace-only proof-of-concept** - Not published to crates.io
 
@@ -17,7 +17,7 @@ This crate provides a lightweight, non-cycle-accurate alternative to the hardwar
 - Implements `Ym2149Backend` trait
 - Basic 3-channel tone generation
 - Volume control
-- Compatible with ym-replayer (for simple YM files)
+- Compatible with ym2149-ym-replayer (for simple YM files)
 
 ## Not Implemented
 
@@ -31,7 +31,7 @@ This crate provides a lightweight, non-cycle-accurate alternative to the hardwar
 
 ```rust
 use ym2149::Ym2149Backend;
-use ym_softsynth::SoftSynth;
+use ym2149_softsynth::SoftSynth;
 
 // Use as any Ym2149Backend
 let mut synth = SoftSynth::new();
@@ -58,7 +58,7 @@ let sample = synth.get_sample();
 This crate was extracted from `ym2149-core` v0.6.0 as part of the backend trait abstraction:
 
 - **ym2149-core**: Hardware-accurate emulation (production-ready)
-- **ym-softsynth**: Experimental synthesizer (this crate)
+- **ym2149-softsynth**: Experimental synthesizer (this crate)
 - Both implement `Ym2149Backend` for interoperability
 
 ## License

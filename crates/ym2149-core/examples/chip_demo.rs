@@ -92,5 +92,5 @@ fn main() {
     println!("  ✓ Real-time audio output");
     println!("  ✓ Tone generation");
     println!("\nFor YM file playback, use:");
-    println!("  cargo run -p ym-replayer-cli -- path/to/song.ym\n");
+    println!("  cargo run -p ym2149-ym-replayer-cli -- path/to/song.ym\n");
 }
