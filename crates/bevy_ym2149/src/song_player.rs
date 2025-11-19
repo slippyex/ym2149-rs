@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use arkos_replayer::{parser::load_aks, player::ArkosPlayer};
 use parking_lot::RwLock;
-use ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
+use ym2149_arkos_replayer::{parser::load_aks, player::ArkosPlayer};
+use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
 
 use crate::audio_source::Ym2149Metadata;
 use crate::error::BevyYm2149Error;
@@ -96,7 +96,7 @@ impl YmSongPlayer {
         }
     }
 
-    pub(crate) fn state(&self) -> ym_replayer::PlaybackState {
+    pub(crate) fn state(&self) -> ym2149_ym_replayer::PlaybackState {
         match self {
             Self::Ym { player, .. } => player.state(),
             Self::Arkos(p) => p.state(),
@@ -185,7 +185,7 @@ impl YmSongPlayer {
 pub(crate) fn load_song_from_bytes(
     data: &[u8],
 ) -> std::result::Result<(YmSongPlayer, PlaybackMetrics, Ym2149Metadata), String> {
-    if let Ok((player, summary)) = ym_replayer::load_song(data) {
+    if let Ok((player, summary)) = ym2149_ym_replayer::load_song(data) {
         let metadata = metadata_from_player(&player, &summary);
         let metrics = PlaybackMetrics::from(&summary);
         Ok((
@@ -280,11 +280,11 @@ impl ArkosBevyPlayer {
             .map_err(|e| BevyYm2149Error::Other(format!("AKS stop failed: {e}")))
     }
 
-    pub(crate) fn state(&self) -> ym_replayer::PlaybackState {
+    pub(crate) fn state(&self) -> ym2149_ym_replayer::PlaybackState {
         if self.player.is_playing() {
-            ym_replayer::PlaybackState::Playing
+            ym2149_ym_replayer::PlaybackState::Playing
         } else {
-            ym_replayer::PlaybackState::Stopped
+            ym2149_ym_replayer::PlaybackState::Stopped
         }
     }
 

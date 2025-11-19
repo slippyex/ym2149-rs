@@ -1,4 +1,4 @@
-# ym-replayer
+# ym2149-ym-replayer
 
 YM file format parser and music replayer for YM2149 PSG chips.
 
@@ -23,7 +23,7 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
 ### Basic Playback
 
 ```rust
-use ym_replayer::{load_song, PlaybackController};
+use ym2149_ym_replayer::{load_song, PlaybackController};
 
 let data = std::fs::read("song.ym")?;
 let (mut player, summary) = load_song(&data)?;
@@ -36,7 +36,7 @@ let samples = player.generate_samples(summary.samples_per_frame as usize);
 ### Loading from Files
 
 ```rust
-use ym_replayer::loader;
+use ym2149_ym_replayer::loader;
 
 // From file path
 let frames = loader::load_file("song.ym")?;
@@ -54,15 +54,15 @@ Internally the player is split into three layers:
 2. **FormatProfile** – Trait implemented per format (YM2/YM5/YM6/basic) so register preprocessing and effect decoding live behind `FormatMode` strategies instead of `is_ym*_mode` flags.
 3. **EffectsPipeline** – Wraps the low-level `EffectsManager`, tracks which SID/digidrum voices are active, and feeds the backend every sample.
 
-`load_song` automatically selects the right profile, and custom loaders can create a profile via `ym_replayer::player::create_profile`. Metadata and Bevy visualizers now query effect state through the pipeline.
+`load_song` automatically selects the right profile, and custom loaders can create a profile via `ym2149_ym_replayer::player::create_profile`. Metadata and Bevy visualizers now query effect state through the pipeline.
 
 ## Architecture
 
 This crate was extracted from `ym2149-core` v0.6.0 to provide better separation of concerns:
 
 - **ym2149-core**: Pure YM2149 chip emulation
-- **ym-replayer**: YM file parsing and playback (this crate)
-- **ym-softsynth**: Experimental synthesizer backend
+- **ym2149-ym-replayer**: YM file parsing and playback (this crate)
+- **ym2149-softsynth**: Experimental synthesizer backend
 
 ## Migration from ym2149-core < 0.6
 
@@ -74,8 +74,8 @@ use ym2149::replayer::Ym6Player;
 use ym2149::ym_loader;
 
 // New
-use ym_replayer::Ym6Player;
-use ym_replayer::loader;
+use ym2149_ym_replayer::Ym6Player;
+use ym2149_ym_replayer::loader;
 ```
 
 ## Feature Flags

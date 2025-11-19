@@ -138,16 +138,16 @@ pub trait Ym2149Backend: Send {
 
 **Implementations:**
 - `Ym2149` (this crate): Hardware-accurate emulation with full YM6 effect support
-- `SoftSynth` (ym-softsynth crate): Experimental synthesizer (effects ignored via default trait methods)
+- `SoftSynth` (ym2149-softsynth crate): Experimental synthesizer (effects ignored via default trait methods)
 
 **Generic Player:**
-The `Ym6PlayerGeneric<B: Ym2149Backend>` in ym-replayer uses this trait, allowing any backend. The type alias `Ym6Player = Ym6PlayerGeneric<Ym2149>` provides the common hardware-accurate default.
+The `Ym6PlayerGeneric<B: Ym2149Backend>` in ym2149-ym-replayer uses this trait, allowing any backend. The type alias `Ym6Player = Ym6PlayerGeneric<Ym2149>` provides the common hardware-accurate default.
 
 ---
 
 ## Effect Support Methods
 
-The `Ym2149` implementation provides additional public methods for hardware effects (used by ym-replayer):
+The `Ym2149` implementation provides additional public methods for hardware effects (used by ym2149-ym-replayer):
 
 ### Mixer Overrides
 ```rust
@@ -219,10 +219,10 @@ ym2149-core/src/
 
 The following modules are deprecated and maintained only for backward compatibility. Use the new crates instead:
 
-- `compression/` → Use `ym-replayer` crate
-- `ym_parser/` → Use `ym-replayer` crate
-- `ym_loader/` → Use `ym-replayer` crate
-- `replayer/` → Use `ym-replayer` crate
+- `compression/` → Use `ym2149-ym-replayer` crate
+- `ym_parser/` → Use `ym2149-ym-replayer` crate
+- `ym_loader/` → Use `ym2149-ym-replayer` crate
+- `replayer/` → Use `ym2149-ym-replayer` crate
 
 ---
 

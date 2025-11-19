@@ -431,14 +431,14 @@ impl Ym2149 {
         *self.registers.as_slice()
     }
 
-    /// Set mixer overrides for effects (used by EffectsManager in ym-replayer)
+    /// Set mixer overrides for effects (used by EffectsManager in ym2149-ym-replayer)
     pub fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
         self.mixer_overrides.force_tone = force_tone;
         self.mixer_overrides.force_noise_mute = force_noise_mute;
         self.update_mixer_masks();
     }
 
-    /// Set drum sample override for a voice (used by EffectsManager in ym-replayer)
+    /// Set drum sample override for a voice (used by EffectsManager in ym2149-ym-replayer)
     pub fn set_drum_sample_override(&mut self, voice: usize, sample: Option<i32>) {
         if voice >= 3 {
             return;

@@ -1,0 +1,3 @@
+[env]
+# Embed example assets automatically when building binaries
+BEVY_ASSET_PATH = { value = "crates/bevy_ym2149_examples/assets", relative = true }

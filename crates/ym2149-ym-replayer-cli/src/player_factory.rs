@@ -6,12 +6,12 @@
 //! - Setting up demo mode when no file is provided
 //! - Configuring chip-specific settings
 
-use arkos_replayer::{ArkosPlayer, load_aks};
 use std::env;
 use std::fs;
 use std::path::Path;
-use ym_replayer::{Player, load_song};
 use ym2149::streaming::DEFAULT_SAMPLE_RATE;
+use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
+use ym2149_ym_replayer::{Player, load_song};
 
 use crate::args::ChipChoice;
 use crate::{ArkosPlayerWrapper, RealtimeChip};
@@ -31,7 +31,7 @@ fn load_arkos_file(
     file_data: &[u8],
     file_path: &str,
     _chip_choice: ChipChoice,
-) -> ym_replayer::Result<PlayerInfo> {
+) -> ym2149_ym_replayer::Result<PlayerInfo> {
     let song = load_aks(file_data).map_err(|e| format!("Failed to load AKS file: {}", e))?;
 
     if song.subsongs.is_empty() {
@@ -96,7 +96,7 @@ pub fn create_player(
     file_path: &str,
     chip_choice: ChipChoice,
     color_filter_override: Option<bool>,
-) -> ym_replayer::Result<PlayerInfo> {
+) -> ym2149_ym_replayer::Result<PlayerInfo> {
     println!("Loading file: {}\n", file_path);
     let file_data =
         fs::read(file_path).map_err(|e| format!("Failed to read file '{}': {}", file_path, e))?;
@@ -148,7 +148,7 @@ pub fn create_player(
 ///
 /// # Returns
 /// PlayerInfo with a demo player
-pub fn create_demo_player(chip_choice: ChipChoice) -> ym_replayer::Result<PlayerInfo> {
+pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result<PlayerInfo> {
     println!("No YM file specified. Running in demo mode (5 seconds).");
     println!(
         "Usage: {} <path/to/song.ym>\n",

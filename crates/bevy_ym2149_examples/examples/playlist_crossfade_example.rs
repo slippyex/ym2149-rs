@@ -1,11 +1,14 @@
 use bevy::prelude::*;
+use bevy_embedded_assets::EmbeddedAssetReader;
 use bevy_ym2149::events::PlaylistAdvanceRequest;
 use bevy_ym2149::playlist::{
     CrossfadeConfig, CrossfadeTrigger, PlaylistMode, PlaylistSource, Ym2149Playlist,
     Ym2149PlaylistPlayer,
 };
 use bevy_ym2149::{Ym2149Playback, Ym2149Plugin};
-use bevy_ym2149_examples::ASSET_BASE;
+use bevy_ym2149_examples::{embedded_asset_plugin, ASSET_BASE};
+use std::path::Path;
+use std::sync::OnceLock;
 
 const SONGS: &[&str] = &[
     "music/Ashtray.ym",
@@ -43,6 +46,7 @@ struct DisplaySong {
 
 fn main() {
     App::new()
+        .add_plugins(embedded_asset_plugin())
         .add_plugins(DefaultPlugins.set(AssetPlugin {
             file_path: ASSET_BASE.into(),
             ..default()
@@ -59,8 +63,7 @@ fn setup(mut commands: Commands, mut playlists: ResMut<Assets<Ym2149Playlist>>) 
     let entries: Vec<DisplaySong> = SONGS
         .iter()
         .map(|path| {
-            let abs = format!("{}/{}", ASSET_BASE, path);
-            let meta = load_metadata(&abs);
+            let meta = load_metadata(path);
             DisplaySong {
                 title: meta.0,
                 author: meta.1,
@@ -184,22 +187,38 @@ fn update_ui(
 }
 
 fn load_metadata(path: &str) -> (String, String) {
-    let data = std::fs::read(path);
-    if let Ok(bytes) = data
-        && let Ok((player, _summary)) = ym_replayer::load_song(&bytes)
-        && let Some(info) = player.info()
-    {
-        let title = if info.song_name.trim().is_empty() {
-            "Unknown title".to_string()
-        } else {
-            info.song_name.clone()
-        };
-        let author = if info.author.trim().is_empty() {
-            "Unknown author".to_string()
-        } else {
-            info.author.clone()
-        };
-        return (title, author);
+    static EMBEDDED: OnceLock<EmbeddedAssetReader> = OnceLock::new();
+    let reader = EMBEDDED.get_or_init(EmbeddedAssetReader::preloaded);
+
+    if let Ok(data) = reader.load_path_sync(Path::new(path)) {
+        if let Some(info) = decode_metadata(data.0) {
+            return info;
+        }
     }
+
+    // Fallback to reading from disk (useful during development with hot assets)
+    let disk_path = format!("{}/{}", ASSET_BASE, path);
+    if let Ok(bytes) = std::fs::read(disk_path) {
+        if let Some(info) = decode_metadata(&bytes) {
+            return info;
+        }
+    }
+
     ("Unknown title".to_string(), "Unknown author".to_string())
+}
+
+fn decode_metadata(bytes: &[u8]) -> Option<(String, String)> {
+    let (player, _) = ym2149_ym_replayer::load_song(bytes).ok()?;
+    let info = player.info()?;
+    let title = if info.song_name.trim().is_empty() {
+        "Unknown title".to_string()
+    } else {
+        info.song_name.clone()
+    };
+    let author = if info.author.trim().is_empty() {
+        "Unknown author".to_string()
+    } else {
+        info.author.clone()
+    };
+    Some((title, author))
 }

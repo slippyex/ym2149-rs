@@ -1,5 +1,5 @@
 [package]
-name = "ym-replayer-cli"
+name = "ym2149-ym-replayer-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -17,13 +17,13 @@ path = "src/main.rs"
 ym2149 = { path = "../ym2149-core", version = "0.6.0", features = ["streaming", "visualization"] }
 
 # YM file parsing and playback (no streaming needed here - CLI handles it)
-ym-replayer = { path = "../ym-replayer", version = "0.6.0" }
+ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.6.0" }
 
 # Arkos Tracker replayer
-arkos-replayer = { path = "../arkos-replayer", version = "0.6.0" }
+ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-arkos-replayer", version = "0.6.0" }
 
 # Optional softsynth backend
-ym-softsynth = { path = "../ym-softsynth", version = "0.6.0", optional = true }
+ym2149_softsynth = { package = "ym2149-softsynth", path = "../ym2149-softsynth", version = "0.6.0", optional = true }
 
 # Synchronization
 parking_lot.workspace = true
@@ -32,4 +32,4 @@ parking_lot.workspace = true
 default = []
 
 # Softsynth backend support (experimental)
-softsynth = ["dep:ym-softsynth"]
+softsynth = ["dep:ym2149_softsynth"]

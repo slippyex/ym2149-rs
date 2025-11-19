@@ -480,11 +480,11 @@ impl Default for SoftSynth {
 
 // NOTE: SoftPlayer has been intentionally removed.
 //
-// For playback, use `Ym6PlayerGeneric<SoftSynth>` from ym-replayer:
+// For playback, use `Ym6PlayerGeneric<SoftSynth>` from ym2149-ym-replayer:
 //
 // ```rust
-// use ym_replayer::Ym6PlayerGeneric;
-// use ym_softsynth::SoftSynth;
+// use ym2149_ym_replayer::Ym6PlayerGeneric;
+// use ym2149_softsynth::SoftSynth;
 //
 // let player: Ym6PlayerGeneric<SoftSynth> = Ym6PlayerGeneric::new();
 // ```

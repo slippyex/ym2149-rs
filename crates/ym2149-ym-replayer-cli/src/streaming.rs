@@ -9,9 +9,9 @@
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use ym_replayer::PlaybackState;
 use ym2149::streaming::{BUFFER_BACKOFF_MICROS, StreamConfig};
 use ym2149::{AudioDevice, RealtimePlayer};
+use ym2149_ym_replayer::PlaybackState;
 
 use crate::RealtimeChip;
 
@@ -38,7 +38,10 @@ impl StreamingContext {
     ///
     /// # Returns
     /// Streaming context with running audio device and producer thread
-    pub fn start(player: Box<dyn RealtimeChip>, config: StreamConfig) -> ym_replayer::Result<Self> {
+    pub fn start(
+        player: Box<dyn RealtimeChip>,
+        config: StreamConfig,
+    ) -> ym2149_ym_replayer::Result<Self> {
         let streamer = Arc::new(RealtimePlayer::new(config)?);
         let audio_device =
             AudioDevice::new(config.sample_rate, config.channels, streamer.get_buffer())?;

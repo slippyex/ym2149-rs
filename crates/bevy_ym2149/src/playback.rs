@@ -61,8 +61,8 @@ impl PlaybackMetrics {
     }
 }
 
-impl From<&ym_replayer::LoadSummary> for PlaybackMetrics {
-    fn from(summary: &ym_replayer::LoadSummary) -> Self {
+impl From<&ym2149_ym_replayer::LoadSummary> for PlaybackMetrics {
+    fn from(summary: &ym2149_ym_replayer::LoadSummary) -> Self {
         Self {
             frame_count: summary.frame_count,
             samples_per_frame: summary.samples_per_frame,

@@ -37,15 +37,17 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 | Crate | Purpose | Crates.io | Docs |
 |-------|---------|-----------|------|
 | [`ym2149`](crates/ym2149-core) | Core YM2149 chip emulator (cycle-accurate) | [crates.io/crates/ym2149](https://crates.io/crates/ym2149) | [docs.rs/ym2149](https://docs.rs/ym2149) |
-| [`ym-replayer`](crates/ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | [crates.io/crates/ym-replayer](https://crates.io/crates/ym-replayer) | [docs.rs/ym-replayer](https://docs.rs/ym-replayer) |
-| [`ym-replayer-cli`](crates/ym-replayer-cli) | Standalone CLI player with streaming and export | Workspace-only | [crates/ym-replayer-cli/README.md](crates/ym-replayer-cli/README.md) |
-| [`ym-softsynth`](crates/ym-softsynth) | Experimental software synthesizer backend (proof-of-concept) | Workspace-only | [crates/ym-softsynth/README.md](crates/ym-softsynth/README.md) |
-| [`arkos-replayer`](crates/arkos-replayer) | Arkos Tracker 3 (.aks) parser and multi-PSG player | Workspace-only | [crates/arkos-replayer/README.md](crates/arkos-replayer/README.md) |
+| [`ym2149-ym-replayer`](crates/ym2149-ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | Unpublished (workspace) | [crates/ym2149-ym-replayer/README.md](crates/ym2149-ym-replayer/README.md) |
+| [`ym2149-ym-replayer-cli`](crates/ym2149-ym-replayer-cli) | Standalone CLI player with streaming and export | Unpublished (workspace) | – |
+| [`ym2149-softsynth`](crates/ym2149-softsynth) | Experimental software synthesizer backend (proof-of-concept) | Unpublished (workspace) | [crates/ym2149-softsynth/README.md](crates/ym2149-softsynth/README.md) |
+| [`ym2149-arkos-replayer`](crates/ym2149-arkos-replayer) | Arkos Tracker 2/3 (.aks) parser and native multi-PSG player (pure Rust) | [crates.io/crates/ym2149-arkos-replayer](https://crates.io/crates/ym2149-arkos-replayer) | [docs.rs/ym2149-arkos-replayer](https://docs.rs/ym2149-arkos-replayer) |
 | [`bevy_ym2149`](crates/bevy_ym2149) | Bevy audio plugin (playback, playlists, diagnostics, audio bridge) | [crates.io/crates/bevy_ym2149](https://crates.io/crates/bevy_ym2149) | [docs.rs/bevy_ym2149](https://docs.rs/bevy_ym2149) |
 | [`bevy_ym2149_viz`](crates/bevy_ym2149_viz) | Optional visualization systems & UI builders | [crates.io/crates/bevy_ym2149_viz](https://crates.io/crates/bevy_ym2149_viz) | [docs.rs/bevy_ym2149_viz](https://docs.rs/bevy_ym2149_viz) |
 | [`bevy_ym2149_examples`](crates/bevy_ym2149_examples) | Runnable Bevy demos (basic, advanced, crossfade, feature showcase, demoscene, playlist UI) | Workspace-only | [crates/bevy_ym2149_examples/README.md](crates/bevy_ym2149_examples/README.md) |
 | [`ym2149-wasm`](crates/ym2149-wasm) | WebAssembly bindings for browser playback ([web demo](https://slippyex.github.io/ym2149-rs/)) | Workspace-only | [crates/ym2149-wasm/README.md](crates/ym2149-wasm/README.md) |
 | [`ym2149-bevy`](crates/ym2149-bevy) | Legacy re-export (shim to `bevy_ym2149`) | [crates.io/crates/ym2149-bevy](https://crates.io/crates/ym2149-bevy) | – |
+
+Naming: Bevy-focused crates follow `bevy_ym2149_*`, while core/backends/replayers use the `ym2149-*` prefix.
 
 > **Why Arkos Tracker?**  
 > It marries the classic step-sequencer workflow with modern comforts:
@@ -53,6 +55,9 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 > blended software/hardware envelopes, and native export pipelines (like
 > this repo). Perfect if you want authentic 8-bit character without
 > giving up on flexible tooling.
+
+Arkos playback here is powered by a native Rust replayer—no external
+tracker runtime or C++ bindings required.
 
 <img src="docs/screenshots/advanced_example.png" alt="Advanced Bevy example" width="780">
 
@@ -79,11 +84,11 @@ ym2149 = "0.6"
 ym2149 = { version = "0.6", features = ["streaming"] }
 
 # YM file parsing and playback
-ym-replayer = "0.6"
+ym2149-ym-replayer = "0.6"
 ```
 
 ```rust
-use ym_replayer::{load_song, PlaybackController};
+use ym2149_ym_replayer::{load_song, PlaybackController};
 
 fn main() -> anyhow::Result<()> {
     let data = std::fs::read("song.ym")?;
@@ -100,7 +105,7 @@ fn main() -> anyhow::Result<()> {
 
 ```bash
 # Real-time playback with scope overlay
-cargo run -p ym-replayer-cli -- examples/ND-Toxygene.ym
+cargo run -p ym2149-ym-replayer-cli -- examples/ND-Toxygene.ym
 
 # Interactive chip demo with audio output
 cargo run --example chip_demo -p ym2149 --features streaming
@@ -111,7 +116,7 @@ cargo run --example chip_demo -p ym2149 --features streaming
 ### Export to Audio Files
 
 ```rust
-use ym_replayer::{load_song, export::export_to_wav_default, export::export_to_mp3_with_config, export::ExportConfig};
+use ym2149_ym_replayer::{load_song, export::export_to_wav_default, export::export_to_mp3_with_config, export::ExportConfig};
 
 fn main() -> anyhow::Result<()> {
     let data = std::fs::read("song.ym")?;
@@ -189,8 +194,10 @@ cargo test -p ym2149 --features streaming
 ym2149-rs/
 ├── crates/
 │   ├── ym2149-core/          # Core YM2149 chip emulator (published as `ym2149`)
-│   ├── ym-replayer/          # YM file parsing and playback
-│   ├── ym-softsynth/         # Experimental synthesizer backend
+│   ├── ym2149-arkos-replayer/# Arkos Tracker parser + pure-Rust replayer
+│   ├── ym2149-ym-replayer/   # YM file parsing and playback
+│   ├── ym2149-ym-replayer-cli/# CLI for YM/AKS playback and export
+│   ├── ym2149-softsynth/     # Experimental synthesizer backend
 │   ├── ym2149-wasm/          # WebAssembly bindings
 │   ├── bevy_ym2149/          # Bevy audio plugin
 │   ├── bevy_ym2149_viz/      # Visualization helpers

@@ -8,10 +8,11 @@
 use bevy::log::info;
 use bevy::prelude::*;
 use bevy_ym2149::{Ym2149Playback, Ym2149Plugin, YmSfxRequest};
-use bevy_ym2149_examples::example_plugins;
+use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins};
 
 fn main() {
     App::new()
+        .add_plugins(embedded_asset_plugin())
         .add_plugins(example_plugins())
         .add_plugins(Ym2149Plugin::default())
         .add_systems(Startup, setup)

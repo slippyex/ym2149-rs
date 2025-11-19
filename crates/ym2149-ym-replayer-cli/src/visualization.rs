@@ -11,10 +11,10 @@ use std::io::{self, Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-use ym_replayer::PlaybackState;
 use ym2149::streaming::VISUALIZATION_UPDATE_MS;
 use ym2149::util::{channel_period, period_to_frequency};
 use ym2149::visualization::{create_channel_status, create_volume_bar};
+use ym2149_ym_replayer::PlaybackState;
 
 use crate::streaming::StreamingContext;
 use crate::{RealtimeChip, VisualSnapshot};

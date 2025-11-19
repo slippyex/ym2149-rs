@@ -1,10 +1,10 @@
 #![cfg(feature = "extended-tests")]
 
-use arkos_replayer::format::{ChannelLink, InstrumentCell};
-use arkos_replayer::psg_registers::{
+use ym2149_arkos_replayer::format::{ChannelLink, InstrumentCell};
+use ym2149_arkos_replayer::psg_registers::{
     DEFAULT_HARDWARE_ENVELOPE, HARDWARE_VOLUME_VALUE, PsgRegisters,
 };
-use arkos_replayer::psg_registers_converter::PsgRegistersConverter;
+use ym2149_arkos_replayer::psg_registers_converter::PsgRegistersConverter;
 
 const DEFAULT_RATIO: u8 = 4;
 

@@ -108,13 +108,14 @@ bevy_ym2149_examples/
 
 The `src/lib.rs` module exports:
 - **`ASSET_BASE`**: Compile-time constant pointing to the crate's assets directory
+- **`embedded_asset_plugin()`**: Configured `EmbeddedAssetPlugin` so binaries bundle all assets (with a disk fallback during development)
 - **`example_plugins()`**: Helper function that configures DefaultPlugins with the correct asset path
 
 All examples use these to ensure consistent asset loading from any directory.
 
 ## Asset Configuration
 
-All examples use compile-time asset path resolution to ensure assets are found regardless of execution directory.
+All examples embed their assets directly into the binary via [`bevy_embedded_assets`](https://docs.rs/bevy_embedded_assets). The executables therefore run without an external `assets/` folder. During development, we still keep compile-time asset paths as a fallback for hot-reload workflows.
 
 ### How It Works
 
@@ -136,7 +137,20 @@ cargo run --example basic_example
 # From anywhere else - both work correctly!
 ```
 
-Asset paths in code are relative to `ASSET_BASE`:
+Assets are embedded by adding the helper plugin before `DefaultPlugins`:
+
+```rust
+use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins};
+
+fn main() {
+    App::new()
+        .add_plugins(embedded_asset_plugin()) // bundles assets into the binary
+        .add_plugins(example_plugins())       // configures DefaultPlugins with ASSET_BASE fallback
+        .run();
+}
+```
+
+Asset paths in code remain relative to `ASSET_BASE` so they work for both embedded and on-disk workflows:
 - Music files: `"music/ND-Toxygene.ym"`
 - Fonts: `"fonts/demoscene_font.png"`
 - Shaders: `"shaders/oldschool.wgsl"`
@@ -177,10 +191,11 @@ pub const ASSET_BASE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets");
 
 **For examples and development tools** (recommended to use our approach):
 ```rust
-use bevy_ym2149_examples::example_plugins;
+use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins};
 
 fn main() {
     App::new()
+        .add_plugins(embedded_asset_plugin())
         .add_plugins(example_plugins())
         // rest of code
         .run();

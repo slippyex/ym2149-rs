@@ -2,10 +2,10 @@
 
 All notable changes to the ym2149-rs project.
 
-## [Unreleased]
+## [v0.6.0] - Current Release
 
 ### Added
-- Arkos Tracker support end-to-end: `arkos-replayer` crate, Bevy/wrapper integration, curated fixtures in `examples/arkos`, wasm auto-detection for `.aks`
+- Arkos Tracker support end-to-end: `ym2149-arkos-replayer` crate, Bevy/wrapper integration, curated fixtures in `examples/arkos`, wasm auto-detection for `.aks`
 - New `scripts/build-wasm-examples.sh` helper to rebuild/copy the wasm bundle for demos & releases
 - Message-based Bevy runtime: `FrameAudioData`, split `initialize_playback` / `drive_playback_state` / `process_playback_frames` + diagnostics and bridge consumers
 
@@ -18,7 +18,6 @@ All notable changes to the ym2149-rs project.
 - Removed dependency on the upstream `arkostracker3` repo by copying reference `.aks/.ym` fixtures into `examples/arkos`
 - Optional `extended-tests` now run against local fixtures; parser tests no longer panic when the Arkos repo is absent
 
-## [v0.6.0] - Current Release
 
 ### New Crates
 

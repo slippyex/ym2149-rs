@@ -257,7 +257,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     ///
     /// # Example
     /// ```no_run
-    /// # use ym_replayer::Ym6Player;
+    /// # use ym2149_ym_replayer::Ym6Player;
     /// # let mut player = Ym6Player::new();
     /// let mut buffer = vec![0.0f32; 882]; // Reusable buffer
     /// player.generate_samples_into(&mut buffer);

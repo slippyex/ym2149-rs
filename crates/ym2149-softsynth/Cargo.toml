@@ -1,5 +1,5 @@
 [package]
-name = "ym-softsynth"
+name = "ym2149-softsynth"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

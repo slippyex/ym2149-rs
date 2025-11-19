@@ -760,7 +760,7 @@ pub(in crate::plugin) fn process_playback_frames(
 
         let player_state = player.state();
 
-        if player_state != ym_replayer::PlaybackState::Playing
+        if player_state != ym2149_ym_replayer::PlaybackState::Playing
             && playback.state == PlaybackState::Playing
         {
             runtime.time_since_last_frame = 0.0;

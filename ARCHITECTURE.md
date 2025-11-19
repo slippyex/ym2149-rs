@@ -15,17 +15,17 @@ graph TB
         BEVY_VIZ["bevy_ym2149_viz<br/>Visualization Components"]
         BEVY["bevy_ym2149<br/>Bevy Audio Plugin"]
         WASM["ym2149-wasm<br/>WASM/Browser"]
-        CLI["ym-replayer-cli<br/>CLI / Export"]
+        CLI["ym2149-ym-replayer-cli<br/>CLI / Export"]
     end
 
     subgraph "Layer 3: Playback Engines"
-        REPLAYER["ym-replayer<br/>YM Parser & Player"]
-        ARKOS["arkos-replayer<br/>AKS Parser & Player"]
+        REPLAYER["ym2149-ym-replayer<br/>YM Parser & Player"]
+        ARKOS["ym2149-arkos-replayer<br/>AKS Parser & Player"]
     end
 
     subgraph "Layer 2: Chip Backends"
         YM2149["ym2149-core<br/>Hardware Emulator"]
-        SOFTSYNTH["ym-softsynth<br/>Alt Synth Backend"]
+        SOFTSYNTH["ym2149-softsynth<br/>Alt Synth Backend"]
     end
 
     subgraph "Layer 1: Backend Trait"
@@ -53,14 +53,14 @@ graph TB
 | Crate | Layer | Purpose | Public API | Binaries/Examples |
 |-------|-------|---------|------------|-------------------|
 | **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation | `Ym2149`, `Ym2149Backend` trait, streaming, visualization | `chip_demo` example |
-| **ym-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` (implements `Ym2149Backend`) | None (library only) |
-| **ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()`, parsers, loader | `ym-replayer` CLI |
-| **arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Uses curated songs in [`examples/arkos`](examples/arkos) |
-| **bevy_ym2149** | 4 | Bevy audio plugin with playback management (YM + AKS via `ym-replayer`/`arkos-replayer`) | `Ym2149Plugin`, `Ym2149Playback` component | None (library only) |
+| **ym2149-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` (implements `Ym2149Backend`) | None (library only) |
+| **ym2149-ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()`, parsers, loader | Used by `ym2149-ym-replayer-cli` |
+| **ym2149-arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Uses curated songs in [`examples/arkos`](examples/arkos) |
+| **bevy_ym2149** | 4 | Bevy audio plugin with playback management (YM + AKS via `ym2149-ym-replayer`/`ym2149-arkos-replayer`) | `Ym2149Plugin`, `Ym2149Playback` component | None (library only) |
 | **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization components & systems | None (library only) |
 | **bevy_ym2149_examples** | 4 | Runnable demo applications | None (examples only) | 5 example scenes |
 | **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | [`crates/ym2149-wasm/examples`](crates/ym2149-wasm/examples) |
-| **ym-replayer-cli** | 4 | Terminal streaming/export tool | `main.rs` CLI | `cargo run -p ym-replayer-cli` |
+| **ym2149-ym-replayer-cli** | 4 | Terminal streaming/export tool | `main.rs` CLI | `cargo run -p ym2149-ym-replayer-cli` |
 
 ---
 
@@ -162,7 +162,7 @@ Ym2149
 
 **See:** [ym2149-core/ARCHITECTURE.md](crates/ym2149-core/ARCHITECTURE.md)
 
-### ym-softsynth
+### ym2149-softsynth
 
 **Experimental synthesizer** backend for non-critical applications.
 
@@ -186,7 +186,7 @@ Ym2149
 - Low-resource environments
 - Simple PSG experimentation
 
-**Note:** `SoftPlayer` has been disabled due to circular dependencies. Use `Ym6Player` with `SoftSynth` backend once generic backend support is implemented in ym-replayer.
+**Note:** `SoftPlayer` has been disabled due to circular dependencies. Use `Ym6Player` with `SoftSynth` backend once generic backend support is implemented in ym2149-ym-replayer.
 
 ---
 
@@ -214,7 +214,7 @@ Ym2149
 
 **Status:** ✅ **Implemented** - Available via feature flags
 
-**Location:** `ym-replayer/src/export/`
+**Location:** `ym2149-ym-replayer/src/export/`
 
 **Supported Formats:**
 - **WAV** - Uncompressed PCM audio (feature: `export-wav`)
@@ -231,14 +231,14 @@ Ym2149
 
 Enable export features in `Cargo.toml`:
 ```toml
-ym-replayer = { version = "0.6", features = ["export-wav"] }
+ym2149-ym-replayer = { version = "0.6", features = ["export-wav"] }
 # or
-ym-replayer = { version = "0.6", features = ["export-mp3"] }
+ym2149-ym-replayer = { version = "0.6", features = ["export-mp3"] }
 ```
 
 Example code:
 ```rust
-use ym_replayer::{load_song, export::export_to_wav_default};
+use ym2149_ym_replayer::{load_song, export::export_to_wav_default};
 
 let data = std::fs::read("song.ym")?;
 let (mut player, info) = load_song(&data)?;
@@ -247,7 +247,7 @@ export_to_wav_default(&mut player, info, "output.wav")?;
 
 **Advanced Configuration:**
 ```rust
-use ym_replayer::export::{export_to_mp3_with_config, ExportConfig};
+use ym2149_ym_replayer::export::{export_to_mp3_with_config, ExportConfig};
 
 let config = ExportConfig::stereo()
     .normalize(true)
@@ -264,9 +264,9 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
 
 ---
 
-## Layer 3: Music Playback (ym-replayer & arkos-replayer)
+## Layer 3: Music Playback (ym2149-ym-replayer & ym2149-arkos-replayer)
 
-### Responsibilities (ym-replayer)
+### Responsibilities (ym2149-ym-replayer)
 
 1. **YM File Parsing**
    - Format detection (YM1/2/3/3b/4/5/6 final, YMT1/YMT2 tracker)
@@ -286,7 +286,7 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
 - `EffectsPipeline` wraps the low-level `EffectsManager` and tracks SID/digidrum state
 - All format-specific logic now lives behind `FormatMode` strategies instead of `is_ym*_mode` flags
 
-### Responsibilities (arkos-replayer)
+### Responsibilities (ym2149-arkos-replayer)
 
 1. **Arkos Tracker Project Parsing**
    - Parses `.aks` subsongs, position tables, speed tracks, instruments, pitch/arpeggio tables
@@ -310,7 +310,7 @@ export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
 ### Module Organization
 
 ```
-ym-replayer/src/
+ym2149-ym-replayer/src/
 ├── parser/
 │   ├── ym.rs              # YM1-YM5 parser
 │   ├── ym6.rs             # YM6 (final format) parser
@@ -339,7 +339,7 @@ ym-replayer/src/
 └── lib.rs                 # Public exports
 ```
 
-### Playback Algorithm (ym-replayer)
+### Playback Algorithm (ym2149-ym-replayer)
 
 ```
 initialize(ym_file):
@@ -370,7 +370,7 @@ generate_samples(count):
           stop()
 ```
 
-### Generic Backend with Hardware-Specific Effects (ym-replayer)
+### Generic Backend with Hardware-Specific Effects (ym2149-ym-replayer)
 
 **Implementation:** `Ym6Player` is implemented as a generic struct `Ym6PlayerGeneric<B: Ym2149Backend>`, allowing it to work with any backend that implements the `Ym2149Backend` trait.
 
@@ -393,9 +393,9 @@ pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
 
 ---
 
-### arkos-replayer (Arkos Tracker 3)
+### ym2149-arkos-replayer (Arkos Tracker 3)
 
-**Purpose:** Parse and play Arkos Tracker 3 (`.aks`) projects, including multi-PSG songs.
+**Purpose:** Parse and play Arkos Tracker 3 (`.aks`) projects, including multi-PSG songs, via a native Rust replayer (no external tracker runtime / FFI).
 
 **Capabilities:**
 - XML-based `.aks` parser with subsong selection and per-PSG reference frequency
@@ -403,7 +403,7 @@ pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
 - Digidrum/sample playback with loop handling
 - Tick/line counters for progress reporting (used by wasm)
 
-**Module Organization (crates/arkos-replayer):**
+**Module Organization (crates/ym2149-arkos-replayer):**
 - `parser.rs` – XML parsing, subsong selection, frequency/loop extraction
 - `psg.rs` / `psg_bank.rs` – Period math + multiple `Ym2149` chips
 - `channel_player.rs` – Per-voice envelopes, digidrums, pitch handling
@@ -412,7 +412,7 @@ pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
 
 **Integration Points:**
 - CLI wraps it via `ArkosPlayerWrapper` (streaming path)
-- WASM binding `ArkosWasmPlayer` exposes play/pause/stop, metadata, estimated ticks
+- WASM wrapper `ArkosWasmPlayer` exposes play/pause/stop, metadata, estimated ticks
 
 **Limitations / TODOs:**
 - CLI path lacks live PSG dump/mute/position (placeholders in `ArkosPlayerWrapper`)
@@ -525,7 +525,7 @@ Ym2149VizPlugin
 
 ### CLI / Streaming
 
-`ym-replayer-cli` wraps `ym-replayer` + `arkos-replayer` under a single
+`ym2149-ym-replayer-cli` wraps `ym2149-ym-replayer` + `ym2149-arkos-replayer` under a single
 `RealtimeChip` trait. It wires streaming audio (`ym2149::streaming`),
 terminal visualization, and hotkeys for muting, color filter toggles,
 and tracker metadata.
@@ -534,7 +534,7 @@ and tracker metadata.
 
 `ym2149-wasm` exposes `Ym2149Player` to JavaScript via wasm-bindgen. A
 `BrowserSongPlayer` enum automatically decides whether the loaded bytes
-should be handled by `ym-replayer` (YM dumps) or `arkos-replayer`
+should be handled by `ym2149-ym-replayer` (YM dumps) or `ym2149-arkos-replayer`
 (`.aks`), ensuring the same API works for both ecosystems. The `pkg/`
 artifacts live next to `crates/ym2149-wasm/examples`, and
 `scripts/build-wasm-examples.sh` rebuilds/copies them so `simple-player.html`
@@ -557,7 +557,7 @@ Ym2149Loader::load() (async)
 Read file bytes
     ↓
 Ym2149AudioSource::new(data)
-    ├─ ym_replayer::load_song(&data)
+    ├─ ym2149_ym_replayer::load_song(&data)
     ├─ Create Ym6Player with Ym2149 chip
     ├─ Call player.play() to start
     └─ Return Asset
@@ -629,15 +629,15 @@ bevy_ym2149_examples
         │           │
         │           └──→ bevy_ym2149
         │                       │
-        └───────────────────────┴──→ ym-replayer
+        └───────────────────────┴──→ ym2149-ym-replayer
                                             │
                                             ├──→ ym2149-core
                                             │
-                                            └──→ ym-softsynth (optional)
+                                            └──→ ym2149-softsynth (optional)
                                                         │
                                                         └──→ ym2149-core
 
-ym-replayer-cli ──→ ym-replayer  # Standalone CLI binary with streaming/export
+ym2149-ym-replayer-cli ──→ ym2149-ym-replayer  # Standalone CLI binary with streaming/export
 ```
 
 **Key Principles:**
@@ -743,7 +743,7 @@ let samples = player.generate_samples(882);
 
 ## Feature Flag Matrix
 
-| Feature | ym2149-core | ym-replayer | bevy_ym2149 | Notes |
+| Feature | ym2149-core | ym2149-ym-replayer | bevy_ym2149 | Notes |
 |---------|-------------|-------------|-------------|-------|
 | `emulator` | ✓ (default) | - | - | Core chip emulation |
 | `streaming` | ✓ | ✓ | - | CLI streaming only; Bevy uses native audio |
@@ -790,8 +790,8 @@ use ym2149::replayer::Ym6Player;
 use ym2149::ym_loader;
 
 // v0.6 (recommended)
-use ym_replayer::Ym6Player;
-use ym_replayer::loader;
+use ym2149_ym_replayer::Ym6Player;
+use ym2149_ym_replayer::loader;
 ```
 
 ### Backward Compatibility
@@ -803,11 +803,11 @@ Old paths emit deprecation warnings with migration guidance. All deprecated code
 
 ### Unit Tests
 - **ym2149-core:** Chip component tests (generators, mixer, registers)
-- **ym-replayer:** Parser tests, effect decoding, playback logic
+- **ym2149-ym-replayer:** Parser tests, effect decoding, playback logic
 - **bevy_ym2149:** System tests, component lifecycle
 
 ### Integration Tests
-- **ym-replayer:** Full file loading and playback
+- **ym2149-ym-replayer:** Full file loading and playback
 - **bevy_ym2149:** Asset loading, playback coordination
 
 ### Current Status
@@ -853,5 +853,5 @@ cargo test --workspace
 
 - [ym2149-core Architecture](crates/ym2149-core/ARCHITECTURE.md) - Chip emulation details
 - [Streaming Guide](crates/ym2149-core/STREAMING_GUIDE.md) - Real-time audio architecture
-- [ym-replayer README](crates/ym-replayer/README.md) - Playback layer API
+- [ym2149-ym-replayer README](crates/ym2149-ym-replayer/README.md) - Playback layer API
 - [bevy_ym2149 README](crates/bevy_ym2149/README.md) - Bevy integration guide

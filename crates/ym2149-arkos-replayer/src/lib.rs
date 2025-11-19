@@ -16,7 +16,7 @@
 //! # Quick Start
 //!
 //! ```no_run
-//! use arkos_replayer::{load_aks, ArkosPlayer};
+//! use ym2149_arkos_replayer::{load_aks, ArkosPlayer};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let data = std::fs::read("song.aks")?;

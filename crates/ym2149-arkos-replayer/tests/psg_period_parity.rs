@@ -1,7 +1,7 @@
 #![cfg(feature = "extended-tests")]
 
-use arkos_replayer::format::Note;
-use arkos_replayer::psg;
+use ym2149_arkos_replayer::format::Note;
+use ym2149_arkos_replayer::psg;
 
 fn period(psg_frequency: f64, reference_frequency: f64, note: Note) -> u16 {
     psg::calculate_period(psg_frequency, reference_frequency, note)

@@ -12,12 +12,13 @@ use bevy_ym2149::playlist::{
     CrossfadeConfig, PlaylistMode, PlaylistSource, Ym2149Playlist, Ym2149PlaylistPlayer,
 };
 use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin};
-use bevy_ym2149_examples::example_plugins;
+use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins};
 
 const CROSSFADE_SECONDS: f32 = 3.0;
 
 fn main() {
     App::new()
+        .add_plugins(embedded_asset_plugin())
         .add_plugins(example_plugins())
         .add_plugins(Ym2149Plugin::default())
         .add_systems(Startup, setup_scene)
