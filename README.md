@@ -2,15 +2,32 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Cycle-accurate Yamaha YM2149 tooling for Rust: standalone emulator, CLI player/exporter, and Bevy integration with ready-made visualizers.
+| Crate | crates.io | docs.rs |
+|-------|-----------|---------|
+| `ym2149` | [![ym2149](https://img.shields.io/crates/v/ym2149.svg?label=ym2149)](https://crates.io/crates/ym2149) | [![ym2149 docs](https://docs.rs/ym2149/badge.svg)](https://docs.rs/ym2149) |
+| `ym2149-ym-replayer` | [![ym2149-ym-replayer](https://img.shields.io/crates/v/ym2149-ym-replayer.svg?label=ym2149-ym-replayer)](https://crates.io/crates/ym2149-ym-replayer) | [![ym2149-ym-replayer docs](https://docs.rs/ym2149-ym-replayer/badge.svg)](https://docs.rs/ym2149-ym-replayer) |
+| `ym2149-arkos-replayer` | [![ym2149-arkos-replayer](https://img.shields.io/crates/v/ym2149-arkos-replayer.svg?label=ym2149-arkos-replayer)](https://crates.io/crates/ym2149-arkos-replayer) | [![ym2149-arkos-replayer docs](https://docs.rs/ym2149-arkos-replayer/badge.svg)](https://docs.rs/ym2149-arkos-replayer) |
+| `bevy_ym2149` | [![bevy_ym2149](https://img.shields.io/crates/v/bevy_ym2149.svg?label=bevy_ym2149)](https://crates.io/crates/bevy_ym2149) | [![bevy_ym2149 docs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149) |
+| `bevy_ym2149_viz` | [![bevy_ym2149_viz](https://img.shields.io/crates/v/bevy_ym2149_viz.svg?label=bevy_ym2149_viz)](https://crates.io/crates/bevy_ym2149_viz) | [![bevy_ym2149_viz docs](https://docs.rs/bevy_ym2149_viz/badge.svg)](https://docs.rs/bevy_ym2149_viz) |
+| `ym2149-bevy` | [![ym2149-bevy](https://img.shields.io/crates/v/ym2149-bevy.svg?label=ym2149-bevy)](https://crates.io/crates/ym2149-bevy) | – |
+
+> Cycle-accurate Yamaha YM2149 tooling for Rust — from raw PSG emulation and YM/YMT importers to Arkos Tracker playback, CLI/export pipelines, Bevy integrations, visualization stacks, and a one-click WASM demo.
+
+| Quick Links | |
+|-------------|---|
+| ▶️ [Web Player](https://slippyex.github.io/ym2149-rs/) | Cycle-accurate YM/AKS demo in the browser |
+| 🧱 [Architecture](ARCHITECTURE.md) | Layered breakdown of emulator, replayers, and integrations |
+| 🧭 [Quick Start](#quick-start) | Code snippets for core, CLI, Bevy, and exports |
+| 🆕 [Changelog](CHANGELOG.md) | Recent features and compatibility notes |
 
 ## At a Glance
 
-- 🧠 **Core emulator**: integer-accurate PSG with YM1-YM6 (final format) + YMT1/YMT2 tracker support
-- 🪕 **Audio workflows**: real-time streaming, WAV/MP3 export, playlist & music-state automation
-- 🕹️ **Game-ready**: Bevy plugins with diagnostics, visual components, and full example scenes
-- 🌐 **Browser-ready**: WebAssembly player with full LHA decompression support
-- 📦 **Monorepo cohesion**: shared workspace versioning, consistent docs, cross-crate testing (`cargo test --workspace`)
+| 🧠 Core Emulator | 🪕 Audio Pipelines | 🕹️ Game & Bevy |
+|------------------|-------------------|----------------|
+| Integer-accurate PSG, YM1–YM6 & tracker helpers | Streaming playback, WAV/MP3 export, playlist automation | Plug-and-play Bevy plugins with diagnostics, viz, playlists |
+| 🌐 Browser Ready | 📦 Monorepo Cohesion | 🧪 Quality |
+| WASM player (147 KB) with LHA support & drag-drop | Shared versioning, unified docs, cross-crate tests | 165+ tests, curated fixtures, demoscene examples |
+
 
 ## 🎵 Try it in Your Browser
 
@@ -37,7 +54,7 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 | Crate | Purpose | Crates.io | Docs |
 |-------|---------|-----------|------|
 | [`ym2149`](crates/ym2149-core) | Core YM2149 chip emulator (cycle-accurate) | [crates.io/crates/ym2149](https://crates.io/crates/ym2149) | [docs.rs/ym2149](https://docs.rs/ym2149) |
-| [`ym2149-ym-replayer`](crates/ym2149-ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | Unpublished (workspace) | [crates/ym2149-ym-replayer/README.md](crates/ym2149-ym-replayer/README.md) |
+| [`ym2149-ym-replayer`](crates/ym2149-ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | [crates.io/crates/ym2149-ym-replayer](https://crates.io/crates/ym2149-ym-replayer) | [docs.rs/ym2149-ym-replayer](https://docs.rs/ym2149-ym-replayer) |
 | [`ym2149-ym-replayer-cli`](crates/ym2149-ym-replayer-cli) | Standalone CLI player with streaming and export | Unpublished (workspace) | – |
 | [`ym2149-softsynth`](crates/ym2149-softsynth) | Experimental software synthesizer backend (proof-of-concept) | Unpublished (workspace) | [crates/ym2149-softsynth/README.md](crates/ym2149-softsynth/README.md) |
 | [`ym2149-arkos-replayer`](crates/ym2149-arkos-replayer) | Arkos Tracker 2/3 (.aks) parser and native multi-PSG player (pure Rust) | [crates.io/crates/ym2149-arkos-replayer](https://crates.io/crates/ym2149-arkos-replayer) | [docs.rs/ym2149-arkos-replayer](https://docs.rs/ym2149-arkos-replayer) |

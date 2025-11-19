@@ -18,6 +18,15 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
 - **Backend Agnostic**: Works with any `Ym2149Backend` implementation
 - **Optional Features**: Streaming audio output
 
+## Install
+
+Add the crate to your `Cargo.toml`:
+
+```toml
+[dependencies]
+ym2149-ym-replayer = "0.6"
+```
+
 ## Usage
 
 ### Basic Playback
