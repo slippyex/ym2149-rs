@@ -71,7 +71,7 @@ This crate was extracted from `ym2149-core` v0.6.0 to provide better separation 
 
 - **ym2149-core**: Pure YM2149 chip emulation
 - **ym2149-ym-replayer**: YM file parsing and playback (this crate)
-- **ym2149-softsynth**: Experimental synthesizer backend
+- **ym2149-softsynth**: Experimental synthesizer backend (workspace helper; not published)
 
 ## Migration from ym2149-core < 0.6
 
@@ -96,7 +96,7 @@ use ym2149_ym_replayer::loader;
 - `streaming`: Enable real-time audio output (requires `rodio`) - for CLI/standalone use; Bevy integration uses native audio
 - `export-wav`: Enable WAV file export (requires `hound`)
 - `export-mp3`: Enable MP3 file export (requires `mp3lame-encoder`)
-- `softsynth`: Enable experimental software synthesizer backend
+- `softsynth`: Workspace-only hook for experimental software synthesizer backends (requires providing your own `ym2149-softsynth` via `[patch]`)
 
 ## License
 
