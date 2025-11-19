@@ -16,9 +16,6 @@ categories = ["multimedia::audio", "parser-implementations"]
 # Core YM2149 chip emulation (backend trait only - no streaming/visualization for library)
 ym2149 = { path = "../ym2149-core", version = "0.6.0" }
 
-# Optional softsynth backend
-ym2149_softsynth = { package = "ym2149-softsynth", path = "../ym2149-softsynth", version = "0.6.0", optional = true }
-
 # Error handling
 thiserror.workspace = true
 
@@ -55,8 +52,8 @@ tracker = []
 # Mad Max digi-drums support
 digidrums = []
 
-# Softsynth backend support (experimental)
-softsynth = ["dep:ym2149_softsynth"]
+# Softsynth backend hook (workspace-only; no crates.io dependency)
+softsynth = []
 
 # Export functionality
 export-wav = ["dep:hound"]
