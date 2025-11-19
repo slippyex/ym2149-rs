@@ -6,6 +6,7 @@
 use bevy::app::PluginGroup;
 use bevy::asset::AssetPlugin;
 use bevy::prelude::DefaultPlugins;
+use bevy_embedded_assets::{EmbeddedAssetPlugin, PluginMode};
 
 /// Asset base path resolved at compile time to ensure examples work from any directory.
 ///
@@ -24,6 +25,19 @@ use bevy::prelude::DefaultPlugins;
 /// // Use in asset paths: "music/ND-Toxygene.ym"
 /// ```
 pub const ASSET_BASE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets");
+
+/// Returns a configured [`EmbeddedAssetPlugin`] that bundles all example assets into the binary.
+///
+/// The plugin replaces the default Bevy asset source and falls back to the on-disk `ASSET_BASE`
+/// when assets are missing (useful during development). Add this plugin *before* the default
+/// Bevy plugins.
+pub fn embedded_asset_plugin() -> EmbeddedAssetPlugin {
+    EmbeddedAssetPlugin {
+        mode: PluginMode::ReplaceAndFallback {
+            path: ASSET_BASE.into(),
+        },
+    }
+}
 
 /// Configure DefaultPlugins with the correct asset path for examples.
 ///
