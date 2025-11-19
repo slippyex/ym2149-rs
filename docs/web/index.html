@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YM2149 WASM Web Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+        }
+
+        h1 {
+            color: #00ff00;
+            text-align: center;
+            font-size: 32px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #00ff00;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #00aaff;
+            margin-bottom: 30px;
+        }
+
+        .description {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .cta-button {
+            display: block;
+            background: linear-gradient(135deg, #00ff00, #00cc00);
+            color: #000;
+            text-decoration: none;
+            padding: 20px 40px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 255, 0, 0.4);
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 255, 0, 0.6);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .feature {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 3px solid #00ff00;
+        }
+
+        .feature h3 {
+            color: #00ff00;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .feature p {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        .test-files {
+            margin-top: 30px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 5px;
+        }
+
+        .test-files h2 {
+            color: #00ff00;
+            margin-bottom: 15px;
+        }
+
+        .file-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .file-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: #fff;
+            display: block;
+        }
+
+        .file-item:hover {
+            background: rgba(0, 255, 0, 0.2);
+            transform: translateX(5px);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(0, 255, 0, 0.3);
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .tech-stack {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .tech-badge {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 11px;
+            border: 1px solid #00ff00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 YM2149 Web Player</h1>
+        <div class="subtitle">Atari ST Chiptune Music in Your Browser via WebAssembly</div>
+
+        <div class="description">
+            <p>
+                Experience authentic Atari ST chiptune music directly in your browser!
+                This player uses WebAssembly to run a cycle-accurate YM2149 PSG emulator,
+                delivering the same sound quality as the original hardware.
+            </p>
+        </div>
+
+        <a href="simple-player.html" class="cta-button">
+            🚀 Launch Web Player
+        </a>
+
+        <div class="features">
+            <div class="feature">
+                <h3>🎮 Full Control</h3>
+                <p>Play, pause, stop, and restart with responsive controls</p>
+            </div>
+            <div class="feature">
+                <h3>📊 Metadata</h3>
+                <p>View song title, author, and duration information</p>
+            </div>
+            <div class="feature">
+                <h3>🔊 Volume Control</h3>
+                <p>Adjust volume from 0-100%</p>
+            </div>
+            <div class="feature">
+                <h3>🎚️ Channel Muting</h3>
+                <p>Mute individual channels A, B, or C</p>
+            </div>
+            <div class="feature">
+                <h3>⚡ High Performance</h3>
+                <p>&lt;1% CPU usage, ~2MB memory</p>
+            </div>
+            <div class="feature">
+                <h3>📱 Mobile Ready</h3>
+                <p>Works on iOS, Android, and desktop</p>
+            </div>
+        </div>
+
+        <div class="test-files">
+            <h2>Test Files Included</h2>
+            <div class="file-list">
+                <a href="simple-player.html?file=Ashtray.ym" class="file-item">📼 Ashtray.ym</a>
+                <a href="simple-player.html?file=Credits.ym" class="file-item">📼 Credits.ym</a>
+                <a href="simple-player.html?file=ND-Toxygene.ym" class="file-item">📼 ND-Toxygene.ym</a>
+                <a href="simple-player.html?file=Prelude.ym" class="file-item">📼 Prelude.ym</a>
+                <a href="simple-player.html?file=Scout.ym" class="file-item">📼 Scout.ym</a>
+                <a href="simple-player.html?file=Steps.ym" class="file-item">📼 Steps.ym</a>
+                <a href="simple-player.html?file=Doclands-TinyThings.aks" class="file-item">🎶 Doclands-TinyThings.aks</a>
+                <a href="simple-player.html?file=Digitest.aks" class="file-item">🎶 Digitest.aks</a>
+            </div>
+        </div>
+
+        <div class="tech-stack">
+            <span class="tech-badge">🦀 Rust</span>
+            <span class="tech-badge">🕸️ WebAssembly</span>
+            <span class="tech-badge">🎵 Web Audio API</span>
+            <span class="tech-badge">⚡ 6ns/clock</span>
+            <span class="tech-badge">📦 147KB</span>
+        </div>
+
+        <div class="footer">
+            <p>YM2149 PSG Emulator - Hardware-accurate Atari ST sound chip emulation</p>
+            <p>Built with Rust + WebAssembly</p>
+        </div>
+    </div>
+</body>
+</html>
