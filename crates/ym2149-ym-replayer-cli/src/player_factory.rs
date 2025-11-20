@@ -9,12 +9,15 @@
 use std::env;
 use std::fs;
 use std::path::Path;
+use ym2149::TinyYm2149;
 use ym2149::streaming::DEFAULT_SAMPLE_RATE;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
+use ym2149_ay_replayer::AyPlayer;
+use ym2149_ym_replayer::player::ym_player::Ym6PlayerGeneric;
 use ym2149_ym_replayer::{Player, load_song};
 
 use crate::args::ChipChoice;
-use crate::{ArkosPlayerWrapper, RealtimeChip};
+use crate::{ArkosPlayerWrapper, AyPlayerWrapper, RealtimeChip};
 
 /// Information about a loaded player.
 pub struct PlayerInfo {
@@ -81,6 +84,49 @@ fn load_arkos_file(
     })
 }
 
+/// Load an AY (ZXAY/EMUL) file.
+fn load_ay_file(
+    file_data: &[u8],
+    file_path: &str,
+    color_filter_override: Option<bool>,
+) -> ym2149_ym_replayer::Result<PlayerInfo> {
+    let (mut player, metadata) =
+        AyPlayer::load_from_bytes(file_data, 0).map_err(|e| format!("AY load failed: {e}"))?;
+
+    if let Some(cf) = color_filter_override {
+        player.set_color_filter(cf);
+    }
+
+    let samples_per_frame = (DEFAULT_SAMPLE_RATE as f32 / 50.0).round() as usize;
+    let total_samples = metadata
+        .frame_count
+        .map(|frames| frames * samples_per_frame)
+        .unwrap_or(DEFAULT_SAMPLE_RATE as usize * 180);
+
+    let info_str = format!(
+        "File: {}\nFormat: AY/EMUL\nTitle: {}\nAuthor: {}\nSongs: {}/{}\nFrame length: {}\n",
+        file_path,
+        metadata.song_name,
+        if metadata.author.is_empty() {
+            "(unknown)"
+        } else {
+            &metadata.author
+        },
+        metadata.song_index + 1,
+        metadata.song_count,
+        metadata
+            .frame_count
+            .map(|f| f.to_string())
+            .unwrap_or_else(|| "unknown".into()),
+    );
+
+    Ok(PlayerInfo {
+        player: Box::new(AyPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
+        total_samples,
+        song_info: info_str,
+    })
+}
+
 /// Create a player instance from a file path.
 ///
 /// Loads the YM file, detects its format, and creates an appropriate player.
@@ -101,17 +147,20 @@ pub fn create_player(
     let file_data =
         fs::read(file_path).map_err(|e| format!("Failed to read file '{}': {}", file_path, e))?;
 
-    // Check if it's an AKS file
+    // Check file extension
     let path = Path::new(file_path);
-    let is_aks = path
+    let extension = path
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| ext.eq_ignore_ascii_case("aks"))
-        .unwrap_or(false);
+        .map(|ext| ext.to_ascii_lowercase())
+        .unwrap_or_default();
 
-    if is_aks {
+    if extension == "aks" {
         println!("Detected format: Arkos Tracker 3 (AKS)\n");
         return load_arkos_file(&file_data, file_path, chip_choice);
+    } else if extension == "ay" {
+        println!("Detected format: AY (ZXAY/EMUL)\n");
+        return load_ay_file(&file_data, file_path, color_filter_override);
     }
 
     let (mut ym_player, summary) = load_song(&file_data)?;
@@ -122,6 +171,25 @@ pub fn create_player(
             if let Some(cf) = color_filter_override {
                 ym_player.get_chip_mut().set_color_filter(cf);
             }
+
+            let info_str = format!(
+                "File: {} ({})\n{}",
+                file_path,
+                summary.format,
+                ym_player.format_info()
+            );
+
+            let total_samples = summary.total_samples();
+
+            Ok(PlayerInfo {
+                player: Box::new(ym_player) as Box<dyn RealtimeChip>,
+                total_samples,
+                song_info: info_str,
+            })
+        }
+        ChipChoice::TinyYm2149 => {
+            let mut ym_player = Ym6PlayerGeneric::<TinyYm2149>::new();
+            let summary = ym_player.load_data(&file_data)?;
 
             let info_str = format!(
                 "File: {} ({})\n{}",
@@ -167,6 +235,24 @@ pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result
             let duration_secs = demo_player.get_duration_seconds();
             let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
             let info_str = format!("Demo Mode: {:.2} seconds of silence", duration_secs);
+
+            Ok(PlayerInfo {
+                player: Box::new(demo_player) as Box<dyn RealtimeChip>,
+                total_samples,
+                song_info: info_str,
+            })
+        }
+        ChipChoice::TinyYm2149 => {
+            let mut demo_player = Ym6PlayerGeneric::<TinyYm2149>::new();
+            let frames = vec![[0u8; 16]; 250];
+            demo_player.load_frames(frames);
+
+            let duration_secs = demo_player.get_duration_seconds();
+            let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
+            let info_str = format!(
+                "Demo Mode: {:.2} seconds of silence (tiny backend)",
+                duration_secs
+            );
 
             Ok(PlayerInfo {
                 player: Box::new(demo_player) as Box<dyn RealtimeChip>,

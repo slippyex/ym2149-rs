@@ -1,0 +1,411 @@
+//! High-level AY song player (Z80 + YM2149 bridge).
+
+use iz80::{Cpu, Machine, Reg8, Reg16};
+use ym2149::Ym2149Backend;
+
+use crate::error::{AyError, Result};
+use crate::format::{AyFile, AyPoints, AySong};
+use crate::machine::AyMachine;
+
+const SAMPLE_RATE: u32 = 44_100;
+const FRAME_RATE_HZ: f32 = 50.0;
+const RETURN_ADDRESS: u16 = 0x0000;
+const MAX_INSTRUCTIONS_PER_CALL: usize = 250_000;
+
+/// Playback state for the AY player.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AyPlaybackState {
+    /// Not started or fully stopped.
+    Stopped,
+    /// Currently playing.
+    Playing,
+    /// Temporarily paused.
+    Paused,
+}
+
+/// Runtime metadata about the currently loaded song.
+#[derive(Debug, Clone)]
+pub struct AyMetadata {
+    /// Human-readable name extracted from the song entry.
+    pub song_name: String,
+    /// File-level author string.
+    pub author: String,
+    /// File-level misc/comment string.
+    pub misc: String,
+    /// Song index inside the container.
+    pub song_index: usize,
+    /// Total number of songs in the file.
+    pub song_count: usize,
+    /// Optional declared frame count.
+    pub frame_count: Option<usize>,
+    /// Optional duration in seconds.
+    pub duration_seconds: Option<f32>,
+    /// File format version.
+    pub file_version: u16,
+    /// Requested player version.
+    pub player_version: u8,
+}
+
+impl AyMetadata {
+    /// Convenience helper for user-facing descriptions.
+    pub fn description(&self) -> String {
+        format!(
+            "{} — {} ({}/{})",
+            self.song_name,
+            self.author,
+            self.song_index + 1,
+            self.song_count
+        )
+    }
+}
+
+/// High-level AY song player.
+pub struct AyPlayer {
+    song: AySong,
+    metadata: AyMetadata,
+    points: AyPoints,
+    init_address: u16,
+    interrupt_address: u16,
+    machine: AyMachine,
+    cpu: Cpu,
+    samples_per_frame: usize,
+    sample_cache: Vec<f32>,
+    cache_pos: usize,
+    cache_len: usize,
+    frame_counter: usize,
+    max_frames: Option<usize>,
+    state: AyPlaybackState,
+    init_executed: bool,
+}
+
+impl AyPlayer {
+    /// Create a player for the selected song index.
+    pub fn new(file: AyFile, song_index: usize) -> Result<Self> {
+        if song_index >= file.songs.len() {
+            return Err(AyError::InvalidData {
+                msg: format!(
+                    "Song index {song_index} out of range ({} available)",
+                    file.songs.len()
+                ),
+            });
+        }
+
+        let header = file.header;
+        let song = file.songs[song_index].clone();
+        let points = song
+            .data
+            .points
+            .clone()
+            .ok_or_else(|| AyError::InvalidData {
+                msg: "AY song is missing points data".to_string(),
+            })?;
+        if points.interrupt == 0 {
+            return Err(AyError::InvalidData {
+                msg: "AY song does not define an interrupt routine".to_string(),
+            });
+        }
+
+        let init_address = resolve_init_address(&song, &points)?;
+        let interrupt_address = points.interrupt;
+
+        let samples_per_frame = (SAMPLE_RATE as f32 / FRAME_RATE_HZ).round() as usize;
+        let metadata = build_metadata(&header, song_index, file.songs.len(), &song);
+        let mut player = Self {
+            song,
+            metadata,
+            points,
+            init_address,
+            interrupt_address,
+            machine: AyMachine::new(SAMPLE_RATE),
+            cpu: Cpu::new(),
+            samples_per_frame,
+            sample_cache: Vec::with_capacity(samples_per_frame),
+            cache_pos: 0,
+            cache_len: 0,
+            frame_counter: 0,
+            max_frames: frame_limit(&file.songs[song_index]),
+            state: AyPlaybackState::Stopped,
+            init_executed: false,
+        };
+
+        player.reset_runtime()?;
+        Ok(player)
+    }
+
+    /// Helper that parses bytes and builds both metadata + player.
+    pub fn load_from_bytes(data: &[u8], song_index: usize) -> Result<(Self, AyMetadata)> {
+        let file = crate::parser::load_ay(data)?;
+        if song_index >= file.songs.len() {
+            return Err(AyError::InvalidData {
+                msg: format!(
+                    "Song index {song_index} out of range ({} available)",
+                    file.songs.len()
+                ),
+            });
+        }
+        let metadata_stub = build_metadata(
+            &file.header,
+            song_index,
+            file.songs.len(),
+            &file.songs[song_index],
+        );
+        let player = AyPlayer::new(file, song_index)?;
+        Ok((player, metadata_stub))
+    }
+
+    /// Access metadata.
+    pub fn metadata(&self) -> &AyMetadata {
+        &self.metadata
+    }
+
+    /// Return playback state.
+    pub fn state(&self) -> AyPlaybackState {
+        self.state
+    }
+
+    /// Begin playback or resume from pause.
+    pub fn play(&mut self) -> Result<()> {
+        match self.state {
+            AyPlaybackState::Playing => {}
+            AyPlaybackState::Paused => self.state = AyPlaybackState::Playing,
+            AyPlaybackState::Stopped => {
+                self.reset_runtime()?;
+                self.state = AyPlaybackState::Playing;
+            }
+        }
+        Ok(())
+    }
+
+    /// Pause playback (keep current state).
+    pub fn pause(&mut self) {
+        if self.state == AyPlaybackState::Playing {
+            self.state = AyPlaybackState::Paused;
+        }
+    }
+
+    /// Stop playback and reset to the beginning.
+    pub fn stop(&mut self) -> Result<()> {
+        if self.state != AyPlaybackState::Stopped {
+            self.state = AyPlaybackState::Stopped;
+            self.reset_runtime()?;
+        }
+        Ok(())
+    }
+
+    /// Generate mono samples into a freshly allocated buffer.
+    pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
+        let mut output = vec![0.0; count];
+        self.generate_samples_into(&mut output);
+        output
+    }
+
+    /// Generate mono samples into the provided buffer.
+    pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        let mut written = 0;
+        while written < buffer.len() {
+            if self.cache_pos >= self.cache_len {
+                if self.state != AyPlaybackState::Playing {
+                    buffer[written..].fill(0.0);
+                    return;
+                }
+                if let Err(err) = self.render_frame() {
+                    eprintln!("AY frame rendering error: {err}");
+                    buffer[written..].fill(0.0);
+                    self.state = AyPlaybackState::Stopped;
+                    return;
+                }
+                if self.cache_len == 0 {
+                    buffer[written..].fill(0.0);
+                    return;
+                }
+            }
+
+            let available = self.cache_len - self.cache_pos;
+            let needed = buffer.len() - written;
+            let to_copy = available.min(needed);
+            buffer[written..written + to_copy]
+                .copy_from_slice(&self.sample_cache[self.cache_pos..self.cache_pos + to_copy]);
+            self.cache_pos += to_copy;
+            written += to_copy;
+        }
+    }
+
+    /// Access the underlying YM2149 chip.
+    pub fn chip(&self) -> &ym2149::ym2149::Ym2149 {
+        self.machine.chip()
+    }
+
+    /// Mutable access to the underlying YM2149 chip.
+    pub fn chip_mut(&mut self) -> &mut ym2149::ym2149::Ym2149 {
+        self.machine.chip_mut()
+    }
+
+    /// Mute/unmute a PSG channel.
+    pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.machine.chip_mut().set_channel_mute(channel, mute);
+    }
+
+    /// Check mute state of a PSG channel.
+    pub fn is_channel_muted(&self, channel: usize) -> bool {
+        self.machine.chip().is_channel_muted(channel)
+    }
+
+    /// Enable or disable ST-style color filter.
+    pub fn set_color_filter(&mut self, enabled: bool) {
+        self.machine.chip_mut().set_color_filter(enabled);
+    }
+
+    /// Playback position (0.0-1.0) when length is known.
+    pub fn playback_position(&self) -> f32 {
+        if let Some(max_frames) = self.max_frames {
+            if max_frames == 0 {
+                return 0.0;
+            }
+            (self.frame_counter.min(max_frames) as f32) / (max_frames as f32)
+        } else {
+            0.0
+        }
+    }
+
+    /// Current frame index (0-based).
+    pub fn current_frame(&self) -> usize {
+        self.frame_counter
+    }
+
+    fn reset_runtime(&mut self) -> Result<()> {
+        self.machine.reset_layout();
+        for block in &self.song.data.blocks {
+            self.machine.load_block(block);
+        }
+        self.cpu = Cpu::new();
+        self.apply_register_presets();
+        self.frame_counter = 0;
+        self.cache_pos = 0;
+        self.cache_len = 0;
+        self.sample_cache.clear();
+        self.init_executed = false;
+        Ok(())
+    }
+
+    fn apply_register_presets(&mut self) {
+        let preset = ((self.song.data.hi_reg as u16) << 8) | self.song.data.lo_reg as u16;
+        self.cpu.registers().set16(Reg16::AF, preset);
+        self.cpu.registers().set16(Reg16::BC, preset);
+        self.cpu.registers().set16(Reg16::DE, preset);
+        self.cpu.registers().set16(Reg16::HL, preset);
+        self.cpu.registers().set16(Reg16::IX, preset);
+        self.cpu.registers().set16(Reg16::IY, preset);
+        self.cpu.registers().set16(Reg16::SP, self.points.stack);
+        self.cpu.registers().set_pc(RETURN_ADDRESS);
+        self.cpu.registers().set8(Reg8::I, 3);
+    }
+
+    fn ensure_initialized(&mut self) -> Result<()> {
+        if !self.init_executed {
+            self.run_subroutine(self.init_address)?;
+            self.init_executed = true;
+        }
+        Ok(())
+    }
+
+    fn render_frame(&mut self) -> Result<()> {
+        self.ensure_initialized()?;
+        self.run_subroutine(self.interrupt_address)?;
+        let samples = self
+            .machine
+            .chip_mut()
+            .generate_samples(self.samples_per_frame);
+        self.sample_cache = samples;
+        self.cache_pos = 0;
+        self.cache_len = self.sample_cache.len();
+        self.frame_counter = self.frame_counter.saturating_add(1);
+        if let Some(limit) = self.max_frames
+            && self.frame_counter >= limit
+        {
+            self.state = AyPlaybackState::Stopped;
+        }
+        Ok(())
+    }
+
+    fn run_subroutine(&mut self, entry: u16) -> Result<()> {
+        self.emulate_call(entry);
+        let mut guard = MAX_INSTRUCTIONS_PER_CALL;
+        loop {
+            self.cpu.execute_instruction(&mut self.machine);
+            let pc = self.cpu.immutable_registers().pc();
+            if pc == RETURN_ADDRESS {
+                break;
+            }
+            guard = guard.checked_sub(1).ok_or_else(|| AyError::InvalidData {
+                msg: format!(
+                    "Subroutine at 0x{entry:04x} did not return within instruction budget"
+                ),
+            })?;
+        }
+        Ok(())
+    }
+
+    fn emulate_call(&mut self, entry: u16) {
+        let regs = self.cpu.registers();
+        let mut sp = regs.get16(Reg16::SP);
+        sp = sp.wrapping_sub(1);
+        self.machine.poke(sp, (RETURN_ADDRESS >> 8) as u8);
+        sp = sp.wrapping_sub(1);
+        self.machine.poke(sp, RETURN_ADDRESS as u8);
+        regs.set16(Reg16::SP, sp);
+        regs.set_pc(entry);
+    }
+}
+
+fn resolve_init_address(song: &AySong, points: &AyPoints) -> Result<u16> {
+    if points.init != 0 {
+        return Ok(points.init);
+    }
+    let block = song
+        .data
+        .blocks
+        .first()
+        .ok_or_else(|| AyError::InvalidData {
+            msg: "AY song provides no memory blocks".to_string(),
+        })?;
+    for idx in 0..block.data.len().saturating_sub(2) {
+        if block.data[idx] == 0xCD {
+            let addr = u16::from_le_bytes([block.data[idx + 1], block.data[idx + 2]]);
+            if addr != 0 {
+                return Ok(addr);
+            }
+        }
+    }
+    Err(AyError::InvalidData {
+        msg: "Unable to infer INIT address".to_string(),
+    })
+}
+
+fn frame_limit(song: &AySong) -> Option<usize> {
+    if song.data.song_length_50hz == 0 {
+        None
+    } else {
+        Some(song.data.song_length_50hz as usize)
+    }
+}
+
+fn build_metadata(
+    header: &crate::format::AyHeader,
+    song_index: usize,
+    song_count: usize,
+    song: &AySong,
+) -> AyMetadata {
+    let frame_count = frame_limit(song);
+    let duration_seconds = frame_count.map(|frames| frames as f32 / FRAME_RATE_HZ);
+    AyMetadata {
+        song_name: song.name.clone(),
+        author: header.author.clone(),
+        misc: header.misc.clone(),
+        song_index,
+        song_count,
+        frame_count,
+        duration_seconds,
+        file_version: header.file_version,
+        player_version: header.player_version,
+    }
+}

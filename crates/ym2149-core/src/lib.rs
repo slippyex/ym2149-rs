@@ -137,7 +137,7 @@ pub type Result<T> = std::result::Result<T, Ym2149Error>;
 // Public API exports
 pub use backend::Ym2149Backend;
 pub use mfp::Mfp;
-pub use ym2149::Ym2149;
+pub use ym2149::{TinyYm2149, Ym2149};
 
 #[cfg(feature = "streaming")]
 pub use streaming::{AudioDevice, RealtimePlayer, RingBuffer, StreamConfig};

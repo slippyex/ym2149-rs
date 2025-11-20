@@ -32,6 +32,7 @@
 
 use wasm_bindgen::prelude::*;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
+use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer};
 use ym2149_ym_replayer::{LoadSummary, PlaybackController, PlaybackState, load_song};
 
 const YM_SAMPLE_RATE_F32: f32 = 44_100.0;
@@ -110,6 +111,7 @@ impl YmMetadata {
 enum BrowserSongPlayer {
     Ym(Box<ym2149_ym_replayer::Ym6Player>),
     Arkos(Box<ArkosWasmPlayer>),
+    Ay(Box<AyWasmPlayer>),
 }
 
 impl BrowserSongPlayer {
@@ -120,6 +122,7 @@ impl BrowserSongPlayer {
                 true
             }
             BrowserSongPlayer::Arkos(_) => false,
+            BrowserSongPlayer::Ay(_) => false,
         }
     }
 }
@@ -235,11 +238,88 @@ impl ArkosWasmPlayer {
     }
 }
 
+struct AyWasmPlayer {
+    player: AyPlayer,
+    frame_count: usize,
+}
+
+impl AyWasmPlayer {
+    fn new(player: AyPlayer, meta: &AyFileMetadata) -> (Self, YmMetadata) {
+        let metadata = metadata_from_ay(meta);
+        let frame_count = metadata.frame_count as usize;
+        (
+            Self {
+                player,
+                frame_count,
+            },
+            metadata,
+        )
+    }
+
+    fn play(&mut self) -> Result<(), String> {
+        self.player.play().map_err(|e| e.to_string())
+    }
+
+    fn pause(&mut self) -> Result<(), String> {
+        self.player.pause();
+        Ok(())
+    }
+
+    fn stop(&mut self) -> Result<(), String> {
+        self.player.stop().map_err(|e| e.to_string())
+    }
+
+    fn state(&self) -> PlaybackState {
+        match self.player.state() {
+            AyState::Playing => PlaybackState::Playing,
+            AyState::Paused => PlaybackState::Paused,
+            AyState::Stopped => PlaybackState::Stopped,
+        }
+    }
+
+    fn frame_position(&self) -> usize {
+        self.player.current_frame()
+    }
+
+    fn frame_count(&self) -> usize {
+        self.frame_count
+    }
+
+    fn playback_position(&self) -> f32 {
+        self.player.playback_position()
+    }
+
+    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
+        self.player.generate_samples(count)
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        self.player.generate_samples_into(buffer);
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.player.set_channel_mute(channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.player.is_channel_muted(channel)
+    }
+
+    fn dump_registers(&self) -> [u8; 16] {
+        self.player.chip().dump_registers()
+    }
+
+    fn set_color_filter(&mut self, enabled: bool) {
+        self.player.set_color_filter(enabled);
+    }
+}
+
 impl BrowserSongPlayer {
     fn play(&mut self) -> Result<(), String> {
         match self {
             BrowserSongPlayer::Ym(player) => player.play().map_err(|e| e.to_string()),
             BrowserSongPlayer::Arkos(player) => player.play(),
+            BrowserSongPlayer::Ay(player) => player.play(),
         }
     }
 
@@ -247,6 +327,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.pause().map_err(|e| e.to_string()),
             BrowserSongPlayer::Arkos(player) => player.pause(),
+            BrowserSongPlayer::Ay(player) => player.pause(),
         }
     }
 
@@ -254,6 +335,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.stop().map_err(|e| e.to_string()),
             BrowserSongPlayer::Arkos(player) => player.stop(),
+            BrowserSongPlayer::Ay(player) => player.stop(),
         }
     }
 
@@ -261,6 +343,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.state(),
             BrowserSongPlayer::Arkos(player) => player.state(),
+            BrowserSongPlayer::Ay(player) => player.state(),
         }
     }
 
@@ -268,6 +351,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.get_current_frame(),
             BrowserSongPlayer::Arkos(player) => player.frame_position(),
+            BrowserSongPlayer::Ay(player) => player.frame_position(),
         }
     }
 
@@ -275,6 +359,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.frame_count(),
             BrowserSongPlayer::Arkos(player) => player.frame_count(),
+            BrowserSongPlayer::Ay(player) => player.frame_count(),
         }
     }
 
@@ -282,6 +367,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.get_playback_position(),
             BrowserSongPlayer::Arkos(player) => player.playback_position(),
+            BrowserSongPlayer::Ay(player) => player.playback_position(),
         }
     }
 
@@ -289,6 +375,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.generate_samples(count),
             BrowserSongPlayer::Arkos(player) => player.generate_samples(count),
+            BrowserSongPlayer::Ay(player) => player.generate_samples(count),
         }
     }
 
@@ -296,6 +383,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.generate_samples_into(buffer),
             BrowserSongPlayer::Arkos(player) => player.generate_samples_into(buffer),
+            BrowserSongPlayer::Ay(player) => player.generate_samples_into(buffer),
         }
     }
 
@@ -303,6 +391,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.set_channel_mute(channel, mute),
             BrowserSongPlayer::Arkos(player) => player.set_channel_mute(channel, mute),
+            BrowserSongPlayer::Ay(player) => player.set_channel_mute(channel, mute),
         }
     }
 
@@ -310,6 +399,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.is_channel_muted(channel),
             BrowserSongPlayer::Arkos(player) => player.is_channel_muted(channel),
+            BrowserSongPlayer::Ay(player) => player.is_channel_muted(channel),
         }
     }
 
@@ -317,6 +407,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.get_chip().dump_registers(),
             BrowserSongPlayer::Arkos(player) => player.dump_registers(),
+            BrowserSongPlayer::Ay(player) => player.dump_registers(),
         }
     }
 
@@ -324,6 +415,7 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Ym(player) => player.get_chip_mut().set_color_filter(enabled),
             BrowserSongPlayer::Arkos(player) => player.set_color_filter(enabled),
+            BrowserSongPlayer::Ay(player) => player.set_color_filter(enabled),
         }
     }
 }
@@ -355,7 +447,7 @@ impl Ym2149Player {
         console_log!("Loading file ({} bytes)...", data.len());
 
         let (player, metadata) = load_browser_player(data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to load YM/AKS file: {}", e)))?;
+            .map_err(|e| JsValue::from_str(&format!("Failed to load YM/AKS/AY file: {}", e)))?;
 
         console_log!("Song loaded successfully");
         console_log!("  Title: {}", metadata.title);
@@ -506,11 +598,17 @@ fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), S
         return Ok((BrowserSongPlayer::Ym(Box::new(player)), metadata));
     }
 
-    let song = load_aks(data).map_err(|e| format!("Failed to parse AKS file: {e}"))?;
-    let arkos_player =
-        ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to init Arkos player: {e}"))?;
-    let (wrapper, metadata) = ArkosWasmPlayer::new(arkos_player);
-    Ok((BrowserSongPlayer::Arkos(Box::new(wrapper)), metadata))
+    if let Ok(song) = load_aks(data) {
+        let arkos_player =
+            ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to init Arkos player: {e}"))?;
+        let (wrapper, metadata) = ArkosWasmPlayer::new(arkos_player);
+        return Ok((BrowserSongPlayer::Arkos(Box::new(wrapper)), metadata));
+    }
+
+    let (player, meta) =
+        AyPlayer::load_from_bytes(data, 0).map_err(|e| format!("Failed to load AY file: {e}"))?;
+    let (wrapper, metadata) = AyWasmPlayer::new(player, &meta);
+    Ok((BrowserSongPlayer::Ay(Box::new(wrapper)), metadata))
 }
 
 fn metadata_from_summary(
@@ -541,6 +639,23 @@ fn metadata_from_summary(
         frame_count: summary.frame_count as u32,
         frame_rate,
         duration_seconds: player.get_duration_seconds(),
+    }
+}
+
+fn metadata_from_ay(meta: &AyFileMetadata) -> YmMetadata {
+    let frame_count = meta.frame_count.unwrap_or(0);
+    let duration_seconds = meta
+        .duration_seconds
+        .unwrap_or_else(|| frame_count as f32 / 50.0);
+
+    YmMetadata {
+        title: meta.song_name.clone(),
+        author: meta.author.clone(),
+        comments: meta.misc.clone(),
+        format: "AY".to_string(),
+        frame_count: frame_count as u32,
+        frame_rate: 50,
+        duration_seconds,
     }
 }
 

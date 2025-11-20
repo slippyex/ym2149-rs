@@ -12,9 +12,12 @@ mod streaming;
 mod visualization;
 
 use std::time::Instant;
+use ym2149::Ym2149Backend;
 use ym2149::streaming::{DEFAULT_SAMPLE_RATE, StreamConfig};
 use ym2149_arkos_replayer::ArkosPlayer;
-use ym2149_ym_replayer::{PlaybackController, Ym6Player};
+use ym2149_ay_replayer::{AyPlaybackState, AyPlayer};
+use ym2149_ym_replayer::PlaybackController;
+use ym2149_ym_replayer::player::ym_player::Ym6PlayerGeneric;
 
 use args::CliArgs;
 use player_factory::{create_demo_player, create_player};
@@ -61,17 +64,17 @@ pub trait RealtimeChip: PlaybackController + Send {
     fn set_color_filter(&mut self, enabled: bool);
 }
 
-impl RealtimeChip for Ym6Player {
+impl<B: Ym2149Backend + 'static> RealtimeChip for Ym6PlayerGeneric<B> {
     fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        Ym6Player::generate_samples(self, count)
+        Ym6PlayerGeneric::generate_samples(self, count)
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        Ym6Player::generate_samples_into(self, buffer)
+        Ym6PlayerGeneric::generate_samples_into(self, buffer)
     }
 
     fn visual_snapshot(&self) -> VisualSnapshot {
-        let regs = self.get_chip().dump_registers();
+        let regs = self.dump_registers();
         let (sync, sid, drum) = self.get_active_effects();
         VisualSnapshot {
             registers: regs,
@@ -90,11 +93,11 @@ impl RealtimeChip for Ym6Player {
     }
 
     fn get_playback_position(&self) -> f32 {
-        Ym6Player::get_playback_position(self)
+        Ym6PlayerGeneric::get_playback_position(self)
     }
 
     fn set_color_filter(&mut self, enabled: bool) {
-        self.get_chip_mut().set_color_filter(enabled);
+        self.set_color_filter(enabled);
     }
 }
 
@@ -172,6 +175,79 @@ impl RealtimeChip for ArkosPlayerWrapper {
 
     fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for Arkos
+    }
+}
+
+/// AY player wrapper for CLI integration
+pub struct AyPlayerWrapper {
+    player: AyPlayer,
+}
+
+impl AyPlayerWrapper {
+    pub fn new(player: AyPlayer) -> Self {
+        Self { player }
+    }
+}
+
+impl PlaybackController for AyPlayerWrapper {
+    fn play(&mut self) -> ym2149_ym_replayer::Result<()> {
+        self.player
+            .play()
+            .map_err(|e| format!("AY play error: {e}").into())
+    }
+
+    fn pause(&mut self) -> ym2149_ym_replayer::Result<()> {
+        self.player.pause();
+        Ok(())
+    }
+
+    fn stop(&mut self) -> ym2149_ym_replayer::Result<()> {
+        self.player
+            .stop()
+            .map_err(|e| format!("AY stop error: {e}").into())
+    }
+
+    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
+        match self.player.state() {
+            AyPlaybackState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
+            AyPlaybackState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
+            AyPlaybackState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,
+        }
+    }
+}
+
+impl RealtimeChip for AyPlayerWrapper {
+    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
+        self.player.generate_samples(count)
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        self.player.generate_samples_into(buffer);
+    }
+
+    fn visual_snapshot(&self) -> VisualSnapshot {
+        VisualSnapshot {
+            registers: self.player.chip().dump_registers(),
+            sync_buzzer: false,
+            sid_active: [false; 3],
+            drum_active: [false; 3],
+        }
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.player.set_channel_mute(channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.player.is_channel_muted(channel)
+    }
+
+    fn get_playback_position(&self) -> f32 {
+        self.player.playback_position()
+    }
+
+    fn set_color_filter(&mut self, enabled: bool) {
+        self.player.set_color_filter(enabled);
     }
 }
 

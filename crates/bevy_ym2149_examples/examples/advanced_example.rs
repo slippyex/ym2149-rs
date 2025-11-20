@@ -9,7 +9,7 @@ use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{Ym2149Playback, Ym2149Plugin, Ym2149Settings};
-use bevy_ym2149_examples::{embedded_asset_plugin, ASSET_BASE};
+use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
 use bevy_ym2149_viz::{
     Ym2149VizPlugin, create_channel_visualization, create_detailed_channel_display,
     create_oscilloscope, create_status_display,

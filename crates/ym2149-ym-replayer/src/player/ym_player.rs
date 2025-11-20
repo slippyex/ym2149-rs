@@ -81,6 +81,16 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     pub fn is_channel_muted(&self, channel: usize) -> bool {
         self.chip.is_channel_muted(channel)
     }
+
+    /// Dump chip registers (R0-R15)
+    pub fn dump_registers(&self) -> [u8; 16] {
+        self.chip.dump_registers()
+    }
+
+    /// Enable or disable the chip's color filter if supported by the backend.
+    pub fn set_color_filter(&mut self, enabled: bool) {
+        self.chip.set_color_filter(enabled);
+    }
 }
 
 impl<B: Ym2149Backend> Default for Ym6PlayerGeneric<B> {

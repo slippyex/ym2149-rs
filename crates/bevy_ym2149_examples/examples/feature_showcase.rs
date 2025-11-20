@@ -22,7 +22,7 @@ use bevy_ym2149::{
     AudioBridgeTargets, FRAME_POSITION_PATH, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig,
     Ym2149Settings,
 };
-use bevy_ym2149_examples::{embedded_asset_plugin, ASSET_BASE};
+use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
 
 #[derive(Resource)]
 struct DemoPlayback(Entity);

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use ym2149_arkos_replayer::{parser::load_aks, player::ArkosPlayer};
+use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer};
 use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
 
 use crate::audio_source::Ym2149Metadata;
@@ -20,6 +21,7 @@ pub enum YmSongPlayer {
         metadata: Ym2149Metadata,
     },
     Arkos(Box<ArkosBevyPlayer>),
+    Ay(Box<AyBevyPlayer>),
     Synth(Box<YmSynthPlayer>),
 }
 
@@ -53,6 +55,13 @@ impl YmSongPlayer {
         ))))
     }
 
+    pub(crate) fn new_ay(song_data: &[u8]) -> Result<Self, BevyYm2149Error> {
+        let (player, metadata) = AyPlayer::load_from_bytes(song_data, 0)
+            .map_err(|e| BevyYm2149Error::Other(format!("AY load failed: {e}")))?;
+        let ym_meta = metadata_from_ay(&metadata);
+        Ok(Self::Ay(Box::new(AyBevyPlayer::new(player, ym_meta))))
+    }
+
     pub(crate) fn new_synth(controller: YmSynthController) -> Self {
         Self::Synth(Box::new(YmSynthPlayer::new(controller)))
     }
@@ -63,6 +72,7 @@ impl YmSongPlayer {
                 .play()
                 .map_err(|e| BevyYm2149Error::Other(format!("YM play failed: {e}"))),
             Self::Arkos(p) => p.play(),
+            Self::Ay(p) => p.play(),
             Self::Synth(p) => {
                 p.play();
                 Ok(())
@@ -76,6 +86,7 @@ impl YmSongPlayer {
                 .pause()
                 .map_err(|e| BevyYm2149Error::Other(format!("YM pause failed: {e}"))),
             Self::Arkos(p) => p.pause(),
+            Self::Ay(p) => p.pause(),
             Self::Synth(p) => {
                 p.pause();
                 Ok(())
@@ -89,6 +100,7 @@ impl YmSongPlayer {
                 .stop()
                 .map_err(|e| BevyYm2149Error::Other(format!("YM stop failed: {e}"))),
             Self::Arkos(p) => p.stop(),
+            Self::Ay(p) => p.stop(),
             Self::Synth(p) => {
                 p.stop();
                 Ok(())
@@ -100,6 +112,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.state(),
             Self::Arkos(p) => p.state(),
+            Self::Ay(p) => p.state(),
             Self::Synth(p) => p.state(),
         }
     }
@@ -108,6 +121,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.get_current_frame(),
             Self::Arkos(p) => p.current_frame(),
+            Self::Ay(p) => p.current_frame(),
             Self::Synth(p) => p.current_frame(),
         }
     }
@@ -116,6 +130,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.samples_per_frame_value(),
             Self::Arkos(p) => p.samples_per_frame(),
+            Self::Ay(p) => p.samples_per_frame(),
             Self::Synth(p) => p.samples_per_frame_value(),
         }
     }
@@ -124,6 +139,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.generate_sample(),
             Self::Arkos(p) => p.generate_sample(),
+            Self::Ay(p) => p.generate_sample(),
             Self::Synth(p) => p.generate_sample(),
         }
     }
@@ -132,6 +148,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => player.generate_samples_into(buffer),
             Self::Arkos(p) => p.generate_samples_into(buffer),
+            Self::Ay(p) => p.generate_samples_into(buffer),
             Self::Synth(p) => p.generate_samples_into(buffer),
         }
     }
@@ -140,6 +157,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { metadata, .. } => metadata,
             Self::Arkos(p) => p.metadata(),
+            Self::Ay(p) => p.metadata(),
             Self::Synth(p) => p.metadata(),
         }
     }
@@ -148,6 +166,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { metrics, .. } => Some(*metrics),
             Self::Arkos(p) => p.metrics(),
+            Self::Ay(p) => Some(p.metrics()),
             Self::Synth(p) => Some(p.metrics()),
         }
     }
@@ -156,6 +175,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { player, .. } => Some(player.get_chip()),
             Self::Arkos(p) => p.primary_chip(),
+            Self::Ay(p) => Some(p.chip()),
             Self::Synth(p) => Some(p.chip()),
         }
     }
@@ -167,6 +187,7 @@ impl YmSongPlayer {
             Self::Arkos(p) => p
                 .primary_chip()
                 .expect("Arkos player should always expose at least one PSG"),
+            Self::Ay(p) => p.chip(),
             Self::Synth(p) => p.chip(),
         }
     }
@@ -176,6 +197,7 @@ impl YmSongPlayer {
         match self {
             Self::Ym { metrics, .. } => metrics.frame_count,
             Self::Arkos(p) => p.frame_count(),
+            Self::Ay(p) => p.frame_count(),
             Self::Synth(p) => p.metrics().frame_count,
         }
     }
@@ -193,14 +215,21 @@ pub(crate) fn load_song_from_bytes(
             metrics,
             metadata,
         ))
-    } else {
-        let player =
-            YmSongPlayer::new_arkos(data).map_err(|e| format!("Failed to load AKS song: {}", e))?;
+    } else if let Ok(player) = YmSongPlayer::new_arkos(data) {
         let metadata = player.metadata().clone();
         let metrics = player.metrics().unwrap_or(PlaybackMetrics {
             frame_count: metadata.frame_count,
             samples_per_frame: YM2149_SAMPLE_RATE,
         });
+        Ok((player, metrics, metadata))
+    } else {
+        let player =
+            YmSongPlayer::new_ay(data).map_err(|e| format!("Failed to load AY song: {}", e))?;
+        let metadata = player.metadata().clone();
+        let metrics = PlaybackMetrics {
+            frame_count: metadata.frame_count,
+            samples_per_frame: YM2149_SAMPLE_RATE,
+        };
         Ok((player, metrics, metadata))
     }
 }
@@ -225,6 +254,20 @@ fn metadata_from_player(player: &Ym6Player, summary: &LoadSummary) -> Ym2149Meta
         title,
         author,
         comment,
+        frame_count,
+        duration_seconds,
+    }
+}
+
+fn metadata_from_ay(meta: &AyFileMetadata) -> Ym2149Metadata {
+    let frame_count = meta.frame_count.unwrap_or(0);
+    let duration_seconds = meta
+        .duration_seconds
+        .unwrap_or_else(|| frame_count as f32 / 50.0);
+    Ym2149Metadata {
+        title: meta.song_name.clone(),
+        author: meta.author.clone(),
+        comment: meta.misc.clone(),
         frame_count,
         duration_seconds,
     }
@@ -338,5 +381,102 @@ impl ArkosBevyPlayer {
         self.player.generate_samples_into(&mut self.cache);
         self.cache_len = self.cache.len();
         self.cache_pos = 0;
+    }
+}
+
+const AY_CACHE_SAMPLES: usize = 512;
+
+pub struct AyBevyPlayer {
+    player: AyPlayer,
+    metadata: Ym2149Metadata,
+    cache: Vec<f32>,
+    cache_pos: usize,
+    cache_len: usize,
+}
+
+impl AyBevyPlayer {
+    fn new(player: AyPlayer, metadata: Ym2149Metadata) -> Self {
+        Self {
+            player,
+            metadata,
+            cache: vec![0.0; AY_CACHE_SAMPLES],
+            cache_pos: 0,
+            cache_len: 0,
+        }
+    }
+
+    fn play(&mut self) -> Result<(), BevyYm2149Error> {
+        self.player
+            .play()
+            .map_err(|e| BevyYm2149Error::Other(format!("AY play failed: {e}")))
+    }
+
+    fn pause(&mut self) -> Result<(), BevyYm2149Error> {
+        self.player.pause();
+        Ok(())
+    }
+
+    fn stop(&mut self) -> Result<(), BevyYm2149Error> {
+        self.player
+            .stop()
+            .map_err(|e| BevyYm2149Error::Other(format!("AY stop failed: {e}")))
+    }
+
+    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
+        match self.player.state() {
+            AyState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
+            AyState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
+            AyState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,
+        }
+    }
+
+    fn current_frame(&self) -> usize {
+        self.player.current_frame()
+    }
+
+    fn samples_per_frame(&self) -> u32 {
+        YM2149_SAMPLE_RATE
+    }
+
+    fn generate_sample(&mut self) -> f32 {
+        if self.cache_pos >= self.cache_len {
+            self.fill_cache();
+            if self.cache_len == 0 {
+                return 0.0;
+            }
+        }
+        let sample = self.cache[self.cache_pos];
+        self.cache_pos += 1;
+        sample
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        self.player.generate_samples_into(buffer);
+    }
+
+    fn fill_cache(&mut self) {
+        self.player
+            .generate_samples_into(&mut self.cache[..AY_CACHE_SAMPLES]);
+        self.cache_pos = 0;
+        self.cache_len = AY_CACHE_SAMPLES;
+    }
+
+    fn metadata(&self) -> &Ym2149Metadata {
+        &self.metadata
+    }
+
+    fn metrics(&self) -> PlaybackMetrics {
+        PlaybackMetrics {
+            frame_count: self.metadata.frame_count,
+            samples_per_frame: self.samples_per_frame(),
+        }
+    }
+
+    fn chip(&self) -> &ym2149::ym2149::Ym2149 {
+        self.player.chip()
+    }
+
+    fn frame_count(&self) -> usize {
+        self.metadata.frame_count
     }
 }

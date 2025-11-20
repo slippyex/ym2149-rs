@@ -22,6 +22,9 @@ ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-repl
 # Arkos Tracker replayer
 ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-arkos-replayer", version = "0.6.0" }
 
+# AY format replayer
+ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.6.0" }
+
 # Synchronization
 parking_lot.workspace = true
 
