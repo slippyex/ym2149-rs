@@ -7,6 +7,7 @@
 | `ym2149` | [![ym2149](https://img.shields.io/crates/v/ym2149.svg?label=ym2149)](https://crates.io/crates/ym2149) | [![ym2149 docs](https://docs.rs/ym2149/badge.svg)](https://docs.rs/ym2149) |
 | `ym2149-ym-replayer` | [![ym2149-ym-replayer](https://img.shields.io/crates/v/ym2149-ym-replayer.svg?label=ym2149-ym-replayer)](https://crates.io/crates/ym2149-ym-replayer) | [![ym2149-ym-replayer docs](https://docs.rs/ym2149-ym-replayer/badge.svg)](https://docs.rs/ym2149-ym-replayer) |
 | `ym2149-arkos-replayer` | [![ym2149-arkos-replayer](https://img.shields.io/crates/v/ym2149-arkos-replayer.svg?label=ym2149-arkos-replayer)](https://crates.io/crates/ym2149-arkos-replayer) | [![ym2149-arkos-replayer docs](https://docs.rs/ym2149-arkos-replayer/badge.svg)](https://docs.rs/ym2149-arkos-replayer) |
+| `ym2149-ay-replayer` | [![ym2149-ay-replayer](https://img.shields.io/crates/v/ym2149-ay-replayer.svg?label=ym2149-ay-replayer)](https://crates.io/crates/ym2149-ay-replayer) | [![ym2149-ay-replayer docs](https://docs.rs/ym2149-ay-replayer/badge.svg)](https://docs.rs/ym2149-ay-replayer) |
 | `bevy_ym2149` | [![bevy_ym2149](https://img.shields.io/crates/v/bevy_ym2149.svg?label=bevy_ym2149)](https://crates.io/crates/bevy_ym2149) | [![bevy_ym2149 docs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149) |
 | `bevy_ym2149_viz` | [![bevy_ym2149_viz](https://img.shields.io/crates/v/bevy_ym2149_viz.svg?label=bevy_ym2149_viz)](https://crates.io/crates/bevy_ym2149_viz) | [![bevy_ym2149_viz docs](https://docs.rs/bevy_ym2149_viz/badge.svg)](https://docs.rs/bevy_ym2149_viz) |
 | `ym2149-bevy` | [![ym2149-bevy](https://img.shields.io/crates/v/ym2149-bevy.svg?label=ym2149-bevy)](https://crates.io/crates/ym2149-bevy) | – |
@@ -67,16 +68,6 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 
 Naming: Bevy-focused crates follow `bevy_ym2149_*`, while core/backends/replayers use the `ym2149-*` prefix.
 
-> **Why Arkos Tracker?**  
-> It marries the classic step-sequencer workflow with modern comforts:
-> multiple YM2149/AY PSGs per song, visual instrument designers,
-> blended software/hardware envelopes, and native export pipelines (like
-> this repo). Perfect if you want authentic 8-bit character without
-> giving up on flexible tooling.
-
-Arkos playback here is powered by a native Rust replayer—no external
-tracker runtime or C++ bindings required.
-
 <img src="docs/screenshots/advanced_example.png" alt="Advanced Bevy example" width="780">
 
 ## Highlights
@@ -89,6 +80,17 @@ tracker runtime or C++ bindings required.
 - 🖼️ **Visualization stack**: drop-in oscilloscope, spectrum bars, progress HUD, and demoscene showcase based on the viz crate
 - 🧪 **Well-tested**: `cargo test --workspace` (165+ tests) plus example scenes to validate runtime flows
 - 🪄 **Gameplay hooks**: Bevy plugin ships marker events, audio-reactive metrics, and PSG one-shot SFX events
+
+### Why Arkos Tracker Support?
+
+Arkos Tracker is the de-facto “modern” workflow for YM2149/AY musicians: it blends a classic step-sequencer with a visual instrument designer, supports multiple PSGs per song, and lets composers mix hardware envelopes with software macros. Native support matters because:
+
+- **Multi-PSG music** – Arkos sequences can target two or more AY chips; our replayer handles that natively, both in the CLI and Bevy.
+- **Modern authoring tools** – Musicians can stay in the Arkos editor (PC/Mac) and drop the `.aks` export straight into any crate in this repo—no external tracker runtime or C++ bridge required.
+- **Feature parity** – Hardware effects (Sync Buzzer, DigiDrum, SID), custom arps, and per-channel envelopes all map to the same PSG core shared with YM/AY playback.
+- **Cross-target builds** – The same Rust replayer powers desktop, web (WASM), and Bevy integrations, so Arkos rips behave identically everywhere.
+
+In short: Arkos lets artists work with modern ergonomics, and this workspace lets those songs run anywhere Rust does.
 
 ## Quick Start
 
@@ -203,25 +205,31 @@ cargo test -p ym2149 --features streaming
 
 ## Development Prerequisites
 
-- Rust 1.83+ (Rust 2024 edition)
-- libmp3lame for `export-mp3`
-- A working audio backend (cpal/rodio) for streaming playback
+- Rust 1.83+ (Rust 2024 edition) with `cargo` and `rustfmt`
+- `libmp3lame` (or `lame`) on your system if you plan to build the CLI with the `export-mp3` feature
+- Audio backend libraries for CPAL/Rodio (ALSA/PulseAudio, CoreAudio, WASAPI, etc.) when testing real-time playback
+- Optional tooling:
+  - [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) for building the web player
+  - `node`/`npm` or `python -m http.server` for serving the WASM demo locally
+  - Bevy’s native dependencies (Vulkan/Metal/DX) when running the example scenes
+  - `cargo-make`/`just` if you use the provided helper scripts (optional)
 
 ## Project Structure
 
 ```
 ym2149-rs/
 ├── crates/
-│   ├── ym2149-core/          # Core YM2149 chip emulator (published as `ym2149`)
-│   ├── ym2149-arkos-replayer/# Arkos Tracker parser + pure-Rust replayer
-│   ├── ym2149-ym-replayer/   # YM file parsing and playback
-│   ├── ym2149-ym-replayer-cli/# CLI for YM/AKS playback and export
-│   ├── ym2149-softsynth/     # Experimental synthesizer backend
-│   ├── ym2149-wasm/          # WebAssembly bindings
-│   ├── bevy_ym2149/          # Bevy audio plugin
-│   ├── bevy_ym2149_viz/      # Visualization helpers
-│   ├── bevy_ym2149_examples/ # Runnable Bevy demos
-│   └── ym2149-bevy/          # Legacy shim
+│   ├── ym2149-core/            # Core YM2149 chip emulator (crates.io `ym2149`)
+│   ├── ym2149-softsynth/       # Experimental soft synth backend implementing the backend trait
+│   ├── ym2149-ym-replayer/     # YM parser + playback engine
+│   ├── ym2149-arkos-replayer/  # Arkos Tracker (.aks) parser/player
+│   ├── ym2149-ay-replayer/     # ZXAY/EMUL parser + Z80 runner (ZX-only; CPC AY rejected)
+│   ├── ym2149-ym-replayer-cli/ # Terminal streamer/exporter built on the replayers
+│   ├── ym2149-wasm/            # WASM bindings + browser demo
+│   ├── bevy_ym2149/            # Bevy plugin (playback, playlists, crossfade, diagnostics)
+│   ├── bevy_ym2149_viz/        # Optional visualization ECS systems
+│   ├── bevy_ym2149_examples/   # Runnable Bevy app gallery
+│   └── ym2149-bevy/            # Legacy shim that re-exports `bevy_ym2149`
 ├── examples/                 # YM sample files
 ├── docs/                     # Web player (GitHub Pages)
 ├── Cargo.toml                # Workspace configuration
