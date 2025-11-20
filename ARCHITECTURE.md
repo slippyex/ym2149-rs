@@ -21,10 +21,11 @@ graph TB
     subgraph "Layer 3: Playback Engines"
         REPLAYER["ym2149-ym-replayer<br/>YM Parser & Player"]
         ARKOS["ym2149-arkos-replayer<br/>AKS Parser & Player"]
+        AY["ym2149-ay-replayer<br/>ZXAY/EMUL Parser & Player"]
     end
 
     subgraph "Layer 2: Chip Backends"
-        YM2149["ym2149-core<br/>Hardware Emulator"]
+        YM2149["ym2149-core<br/>HW Emulator (clk/8)"]
         SOFTSYNTH["ym2149-softsynth<br/>Alt Synth Backend"]
     end
 
@@ -37,9 +38,13 @@ graph TB
     BEVY_VIZ --> BEVY
     BEVY --> REPLAYER
     BEVY --> ARKOS
+    BEVY --> AY
     WASM --> REPLAYER
     WASM --> ARKOS
+    WASM --> AY
     CLI --> REPLAYER
+    CLI --> ARKOS
+    CLI --> AY
     REPLAYER --> YM2149
     REPLAYER -.optional.-> SOFTSYNTH
     ARKOS --> YM2149
@@ -50,17 +55,18 @@ graph TB
 
 ## Crate Responsibilities
 
-| Crate | Layer | Purpose | Public API | Binaries/Examples |
-|-------|-------|---------|------------|-------------------|
-| **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation | `Ym2149`, `Ym2149Backend` trait, streaming, visualization | `chip_demo` example |
-| **ym2149-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` (implements `Ym2149Backend`) | None (library only) |
-| **ym2149-ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()`, parsers, loader | Used by `ym2149-ym-replayer-cli` |
-| **ym2149-arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Uses curated songs in [`examples/arkos`](examples/arkos) |
-| **bevy_ym2149** | 4 | Bevy audio plugin with playback management (YM + AKS via `ym2149-ym-replayer`/`ym2149-arkos-replayer`) | `Ym2149Plugin`, `Ym2149Playback` component | None (library only) |
-| **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization components & systems | None (library only) |
-| **bevy_ym2149_examples** | 4 | Runnable demo applications | None (examples only) | 5 example scenes |
-| **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | [`crates/ym2149-wasm/examples`](crates/ym2149-wasm/examples) |
-| **ym2149-ym-replayer-cli** | 4 | Terminal streaming/export tool | `main.rs` CLI | `cargo run -p ym2149-ym-replayer-cli` |
+| Crate | Layer | Purpose | Public API | Notes |
+|-------|-------|---------|------------|-------|
+| **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation (clk/8, 32-step vols/env) | `Ym2149`, `Ym2149Backend`, streaming helpers | Used by every higher layer |
+| **ym2149-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` | Optional backend prototype |
+| **ym2149-ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()` | Powers CLI/Bevy/WASM YM playback |
+| **ym2149-arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Supports multi-chip Arkos rips |
+| **ym2149-ay-replayer** | 3 | Project AY ZXAY/EMUL parsing + Z80 replayer | `AyPlayer`, `load_ay()` | ZX-only; CPC AY files rejected (firmware unsupported) |
+| **bevy_ym2149** | 4 | Bevy audio plugin with YM/AKS/AY players | `Ym2149Plugin`, `YmSongPlayer` | Handles streaming & hot-reload |
+| **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization ECS systems | Consumed by example scenes |
+| **bevy_ym2149_examples** | 4 | Runnable Bevy demos | Example scenes | Demonstrates plugin usage |
+| **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | Auto-detects YM/AKS/AY (CPC AY disabled) |
+| **ym2149-ym-replayer-cli** | 4 | Terminal streaming/export CLI | `main.rs` | Streams YM/AKS/ZX-AY (CPC AY rejected with warning) |
 
 ---
 
@@ -86,13 +92,40 @@ sequenceDiagram
         Player->>Player: apply effects (SID/DigiDrum/Buzzer)
         Player->>Chip: load_registers(regs)
 
-        loop samples in frame
-            Player->>Chip: clock()
-            Chip->>Chip: update generators
-            Chip-->>Player: get_sample()
-        end
+    loop samples in frame
+        Player->>Chip: clock()           Note: backend runs YM at clk/8 internally
+        Chip->>Chip: update generators   (tone/noise/env + DC adjust)
+        Chip-->>Player: get_sample()
+    end
 
         Player-->>Audio: send samples
+    end
+```
+
+### AY (ZXAY/EMUL) Flow (ZX Spectrum only)
+
+```mermaid
+sequenceDiagram
+    participant File as AY File
+    participant Parser as AY parser (ZXAY/EMUL)
+    participant Loader as Memory Loader
+    participant CPU as Z80 Core (iz80)
+    participant Chip as Ym2149 Backend
+    participant Audio as Audio Device
+
+    File->>Parser: parse header/blocks/points
+    Parser-->>Loader: program blocks + init/ISR pointers
+    Loader->>CPU: seed RAM + stack
+    note over CPU: CPC firmware calls not supported
+
+    loop INIT/IRQ execution
+        CPU->>Chip: port writes (Spectrum or CPC PSG)
+        CPU->>CPU: run player code
+    end
+
+    loop samples
+        Chip->>Chip: clock @ 2 MHz (ZX)
+        Chip-->>Audio: mix sample
     end
 ```
 
@@ -133,32 +166,20 @@ pub trait Ym2149Backend: Send {
 
 ## Layer 2: Chip Emulation
 
-### ym2149-core
+### ym2149-core (clk/8 backend)
 
-**Hardware-accurate emulation** of the YM2149 PSG chip.
+**Hardware-aligned emulation** of the YM2149 PSG using a clk÷8 model:
 
-**Architecture:**
-```
-Ym2149
-├── 3x ToneGenerator (square wave, 12-bit frequency)
-├── NoiseGenerator (17-bit LFSR)
-├── EnvelopeGenerator (16 shapes, lookup table)
-├── Mixer (AND gate logic, per-channel control)
-└── ColorFilter (optional ST-style filtering)
-```
-
-**Key Features:**
-- Fixed-point phase accumulators (16.16 format)
-- Pre-computed envelope tables (16 shapes × 65K values)
-- Zero allocations in hot path
-- Hardware-specific methods for YM6 effects:
-  - `set_mixer_overrides()` - For SID/Buzzer
-  - `set_drum_sample_override()` - For DigiDrums
-  - `trigger_envelope()` - For Sync Buzzer
+- Internal tick at `master_clock/8` (~250 kHz @ 2 MHz), averaged to host sample rate
+- 10 hardware envelope shapes (128-step tables) + 32-step hardware volume table
+- Noise LFSR and tone edges match hardware expectations (randomized power-on edges, half-rate noise)
+- DC adjust ring buffer to remove offset drift
+- Hardware effect hooks: `set_mixer_overrides`, `set_drum_sample_override`, `trigger_envelope`
+- Trait-compatible (`Ym2149Backend`) and exported as `Ym2149`
 
 **Performance:**
-- ~1-2 µs per sample
-- ~5% CPU @ 44.1 kHz sustained
+- Lightweight hot path; no heap allocations per sample
+- Accurate buzzer/digidrum timing due to subclock stepping
 
 **See:** [ym2149-core/ARCHITECTURE.md](crates/ym2149-core/ARCHITECTURE.md)
 
@@ -628,16 +649,22 @@ bevy_ym2149_examples
         ├──→ bevy_ym2149_viz
         │           │
         │           └──→ bevy_ym2149
-        │                       │
-        └───────────────────────┴──→ ym2149-ym-replayer
-                                            │
-                                            ├──→ ym2149-core
-                                            │
-                                            └──→ ym2149-softsynth (optional)
-                                                        │
-                                                        └──→ ym2149-core
+        │                       ├──→ ym2149-ym-replayer
+        │                       ├──→ ym2149-arkos-replayer
+        │                       └──→ ym2149-ay-replayer
+        │                                    │
+        │                                    └── (ZX-only; CPC AY rejected at runtime)
+        │
+        └──────────────────────────────────────────────┐
+                                                       ↓
+ym2149-ym-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
 
-ym2149-ym-replayer-cli ──→ ym2149-ym-replayer  # Standalone CLI binary with streaming/export
+ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
+
+ym2149-arkos-replayer ──→ ym2149-core
+ym2149-ay-replayer ─────→ ym2149-core + iz80
+ym2149-ym-replayer ────→ ym2149-core
+ym2149-softsynth (opt) ─→ ym2149-core (implements Ym2149Backend)
 ```
 
 **Key Principles:**

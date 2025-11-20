@@ -83,7 +83,7 @@ tracker runtime or C++ bindings required.
 
 - ✅ **Hardware-faithful**: precise envelope, noise, mixer, SID, Sync Buzzer, digi-drum behaviours
 - 📁 **ZXAY/EMUL AY**: bundled replayer with Z80 CPU emulation for the Project AY catalogue
-- 🧰 **CLI ready**: stream YM files in the terminal with real-time visualization
+- 🧰 **CLI ready**: stream YM/AKS/AY files in the terminal with real-time visualization
 - 🎵 **Native Bevy audio**: seamless integration via `Decodable` trait with pull-based sample generation
 - 🛰️ **Configurable Bevy subsystems**: playlists, crossfade decks, music state graphs, channel events, diagnostics, audio bridge
 - 🖼️ **Visualization stack**: drop-in oscilloscope, spectrum bars, progress HUD, and demoscene showcase based on the viz crate
@@ -97,13 +97,13 @@ tracker runtime or C++ bindings required.
 ```toml
 [dependencies]
 # Core emulator only (minimal dependencies)
-ym2149 = "0.6"
+ym2149 = "0.6.1"
 
 # With streaming audio output
-ym2149 = { version = "0.6", features = ["streaming"] }
+ym2149 = { version = "0.6.1", features = ["streaming"] }
 
 # YM file parsing and playback
-ym2149-ym-replayer = "0.6"
+ym2149-ym-replayer = "0.6.1"
 ```
 
 ```rust

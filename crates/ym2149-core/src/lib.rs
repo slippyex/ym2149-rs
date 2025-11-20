@@ -1,13 +1,12 @@
 //! YM2149 PSG Emulator for ATARI ST
 //!
 //! A cycle-accurate emulator of the Yamaha YM2149 Programmable Sound Generator
-//! as integrated into the ATARI ST computer. Supports MFP timer integration,
-//! VBL synchronization, and playback of YM chiptune files.
+//! as integrated into the ATARI ST computer. Supports VBL synchronization and
+//! playback of YM chiptune files.
 //!
 //! # Features
-//! - Cycle-accurate emulation of all 3 audio channels
-//! - Full envelope generator support
-//! - MFP Timer A/B/C integration for modulation effects
+//! - Cycle-accurate emulation of all 3 audio channels (clk/8 internal step)
+//! - Hardware envelope/volume tables (10 shapes, 32-step volume), buzzer/digidrum correct
 //! - 50Hz VBL (Vertical Blanking) synchronization
 //! - YM file format parser and playback
 //! - Raw register dump support
@@ -20,7 +19,7 @@
 //!
 //! # Backend Trait
 //! The `Ym2149Backend` trait allows alternative implementations (e.g., `ym2149-softsynth` crate)
-//! to be used interchangeably with the hardware-accurate emulation.
+//! to be used interchangeably with the hardware-accurate backend.
 //!
 //! # Quick start
 //! ## Core emulator only
@@ -61,9 +60,8 @@
 
 // Domain modules (feature-gated for modular use)
 pub mod backend; // Backend trait abstraction
-pub mod mfp;
 pub mod util;
-pub mod ym2149; // YM2149 PSG Emulation (core) // MFP Timer Effects (helpers) // Shared helper utilities
+pub mod ym2149; // YM2149 PSG emulation
 
 #[cfg(feature = "streaming")]
 pub mod streaming; // Audio Output & Streaming
@@ -136,8 +134,7 @@ pub type Result<T> = std::result::Result<T, Ym2149Error>;
 
 // Public API exports
 pub use backend::Ym2149Backend;
-pub use mfp::Mfp;
-pub use ym2149::{TinyYm2149, Ym2149};
+pub use ym2149::Ym2149;
 
 #[cfg(feature = "streaming")]
 pub use streaming::{AudioDevice, RealtimePlayer, RingBuffer, StreamConfig};

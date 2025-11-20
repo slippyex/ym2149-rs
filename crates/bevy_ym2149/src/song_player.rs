@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
+use bevy::prelude::error;
 use parking_lot::RwLock;
 use ym2149_arkos_replayer::{parser::load_aks, player::ArkosPlayer};
-use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer};
+use ym2149_ay_replayer::{
+    AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer, CPC_UNSUPPORTED_MSG,
+};
 use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
 
 use crate::audio_source::Ym2149Metadata;
@@ -58,6 +61,9 @@ impl YmSongPlayer {
     pub(crate) fn new_ay(song_data: &[u8]) -> Result<Self, BevyYm2149Error> {
         let (player, metadata) = AyPlayer::load_from_bytes(song_data, 0)
             .map_err(|e| BevyYm2149Error::Other(format!("AY load failed: {e}")))?;
+        if player.requires_cpc_firmware() {
+            return Err(BevyYm2149Error::Other(CPC_UNSUPPORTED_MSG.to_string()));
+        }
         let ym_meta = metadata_from_ay(&metadata);
         Ok(Self::Ay(Box::new(AyBevyPlayer::new(player, ym_meta))))
     }
@@ -392,6 +398,8 @@ pub struct AyBevyPlayer {
     cache: Vec<f32>,
     cache_pos: usize,
     cache_len: usize,
+    unsupported: bool,
+    warned: bool,
 }
 
 impl AyBevyPlayer {
@@ -402,13 +410,19 @@ impl AyBevyPlayer {
             cache: vec![0.0; AY_CACHE_SAMPLES],
             cache_pos: 0,
             cache_len: 0,
+            unsupported: false,
+            warned: false,
         }
     }
 
     fn play(&mut self) -> Result<(), BevyYm2149Error> {
+        if self.unsupported {
+            return Err(BevyYm2149Error::Other(CPC_UNSUPPORTED_MSG.to_string()));
+        }
         self.player
             .play()
-            .map_err(|e| BevyYm2149Error::Other(format!("AY play failed: {e}")))
+            .map_err(|e| BevyYm2149Error::Other(format!("AY play failed: {e}")))?;
+        self.ensure_supported()
     }
 
     fn pause(&mut self) -> Result<(), BevyYm2149Error> {
@@ -445,18 +459,31 @@ impl AyBevyPlayer {
                 return 0.0;
             }
         }
+        if self.unsupported {
+            return 0.0;
+        }
         let sample = self.cache[self.cache_pos];
         self.cache_pos += 1;
         sample
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        if self.unsupported {
+            buffer.fill(0.0);
+            return;
+        }
         self.player.generate_samples_into(buffer);
+        if self.check_and_mark_unsupported() {
+            buffer.fill(0.0);
+        }
     }
 
     fn fill_cache(&mut self) {
         self.player
             .generate_samples_into(&mut self.cache[..AY_CACHE_SAMPLES]);
+        if self.check_and_mark_unsupported() {
+            self.cache.fill(0.0);
+        }
         self.cache_pos = 0;
         self.cache_len = AY_CACHE_SAMPLES;
     }
@@ -478,5 +505,26 @@ impl AyBevyPlayer {
 
     fn frame_count(&self) -> usize {
         self.metadata.frame_count
+    }
+
+    fn ensure_supported(&mut self) -> Result<(), BevyYm2149Error> {
+        if self.check_and_mark_unsupported() {
+            Err(BevyYm2149Error::Other(CPC_UNSUPPORTED_MSG.to_string()))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn check_and_mark_unsupported(&mut self) -> bool {
+        if self.unsupported || self.player.requires_cpc_firmware() {
+            if !self.warned {
+                error!("{CPC_UNSUPPORTED_MSG}");
+                self.warned = true;
+            }
+            self.unsupported = true;
+            true
+        } else {
+            false
+        }
     }
 }

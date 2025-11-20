@@ -4,7 +4,7 @@
 [![Docs.rs](https://docs.rs/ym2149/badge.svg)](https://docs.rs/ym2149)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
-Hardware-accurate emulation of the Yamaha YM2149 Programmable Sound Generator (PSG) chip, as used in the Atari ST, Amstrad CPC, and ZX Spectrum 128.
+Hardware-accurate emulation of the Yamaha YM2149 Programmable Sound Generator (PSG) chip, as used in the Atari ST, Amstrad CPC, and ZX Spectrum 128. The core runs an internal `clk/8` loop (~250 kHz @ 2 MHz) with hardware envelope/volume tables, DC adjust, and buzzer/digidrum correctness.
 
 ## Overview
 
@@ -19,7 +19,7 @@ This crate provides the core YM2149 chip emulation with cycle-accurate behavior.
 
 | Area | Details |
 |------|---------|
-| **Emulation** | Integer-accurate tone/noise/envelope pipeline, cycle-exact timing |
+| **Emulation** | Integer/lookup pipeline with clk/8 substep, hardware envelope/volume tables |
 | **Effects** | SID voice, Sync Buzzer, Mad Max digi-drums, DC filter |
 | **Control** | Per-channel mute, color filter, register dump/load |
 | **Backend Trait** | `Ym2149Backend` for interchangeable implementations |
@@ -30,13 +30,13 @@ This crate provides the core YM2149 chip emulation with cycle-accurate behavior.
 
 ```toml
 [dependencies]
-ym2149 = { version = "0.6", features = ["emulator"] }
+ym2149 = { version = "0.6.1", features = ["emulator"] }
 ```
 
 For YM file playback, add:
 
 ```toml
-ym2149-ym-replayer = "0.6"
+ym2149-ym-replayer = "0.6.1"
 ```
 
 ## Quick Start
@@ -110,9 +110,9 @@ fn play_note<B: Ym2149Backend>(chip: &mut B) {
 | `streaming` | Real-time audio output (rodio) |
 | `visualization` | Terminal UI helpers |
 
-## Migration from < 0.6.0
+## Migration from < 0.6.1
 
-Version 0.6.0 reorganized the crate structure for better separation of concerns.
+Version 0.6.1 reorganized the crate structure for better separation of concerns.
 All YM file parsing and playback functionality has been moved to the `ym2149-ym-replayer` crate:
 
 ```rust

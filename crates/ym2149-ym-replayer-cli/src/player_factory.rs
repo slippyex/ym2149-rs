@@ -9,11 +9,9 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use ym2149::TinyYm2149;
 use ym2149::streaming::DEFAULT_SAMPLE_RATE;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
-use ym2149_ay_replayer::AyPlayer;
-use ym2149_ym_replayer::player::ym_player::Ym6PlayerGeneric;
+use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
 use ym2149_ym_replayer::{Player, load_song};
 
 use crate::args::ChipChoice;
@@ -95,6 +93,10 @@ fn load_ay_file(
 
     if let Some(cf) = color_filter_override {
         player.set_color_filter(cf);
+    }
+
+    if player.requires_cpc_firmware() {
+        return Err(CPC_UNSUPPORTED_MSG.into());
     }
 
     let samples_per_frame = (DEFAULT_SAMPLE_RATE as f32 / 50.0).round() as usize;
@@ -187,25 +189,6 @@ pub fn create_player(
                 song_info: info_str,
             })
         }
-        ChipChoice::TinyYm2149 => {
-            let mut ym_player = Ym6PlayerGeneric::<TinyYm2149>::new();
-            let summary = ym_player.load_data(&file_data)?;
-
-            let info_str = format!(
-                "File: {} ({})\n{}",
-                file_path,
-                summary.format,
-                ym_player.format_info()
-            );
-
-            let total_samples = summary.total_samples();
-
-            Ok(PlayerInfo {
-                player: Box::new(ym_player) as Box<dyn RealtimeChip>,
-                total_samples,
-                song_info: info_str,
-            })
-        }
     }
 }
 
@@ -235,24 +218,6 @@ pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result
             let duration_secs = demo_player.get_duration_seconds();
             let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
             let info_str = format!("Demo Mode: {:.2} seconds of silence", duration_secs);
-
-            Ok(PlayerInfo {
-                player: Box::new(demo_player) as Box<dyn RealtimeChip>,
-                total_samples,
-                song_info: info_str,
-            })
-        }
-        ChipChoice::TinyYm2149 => {
-            let mut demo_player = Ym6PlayerGeneric::<TinyYm2149>::new();
-            let frames = vec![[0u8; 16]; 250];
-            demo_player.load_frames(frames);
-
-            let duration_secs = demo_player.get_duration_seconds();
-            let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
-            let info_str = format!(
-                "Demo Mode: {:.2} seconds of silence (tiny backend)",
-                duration_secs
-            );
 
             Ok(PlayerInfo {
                 player: Box::new(demo_player) as Box<dyn RealtimeChip>,

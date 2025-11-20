@@ -1,7 +1,7 @@
 //! High-level AY song player (Z80 + YM2149 bridge).
 
 use iz80::{Cpu, Machine, Reg8, Reg16};
-use ym2149::Ym2149Backend;
+use std::mem;
 
 use crate::error::{AyError, Result};
 use crate::format::{AyFile, AyPoints, AySong};
@@ -11,6 +11,11 @@ const SAMPLE_RATE: u32 = 44_100;
 const FRAME_RATE_HZ: f32 = 50.0;
 const RETURN_ADDRESS: u16 = 0x0000;
 const MAX_INSTRUCTIONS_PER_CALL: usize = 250_000;
+const ZX_CPU_CLOCK_HZ: f64 = 3_500_000.0;
+const CPC_CPU_CLOCK_HZ: f64 = 4_000_000.0;
+/// User-facing message when CPC AY playback is attempted.
+pub const CPC_UNSUPPORTED_MSG: &str =
+    "CPC AY songs currently require full CPC firmware emulation, which is not supported";
 
 /// Playback state for the AY player.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +81,7 @@ pub struct AyPlayer {
     max_frames: Option<usize>,
     state: AyPlaybackState,
     init_executed: bool,
+    sample_period: f64,
 }
 
 impl AyPlayer {
@@ -126,6 +132,7 @@ impl AyPlayer {
             max_frames: frame_limit(&file.songs[song_index]),
             state: AyPlaybackState::Stopped,
             init_executed: false,
+            sample_period: 1.0 / SAMPLE_RATE as f64,
         };
 
         player.reset_runtime()?;
@@ -245,6 +252,17 @@ impl AyPlayer {
         self.machine.chip_mut().set_channel_mute(channel, mute);
     }
 
+    #[cfg(feature = "trace-ports")]
+    /// Retrieve and clear the recorded port log (trace-ports feature).
+    pub fn take_port_log(&mut self) -> Vec<String> {
+        self.machine.take_port_log()
+    }
+
+    /// Whether the current song requires CPC firmware emulation.
+    pub fn requires_cpc_firmware(&self) -> bool {
+        self.machine.requires_cpc_firmware()
+    }
+
     /// Check mute state of a PSG channel.
     pub fn is_channel_muted(&self, channel: usize) -> bool {
         self.machine.chip().is_channel_muted(channel)
@@ -310,12 +328,12 @@ impl AyPlayer {
 
     fn render_frame(&mut self) -> Result<()> {
         self.ensure_initialized()?;
-        self.run_subroutine(self.interrupt_address)?;
-        let samples = self
-            .machine
-            .chip_mut()
-            .generate_samples(self.samples_per_frame);
-        self.sample_cache = samples;
+        if self.sample_cache.len() != self.samples_per_frame {
+            self.sample_cache.resize(self.samples_per_frame, 0.0);
+        }
+        let mut buffer = mem::take(&mut self.sample_cache);
+        self.render_interrupt_stream(&mut buffer)?;
+        self.sample_cache = buffer;
         self.cache_pos = 0;
         self.cache_len = self.sample_cache.len();
         self.frame_counter = self.frame_counter.saturating_add(1);
@@ -327,10 +345,69 @@ impl AyPlayer {
         Ok(())
     }
 
+    fn render_interrupt_stream(&mut self, buffer: &mut [f32]) -> Result<()> {
+        self.fail_if_cpc()?;
+        self.emulate_call(self.interrupt_address);
+        let mut next_sample_time = self.sample_period;
+        let mut cpu_time = 0.0f64;
+        let mut idx = 0usize;
+        let mut guard = MAX_INSTRUCTIONS_PER_CALL;
+
+        while idx < buffer.len() {
+            self.fail_if_cpc()?;
+            while cpu_time < next_sample_time {
+                self.fail_if_cpc()?;
+                if self.cpu.immutable_registers().pc() == RETURN_ADDRESS {
+                    cpu_time = next_sample_time;
+                    break;
+                }
+                let before = self.cpu.cycle_count();
+                self.cpu.execute_instruction(&mut self.machine);
+                let after = self.cpu.cycle_count();
+                let delta_cycles =
+                    after
+                        .checked_sub(before)
+                        .ok_or_else(|| AyError::InvalidData {
+                            msg: "CPU cycle counter underflowed".to_string(),
+                        })? as f64;
+                let cpu_clock = if self.machine.is_cpc_mode() {
+                    CPC_CPU_CLOCK_HZ
+                } else {
+                    ZX_CPU_CLOCK_HZ
+                };
+                cpu_time += delta_cycles / cpu_clock;
+                guard = guard.checked_sub(1).ok_or_else(|| AyError::InvalidData {
+                    msg: format!(
+                        "Interrupt routine at 0x{:04x} exceeded instruction budget",
+                        self.interrupt_address
+                    ),
+                })?;
+            }
+
+            let chip = self.machine.chip_mut();
+            chip.clock();
+            buffer[idx] = chip.get_sample();
+            idx += 1;
+            next_sample_time += self.sample_period;
+        }
+
+        if self.cpu.immutable_registers().pc() != RETURN_ADDRESS {
+            return Err(AyError::InvalidData {
+                msg: format!(
+                    "Interrupt routine at 0x{:04x} did not return before frame end",
+                    self.interrupt_address
+                ),
+            });
+        }
+
+        Ok(())
+    }
+
     fn run_subroutine(&mut self, entry: u16) -> Result<()> {
         self.emulate_call(entry);
         let mut guard = MAX_INSTRUCTIONS_PER_CALL;
         loop {
+            self.fail_if_cpc()?;
             self.cpu.execute_instruction(&mut self.machine);
             let pc = self.cpu.immutable_registers().pc();
             if pc == RETURN_ADDRESS {
@@ -354,6 +431,16 @@ impl AyPlayer {
         self.machine.poke(sp, RETURN_ADDRESS as u8);
         regs.set16(Reg16::SP, sp);
         regs.set_pc(entry);
+    }
+
+    fn fail_if_cpc(&self) -> Result<()> {
+        if self.machine.requires_cpc_firmware() {
+            Err(AyError::InvalidData {
+                msg: CPC_UNSUPPORTED_MSG.to_string(),
+            })
+        } else {
+            Ok(())
+        }
     }
 }
 

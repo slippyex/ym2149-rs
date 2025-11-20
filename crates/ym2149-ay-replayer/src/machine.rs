@@ -21,6 +21,9 @@ pub struct AyMachine {
     cpc_control: u8,
     sample_rate: u32,
     cpc_clock_active: bool,
+    cpc_requires_firmware: bool,
+    #[cfg(feature = "trace-ports")]
+    port_log: Vec<String>,
 }
 
 impl AyMachine {
@@ -34,10 +37,13 @@ impl AyMachine {
             cpc_control: 0,
             sample_rate,
             cpc_clock_active: false,
+            cpc_requires_firmware: false,
+            #[cfg(feature = "trace-ports")]
+            port_log: Vec::new(),
         }
     }
 
-    /// Reset AY chip + memory to the Micro Speccy defaults.
+    /// Reset AY chip + memory to the ZX Spectrum defaults.
     pub fn reset_layout(&mut self) {
         self.memory[..=0x00FF].fill(0xC9);
         self.memory[0x0100..=0x3FFF].fill(0xFF);
@@ -45,6 +51,8 @@ impl AyMachine {
         self.memory[0x0038] = 0xFB;
         self.selected_register = 0;
         self.chip.reset();
+        self.cpc_clock_active = false;
+        self.cpc_requires_firmware = false;
     }
 
     /// Load block payload into memory (clamped to 64K).
@@ -70,15 +78,36 @@ impl AyMachine {
         &mut self.chip
     }
 
+    /// Whether CPC-style port accesses have been detected.
+    pub fn is_cpc_mode(&self) -> bool {
+        self.cpc_clock_active
+    }
+
+    /// Whether CPC playback would require real firmware support.
+    pub(crate) fn requires_cpc_firmware(&self) -> bool {
+        self.cpc_requires_firmware
+    }
+
+    #[cfg(feature = "trace-ports")]
+    pub fn take_port_log(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.port_log)
+    }
+
     fn handle_cpc_control(&mut self) {
         let bdir = (self.cpc_control & 0x80) != 0;
         let bc1 = (self.cpc_control & 0x40) != 0;
         match (bc1, bdir) {
             (true, true) => {
                 self.selected_register = self.cpc_bus_latch & 0x0F;
+                #[cfg(feature = "trace-ports")]
+                self.port_log
+                    .push(format!("cpc latch {:02X}", self.selected_register));
             }
             (false, true) => {
                 let reg = self.selected_register & 0x0F;
+                #[cfg(feature = "trace-ports")]
+                self.port_log
+                    .push(format!("cpc write {:02X} {:02X}", reg, self.cpc_bus_latch));
                 self.chip.write_register(reg, self.cpc_bus_latch);
             }
             _ => {}
@@ -93,6 +122,7 @@ impl AyMachine {
         let regs = self.chip.dump_registers();
         let mut chip = Ym2149::with_clocks(1_000_000, self.sample_rate);
         chip.load_registers(&regs);
+        chip.write_register(7, 0);
         self.chip = chip;
     }
 }
@@ -125,11 +155,19 @@ impl Machine for AyMachine {
         match address & CPC_DATA_BUS_MASK {
             CPC_PORT_A => {
                 self.ensure_cpc_clock();
+                self.cpc_requires_firmware = true;
                 self.cpc_bus_latch = value;
+                #[cfg(feature = "trace-ports")]
+                self.port_log
+                    .push(format!("port f4{:02x} {:02X}", address as u8, value));
             }
             CPC_PORT_C => {
                 self.ensure_cpc_clock();
+                self.cpc_requires_firmware = true;
                 self.cpc_control = value;
+                #[cfg(feature = "trace-ports")]
+                self.port_log
+                    .push(format!("port f6{:02x} {:02X}", address as u8, value));
                 self.handle_cpc_control();
             }
             _ => {}

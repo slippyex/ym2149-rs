@@ -15,7 +15,7 @@ use std::time::Instant;
 use ym2149::Ym2149Backend;
 use ym2149::streaming::{DEFAULT_SAMPLE_RATE, StreamConfig};
 use ym2149_arkos_replayer::ArkosPlayer;
-use ym2149_ay_replayer::{AyPlaybackState, AyPlayer};
+use ym2149_ay_replayer::{AyPlaybackState, AyPlayer, CPC_UNSUPPORTED_MSG};
 use ym2149_ym_replayer::PlaybackController;
 use ym2149_ym_replayer::player::ym_player::Ym6PlayerGeneric;
 
@@ -62,6 +62,11 @@ pub trait RealtimeChip: PlaybackController + Send {
 
     /// Enable/disable ST color filter when supported.
     fn set_color_filter(&mut self, enabled: bool);
+
+    /// Optional reason why playback can’t continue (e.g., unsupported format).
+    fn unsupported_reason(&self) -> Option<&'static str> {
+        None
+    }
 }
 
 impl<B: Ym2149Backend + 'static> RealtimeChip for Ym6PlayerGeneric<B> {
@@ -191,9 +196,16 @@ impl AyPlayerWrapper {
 
 impl PlaybackController for AyPlayerWrapper {
     fn play(&mut self) -> ym2149_ym_replayer::Result<()> {
-        self.player
-            .play()
-            .map_err(|e| format!("AY play error: {e}").into())
+        match self.player.play() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if self.player.requires_cpc_firmware() {
+                    Err(CPC_UNSUPPORTED_MSG.into())
+                } else {
+                    Err(format!("AY play error: {e}").into())
+                }
+            }
+        }
     }
 
     fn pause(&mut self) -> ym2149_ym_replayer::Result<()> {
@@ -248,6 +260,12 @@ impl RealtimeChip for AyPlayerWrapper {
 
     fn set_color_filter(&mut self, enabled: bool) {
         self.player.set_color_filter(enabled);
+    }
+
+    fn unsupported_reason(&self) -> Option<&'static str> {
+        self.player
+            .requires_cpc_firmware()
+            .then_some(CPC_UNSUPPORTED_MSG)
     }
 }
 

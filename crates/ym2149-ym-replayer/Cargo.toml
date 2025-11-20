@@ -14,7 +14,7 @@ categories = ["multimedia::audio", "parser-implementations"]
 
 [dependencies]
 # Core YM2149 chip emulation (backend trait only - no streaming/visualization for library)
-ym2149 = { path = "../ym2149-core", version = "0.6.0" }
+ym2149 = { path = "../ym2149-core", version = "0.6.1" }
 
 # Error handling
 thiserror.workspace = true

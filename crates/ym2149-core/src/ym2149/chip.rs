@@ -1,24 +1,25 @@
-//! YM2149 PSG Chip Emulation
+//! YM2149 PSG core (clk/8 stepping)
 //!
-//! Integer-accurate YM2149 core.
-//!
-//! This module mirrors the integer data-path of the original hardware so that
-//! buzzer, noise and envelope behaviour matches the physical chip sample-by-sample.
+//! Design highlights:
+//! - clk/8 internal stepping (~250 kHz @ 2 MHz) with host-rate averaging
+//! - Hardware envelope/volume tables (10 shapes, 32-step volume)
+//! - Half-rate noise LFSR, randomized power-on tone edges
+//! - DC adjust ring buffer to remove offset drift
+//! - DigiDrum/SID/buzzer hooks via mixer overrides and drum injection
+//! - Matches hardware behaviour as closely as practical for buzzer and digidrums
 
-use super::constants::VOLUME_TABLE;
-use super::registers::RegisterBank;
 use crate::backend::Ym2149Backend;
-use std::env;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::sync::OnceLock;
 
-const DC_BUFFER_LEN: usize = 512;
+const DEFAULT_MASTER_CLOCK: u32 = 2_000_000;
+const DEFAULT_SAMPLE_RATE: u32 = 44_100;
+const YM_DIVIDER: u32 = 8;
+const DC_HISTORY_BITS: usize = 11; // 2048 samples (~20 ms @ 44.1 kHz)
+const DC_HISTORY_LEN: usize = 1 << DC_HISTORY_BITS;
 
-/// DC offset adjuster (moving average) operating on 16-bit PCM samples.
+/// Small DC offset remover using a sliding window
 #[derive(Debug, Clone)]
 struct DcAdjuster {
-    buffer: [i32; DC_BUFFER_LEN],
+    buf: [i32; DC_HISTORY_LEN],
     pos: usize,
     sum: i64,
 }
@@ -26,690 +27,541 @@ struct DcAdjuster {
 impl DcAdjuster {
     fn new() -> Self {
         Self {
-            buffer: [0; DC_BUFFER_LEN],
+            buf: [0; DC_HISTORY_LEN],
             pos: 0,
             sum: 0,
         }
     }
 
-    fn reset(&mut self) {
-        self.buffer.fill(0);
-        self.pos = 0;
-        self.sum = 0;
-    }
-
-    fn add_sample(&mut self, sample: i32) {
-        self.sum -= self.buffer[self.pos] as i64;
-        self.buffer[self.pos] = sample;
+    fn push(&mut self, sample: i32) {
+        self.sum -= self.buf[self.pos] as i64;
+        self.buf[self.pos] = sample;
         self.sum += sample as i64;
-        self.pos = (self.pos + 1) & (DC_BUFFER_LEN - 1);
+        self.pos = (self.pos + 1) & (DC_HISTORY_LEN - 1);
     }
 
-    fn get_level(&self) -> i32 {
-        (self.sum / DC_BUFFER_LEN as i64) as i32
+    fn level(&self) -> i32 {
+        (self.sum / DC_HISTORY_LEN as i64) as i32
     }
 }
 
-#[derive(Debug)]
-struct TraceState {
-    writer: BufWriter<File>,
-    sample_index: u64,
+/// Hardware envelope tables (10 shapes × 128 entries).
+fn envelope_data() -> &'static [[u8; 128]; 10] {
+    static ENV_TABLE: [[u8; 128]; 10] = [
+        [
+            31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+            9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ],
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ],
+        [
+            31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+            9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18,
+            17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 31, 30, 29, 28, 27, 26,
+            25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2,
+            1, 0, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12,
+            11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+        ],
+        [
+            31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+            9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ],
+        [
+            31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+            9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 31, 30, 29, 28, 27, 26, 25,
+            24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1,
+            0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+            23, 24, 25, 26, 27, 28, 29, 30, 31,
+        ],
+        [
+            31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10,
+            9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+        ],
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5, 6, 7,
+            8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+            30, 31, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+            22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+        ],
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+            31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31,
+        ],
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18,
+            17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7,
+            8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+            30, 31, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12,
+            11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
+        ],
+        [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ],
+    ];
+    &ENV_TABLE
 }
 
-/// Mixer control overrides set by effects
-#[derive(Debug, Clone, Copy)]
+/// Hardware 32-step volume table (5-bit).
+fn volume_table_32() -> &'static [i32; 32] {
+    static TABLE: [i32; 32] = [
+        50, 60, 71, 85, 101, 120, 143, 170, 202, 240, 286, 340, 404, 479, 568, 682, 811, 964, 1148,
+        1359, 1623, 1929, 2296, 2730, 3252, 3872, 4614, 5506, 6577, 7860, 9401, 11252,
+    ];
+    &TABLE
+}
+
+/// YM2149 core implementation (clk/8 stepping).
+#[derive(Debug, Clone)]
+pub struct Ym2149 {
+    regs: [u8; 16],
+    tone_counter: [u32; 3],
+    tone_period: [u32; 3],
+    tone_edges: u32,
+    tone_mask: u32,
+    noise_mask: u32,
+
+    noise_counter: u32,
+    noise_period: u32,
+    noise_rng: u32,
+    noise_half: bool,
+    current_noise_mask: u32,
+
+    env_counter: u32,
+    env_period: u32,
+    env_pos: i32,
+    env_shape: usize,
+    env_data: &'static [[u8; 128]; 10],
+
+    host_rate: u32,
+    ym_clock_one_eighth: u32,
+    inner_cycle: u32,
+
+    dc_adjust: DcAdjuster,
+    user_mute: [bool; 3],
+    mixer_overrides: MixerOverrides,
+    drum_overrides: [Option<i32>; 3],
+
+    last_channels: [f32; 3],
+    last_sample: f32,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 struct MixerOverrides {
     force_tone: [bool; 3],
     force_noise_mute: [bool; 3],
 }
 
-/// YM2149 Programmable Sound Generator core (integer-accurate).
-#[derive(Debug)]
-pub struct Ym2149 {
-    registers: RegisterBank,
-    master_clock: u32,
-    sample_rate: u32,
-
-    // Tone generators
-    tone_pos: [u32; 3],
-    tone_step: [u32; 3],
-    tone_use_envelope: [bool; 3],
-    tone_volume: [i32; 3],
-
-    // Noise generator
-    noise_step: u32,
-    noise_pos: u32,
-    rnd_rack: u32,
-    current_noise: u32,
-
-    // Envelope generator
-    env_shape: usize,
-    env_phase: usize,
-    env_pos: u32,
-    env_step: u32,
-    env_volume: i32,
-
-    // Mixer masks
-    mixer_r7: u8,
-    mixer_tone_mask: [u32; 3],
-    mixer_noise_mask: [u32; 3],
-    mixer_overrides: MixerOverrides,
-    // User-controlled per-channel mutes (applied in addition to R7)
-    user_mute: [bool; 3],
-
-    // Effect overrides (digi-drum injection)
-    drum_sample_overrides: [Option<i32>; 3],
-
-    // Output conditioning
-    dc_adjuster: DcAdjuster,
-    low_pass: [i32; 2],
-    color_filter_enabled: bool,
-
-    // Cached envelope table
-    env_data: &'static [[[u8; 32]; 2]; 16],
-
-    // Output
-    last_channel_output: [i32; 3],
-    current_sample: f32,
-    cycle_counter: u32,
-    trace: Option<TraceState>,
-    debug_sample_counter: u32, // DEBUG: for periodic output
-}
-
 impl Ym2149 {
-    /// Create a new YM2149 instance with Atari ST defaults (2 MHz, 44.1 kHz).
-    pub fn new() -> Self {
-        Self::with_clocks(2_000_000, 44_100)
+    fn rng_step(seed: &mut u32) -> u16 {
+        *seed = seed.wrapping_mul(214013).wrapping_add(2531011);
+        ((*seed >> 16) & 0x7fff) as u16
     }
 
-    /// Create a YM2149 instance with custom clock and sample rate.
-    pub fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
+    fn new_inner(master_clock: u32, sample_rate: u32) -> Self {
         let env_data = envelope_data();
+        let mut seed = 1u32;
+        let tone_edges =
+            (Self::rng_step(&mut seed) as u32 & ((1 << 10) | (1 << 5) | (1 << 0))) * 0x1f;
+        let ym_clock_one_eighth = master_clock / YM_DIVIDER;
+
         let mut chip = Self {
-            registers: RegisterBank::new(),
-            master_clock,
-            sample_rate,
-            tone_pos: [0; 3],
-            tone_step: [0; 3],
-            tone_use_envelope: [false; 3],
-            tone_volume: [0; 3],
-            noise_step: 0,
-            noise_pos: 0,
-            rnd_rack: 1,
-            current_noise: 0xffff,
+            regs: [0; 16],
+            tone_counter: [0; 3],
+            tone_period: [0; 3],
+            tone_edges,
+            tone_mask: 0,
+            noise_mask: 0,
+            noise_counter: 0,
+            noise_period: 0,
+            noise_rng: 1,
+            noise_half: false,
+            current_noise_mask: 0,
+            env_counter: 0,
+            env_period: 0,
+            env_pos: -64,
             env_shape: 0,
-            env_phase: 0,
-            env_pos: 0,
-            env_step: 0,
-            env_volume: 0,
-            mixer_r7: 0xff,
-            mixer_tone_mask: [0xffff; 3],
-            mixer_noise_mask: [0xffff; 3],
-            mixer_overrides: MixerOverrides {
-                force_tone: [false; 3],
-                force_noise_mute: [false; 3],
-            },
-            user_mute: [false; 3],
-            drum_sample_overrides: [None; 3],
-            dc_adjuster: DcAdjuster::new(),
-            low_pass: [0; 2],
-            color_filter_enabled: false,
             env_data,
-            last_channel_output: [0; 3],
-            current_sample: 0.0,
-            cycle_counter: 0,
-            trace: None,
-            debug_sample_counter: 0,
+            host_rate: sample_rate,
+            ym_clock_one_eighth,
+            inner_cycle: 0,
+            dc_adjust: DcAdjuster::new(),
+            user_mute: [false; 3],
+            mixer_overrides: MixerOverrides::default(),
+            drum_overrides: [None, None, None],
+            last_channels: [0.0; 3],
+            last_sample: 0.0,
         };
-        chip.recompute_all_steps();
-        chip.update_mixer_masks();
-        if let Ok(path) = env::var("YM2149_TRACE")
-            && let Ok(file) = File::create(path)
-        {
-            let mut writer = BufWriter::new(file);
-            let _ = writeln!(
-                writer,
-                "sample,volA,volB,volC,volE,env_idx,env_phase,env_pos,noise,vol,in,out"
-            );
-            chip.trace = Some(TraceState {
-                writer,
-                sample_index: 0,
-            });
+        // YM power-on state: R7=0x3F, others 0
+        for r in 0..14 {
+            let val = if r == 7 { 0x3f } else { 0 };
+            chip.write_register(r as u8, val);
         }
         chip
     }
 
-    /// Reset to power-on state.
-    pub fn reset(&mut self) {
-        self.registers = RegisterBank::new();
-        self.tone_pos = [0; 3];
-        self.tone_step = [0; 3];
-        self.tone_volume = [0; 3];
-        self.tone_use_envelope = [false; 3];
-        self.noise_step = 0;
-        self.noise_pos = 0;
-        self.rnd_rack = 1;
-        self.current_noise = 0xffff;
-        self.env_shape = 0;
-        self.env_phase = 0;
-        self.env_pos = 0;
-        self.env_step = 0;
-        self.env_volume = 0;
-        self.mixer_r7 = 0xff;
-        self.mixer_overrides.force_tone = [false; 3];
-        self.mixer_overrides.force_noise_mute = [false; 3];
-        self.user_mute = [false; 3];
-        self.drum_sample_overrides = [None; 3];
-        self.dc_adjuster.reset();
-        self.low_pass = [0; 2];
-        self.color_filter_enabled = true;
-        self.last_channel_output = [0; 3];
-        self.current_sample = 0.0;
-        self.cycle_counter = 0;
-        self.debug_sample_counter = 0;
-        self.update_mixer_masks();
-        self.recompute_all_steps();
+    fn dc_adjust_sample(&mut self, sample: i32) -> i32 {
+        self.dc_adjust.push(sample);
+        sample - self.dc_adjust.level()
     }
 
-    /// Recompute tone/noise/envelope steps after clock configuration changes.
-    fn recompute_all_steps(&mut self) {
-        for ch in 0..3 {
-            let lo = self.registers.read((ch * 2) as u8);
-            let hi = self.registers.read((ch * 2 + 1) as u8);
-            self.tone_step[ch] = tone_step_compute(lo, hi, self.master_clock, self.sample_rate);
-            if self.tone_step[ch] == 0 {
-                // Hardware-accurate special case: assume output always 1 if 0 period (for digi/sample paths)
-                self.tone_pos[ch] = 1 << 31;
+    fn envelope_level(&self) -> u8 {
+        let pos = ((self.env_pos + 64) & 0x7f) as usize;
+        self.env_data[self.env_shape][pos]
+    }
+
+    fn update_masks(&mut self) {
+        const MASKS: [u32; 8] = [
+            0x0000, 0x001f, 0x03e0, 0x03ff, 0x7c00, 0x7c1f, 0x7fe0, 0x7fff,
+        ];
+        let r7 = self.regs[7];
+        let tone_idx = r7 & 0x7;
+        let noise_idx = (r7 >> 3) & 0x7;
+        self.tone_mask = MASKS[tone_idx as usize];
+        self.noise_mask = MASKS[noise_idx as usize];
+    }
+
+    fn tick(&mut self) -> u32 {
+        let vmask =
+            (self.tone_edges | self.tone_mask) & (self.current_noise_mask | self.noise_mask);
+
+        for v in 0..3 {
+            self.tone_counter[v] = self.tone_counter[v].wrapping_add(1);
+            if self.tone_counter[v] >= self.tone_period[v] {
+                self.tone_edges ^= 0x1f << (v * 5);
+                self.tone_counter[v] = 0;
             }
         }
 
-        let noise_value = self.registers.read(0x06);
-        self.noise_step = noise_step_compute(noise_value, self.master_clock, self.sample_rate);
-        if self.noise_step == 0 {
-            self.current_noise = 0xffff;
-            self.noise_pos = 0;
+        self.env_counter = self.env_counter.wrapping_add(1);
+        if self.env_counter >= self.env_period {
+            self.env_pos = self.env_pos.wrapping_add(1);
+            if self.env_pos > 0 {
+                self.env_pos &= 0x3f;
+            }
+            self.env_counter = 0;
         }
 
-        let env_lo = self.registers.read(0x0b);
-        let env_hi = self.registers.read(0x0c);
-        self.env_step = envelope_step_compute(env_lo, env_hi, self.master_clock, self.sample_rate);
+        self.noise_half = !self.noise_half;
+        if self.noise_half {
+            self.noise_counter = self.noise_counter.wrapping_add(1);
+            if self.noise_counter >= self.noise_period {
+                let bit = (self.noise_rng ^ (self.noise_rng >> 2)) & 1;
+                self.current_noise_mask = if bit != 0 { u32::MAX } else { 0 };
+                self.noise_rng = (self.noise_rng >> 1) | ((self.current_noise_mask & 1) << 16);
+                self.noise_counter = 0;
+            }
+        }
+
+        vmask
     }
 
-    /// Write to PSG register.
-    pub fn write_register(&mut self, addr: u8, value: u8) {
-        let idx = addr & 0x0F;
-        self.registers.write(idx, value);
+    fn compute_sample(&mut self) -> (f32, [f32; 3]) {
+        let mut high_mask = 0u32;
+        loop {
+            high_mask |= self.tick();
+            self.inner_cycle = self.inner_cycle.wrapping_add(self.host_rate);
+            if self.inner_cycle >= self.ym_clock_one_eighth {
+                break;
+            }
+        }
+        self.inner_cycle = self.inner_cycle.wrapping_sub(self.ym_clock_one_eighth);
 
-        match idx {
-            0x00..=0x05 => {
-                let channel = (idx / 2) as usize;
-                let lo = self.registers.read((channel * 2) as u8);
-                let hi = self.registers.read((channel * 2 + 1) as u8);
-                self.tone_step[channel] =
-                    tone_step_compute(lo, hi, self.master_clock, self.sample_rate);
-                if self.tone_step[channel] == 0 {
-                    // Hardware-accurate special case: assume output always 1 if 0 period
-                    self.tone_pos[channel] = 1 << 31;
+        let env_level = self.envelope_level();
+
+        let make_level = |reg: u8| -> u8 {
+            if (reg & 0x10) != 0 {
+                env_level.min(31)
+            } else {
+                (reg & 0x0f) << 1
+            }
+        };
+
+        let mut chan_levels = [
+            make_level(self.regs[8]),
+            make_level(self.regs[9]),
+            make_level(self.regs[10]),
+        ];
+
+        for (i, muted) in self.user_mute.iter().enumerate() {
+            if *muted {
+                chan_levels[i] = 0;
+            }
+        }
+
+        if self.mixer_overrides.force_tone.iter().any(|&f| f) {
+            for (i, force) in self.mixer_overrides.force_tone.iter().enumerate() {
+                if *force {
+                    high_mask |= 0x1f << (i * 5);
                 }
             }
-            0x06 => {
-                self.noise_step = noise_step_compute(value, self.master_clock, self.sample_rate);
-                if self.noise_step == 0 {
-                    self.current_noise = 0xffff;
-                    self.noise_pos = 0;
+        }
+        if self.mixer_overrides.force_noise_mute.iter().any(|&m| m) {
+            for (i, mute) in self.mixer_overrides.force_noise_mute.iter().enumerate() {
+                if *mute {
+                    let shift = i * 5;
+                    let mask = !(0x1f << shift);
+                    high_mask &= mask;
                 }
             }
-            0x07 => {
-                self.mixer_r7 = value;
-                self.update_mixer_masks();
+        }
+
+        let idx_a = (high_mask & 0x1f) as usize;
+        let idx_b = ((high_mask >> 5) & 0x1f) as usize;
+        let idx_c = ((high_mask >> 10) & 0x1f) as usize;
+
+        let half_shift = |period: u32| if period > 1 { 0 } else { 1 };
+
+        let vol32 = volume_table_32();
+
+        let level_a = if let Some(override_sample) = self.drum_overrides[0] {
+            override_sample
+        } else {
+            (vol32[(chan_levels[0] as usize & idx_a).min(31)] >> half_shift(self.tone_period[0]))
+                as i32
+        };
+        let level_b = if let Some(override_sample) = self.drum_overrides[1] {
+            override_sample
+        } else {
+            (vol32[(chan_levels[1] as usize & idx_b).min(31)] >> half_shift(self.tone_period[1]))
+                as i32
+        };
+        let level_c = if let Some(override_sample) = self.drum_overrides[2] {
+            override_sample
+        } else {
+            (vol32[(chan_levels[2] as usize & idx_c).min(31)] >> half_shift(self.tone_period[2]))
+                as i32
+        };
+
+        let mixed = level_a + level_b + level_c;
+        let adjusted = self.dc_adjust_sample(mixed);
+        let norm = adjusted as f32 / 32767.0;
+        (
+            norm,
+            [
+                level_a as f32 / 32767.0,
+                level_b as f32 / 32767.0,
+                level_c as f32 / 32767.0,
+            ],
+        )
+    }
+}
+
+impl Ym2149Backend for Ym2149 {
+    fn new() -> Self {
+        Self::with_clocks(DEFAULT_MASTER_CLOCK, DEFAULT_SAMPLE_RATE)
+    }
+
+    fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
+        Self::new_inner(master_clock, sample_rate)
+    }
+
+    fn reset(&mut self) {
+        *self = Self::with_clocks(self.ym_clock_one_eighth * YM_DIVIDER, self.host_rate);
+    }
+
+    fn write_register(&mut self, addr: u8, value: u8) {
+        if (addr as usize) >= self.regs.len() {
+            return;
+        }
+        const REG_MASKS: [u8; 14] = [
+            0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0x1f, 0x3f, 0x1f, 0x1f, 0x1f, 0xff, 0xff, 0x0f,
+        ];
+        let masked = if (addr as usize) < REG_MASKS.len() {
+            value & REG_MASKS[addr as usize]
+        } else {
+            value
+        };
+        self.regs[addr as usize] = masked;
+
+        match addr {
+            0..=5 => {
+                let voice = (addr / 2) as usize;
+                let period = ((self.regs[voice * 2 + 1] as u32) << 8) | self.regs[voice * 2] as u32;
+                self.tone_period[voice] = period;
             }
-            0x08..=0x0A => {
-                let channel = (idx - 0x08) as usize;
-                self.tone_use_envelope[channel] = (value & 0x10) != 0;
-                let vol_idx = (value & 0x0F) as usize;
-                self.tone_volume[channel] = VOLUME_TABLE[vol_idx] as i32;
+            6 => {
+                self.noise_period = self.regs[6] as u32;
             }
-            0x0B | 0x0C => {
-                let env_lo = self.registers.read(0x0b);
-                let env_hi = self.registers.read(0x0c);
-                self.env_step =
-                    envelope_step_compute(env_lo, env_hi, self.master_clock, self.sample_rate);
+            7 => {
+                self.update_masks();
             }
-            0x0D => {
-                let new_shape = (value & 0x0F) as usize;
-                // Writing R13 resets envelope position/phase on shape write (hardware behaviour)
-                self.env_shape = new_shape;
-                self.env_pos = 0;
-                self.env_phase = 0;
+            11 | 12 => {
+                let raw = ((self.regs[12] as u32) << 8) | self.regs[11] as u32;
+                self.env_period = raw.max(1);
+            }
+            13 => {
+                const SHAPE_MAP: [usize; 16] = [0, 0, 0, 0, 1, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+                let raw = (self.regs[13] & 0x0f) as usize;
+                self.env_shape = SHAPE_MAP[raw];
+                self.env_pos = -64;
+                self.env_counter = 0;
             }
             _ => {}
         }
     }
 
-    /// Read PSG register.
-    pub fn read_register(&self, addr: u8) -> u8 {
-        self.registers.read(addr & 0x0F)
+    fn read_register(&self, addr: u8) -> u8 {
+        self.regs.get(addr as usize).copied().unwrap_or(0)
     }
 
-    /// Advance the PSG by one sample.
-    #[allow(clippy::needless_range_loop)]
-    pub fn clock(&mut self) {
-        self.clock_noise();
-        self.clock_envelope();
-
-        let noise_mask = self.current_noise;
-
-        let mut mixed = 0i32;
-        let mut channel_outputs = [0i32; 3];
-        for ch in 0..3 {
-            if self.user_mute[ch] {
-                channel_outputs[ch] = 0;
-                self.last_channel_output[ch] = 0;
-                continue;
-            }
-            if let Some(sample) = self.drum_sample_overrides[ch] {
-                channel_outputs[ch] = sample;
-                self.last_channel_output[ch] = sample;
-                mixed += sample;
-                continue;
-            }
-
-            let tone_state = ((self.tone_pos[ch] as i32) >> 31) as u32;
-            let bt =
-                (tone_state | self.mixer_tone_mask[ch]) & (noise_mask | self.mixer_noise_mask[ch]);
-
-            let base_volume = if self.tone_use_envelope[ch] {
-                self.env_volume
-            } else {
-                self.tone_volume[ch]
-            };
-
-            let channel_output = base_volume & bt as i32;
-            channel_outputs[ch] = channel_output;
-            self.last_channel_output[ch] = channel_output;
-            mixed += channel_output;
+    fn load_registers(&mut self, regs: &[u8; 16]) {
+        for (i, &v) in regs.iter().enumerate() {
+            self.write_register(i as u8, v);
         }
-
-        let env_pos_value = self.env_pos;
-        let env_index = env_pos_value >> (32 - 5);
-        let env_phase_value = self.env_phase as u32;
-
-        for ch in 0..3 {
-            self.tone_pos[ch] = self.tone_pos[ch].wrapping_add(self.tone_step[ch]);
-        }
-        self.noise_pos = self.noise_pos.wrapping_add(self.noise_step);
-        self.env_pos = self.env_pos.wrapping_add(self.env_step);
-        if self.env_phase == 0 && self.env_step != 0 && self.env_pos < self.env_step {
-            self.env_phase = 1;
-        }
-
-        self.dc_adjuster.add_sample(mixed);
-        let dc_level = self.dc_adjuster.get_level();
-        let in_value = mixed - dc_level;
-        let mut out_value = in_value;
-
-        if self.color_filter_enabled {
-            let filtered = (self.low_pass[0] >> 2) + (self.low_pass[1] >> 1) + (in_value >> 2);
-            self.low_pass[0] = self.low_pass[1];
-            self.low_pass[1] = in_value;
-            out_value = filtered;
-        } else {
-            self.low_pass[0] = in_value;
-            self.low_pass[1] = in_value;
-        }
-
-        let clamped = out_value.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-        self.current_sample = (clamped as f32) * (1.0 / i16::MAX as f32);
-
-        if let Some(trace) = self.trace.as_mut() {
-            let _ = writeln!(
-                trace.writer,
-                "{},{},{},{},{},{},{},{},{},{},{},{}",
-                trace.sample_index,
-                channel_outputs[0],
-                channel_outputs[1],
-                channel_outputs[2],
-                self.env_volume,
-                env_index,
-                env_phase_value,
-                env_pos_value,
-                noise_mask & 0xffff,
-                mixed,
-                in_value,
-                clamped as i32,
-            );
-            trace.sample_index += 1;
-        }
-        self.cycle_counter = self.cycle_counter.wrapping_add(1);
     }
 
-    /// Current audio sample (-1.0..1.0).
-    pub fn get_sample(&self) -> f32 {
-        self.current_sample
+    fn dump_registers(&self) -> [u8; 16] {
+        self.regs
     }
 
-    /// Trigger envelope restart (used by sync buzzer effects).
-    pub fn trigger_envelope(&mut self) {
-        self.env_pos = 0;
-        self.env_phase = 0;
+    fn clock(&mut self) {
+        let (sample, channels) = self.compute_sample();
+        self.last_sample = sample;
+        self.last_channels = channels;
     }
 
-    /// Set envelope shape without resetting position/phase (used by Sync Buzzer start)
-    pub fn set_envelope_shape_no_reset(&mut self, shape: u8) {
-        self.env_shape = (shape & 0x0F) as usize;
+    fn get_sample(&self) -> f32 {
+        self.last_sample
     }
 
-    /// Enable/disable colour (low-pass) filtering.
-    pub fn set_color_filter(&mut self, enabled: bool) {
-        self.color_filter_enabled = enabled;
-    }
-
-    /// Current channel outputs (for visualisation).
-    pub fn get_channel_outputs(&self) -> (f32, f32, f32) {
-        let norm = 1.0 / (i16::MAX as f32);
+    fn get_channel_outputs(&self) -> (f32, f32, f32) {
         (
-            self.last_channel_output[0] as f32 * norm,
-            self.last_channel_output[1] as f32 * norm,
-            self.last_channel_output[2] as f32 * norm,
+            self.last_channels[0],
+            self.last_channels[1],
+            self.last_channels[2],
         )
     }
 
-    /// Total number of generated samples since reset
-    pub fn get_cycle_count(&self) -> u32 {
-        self.cycle_counter
-    }
-
-    /// Load all 16 YM2149 registers from a frame
-    pub fn load_registers(&mut self, regs: &[u8; 16]) {
-        for (idx, &value) in regs.iter().enumerate() {
-            self.write_register(idx as u8, value);
-        }
-    }
-
-    /// Return a copy of all 16 YM2149 registers
-    pub fn dump_registers(&self) -> [u8; 16] {
-        *self.registers.as_slice()
-    }
-
-    /// Set mixer overrides for effects (used by EffectsManager in ym2149-ym-replayer)
-    pub fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
-        self.mixer_overrides.force_tone = force_tone;
-        self.mixer_overrides.force_noise_mute = force_noise_mute;
-        self.update_mixer_masks();
-    }
-
-    /// Set drum sample override for a voice (used by EffectsManager in ym2149-ym-replayer)
-    pub fn set_drum_sample_override(&mut self, voice: usize, sample: Option<i32>) {
-        if voice >= 3 {
-            return;
-        }
-        self.drum_sample_overrides[voice] = sample;
-    }
-
-    #[allow(dead_code)] // clear_effect_overrides was removed as unused; effect paths explicitly set overrides.
-    fn clock_noise(&mut self) {
-        if self.noise_step != 0 && (self.noise_pos & 0xFFFF_0000) != 0 {
-            self.current_noise ^= self.rnd_compute();
-            self.noise_pos &= 0xFFFF;
-        }
-    }
-
-    fn clock_envelope(&mut self) {
-        let phase_data = &self.env_data[self.env_shape][self.env_phase];
-        let idx = (self.env_pos >> (32 - 5)) as usize & 0x1F;
-        let level = phase_data[idx] as usize;
-        self.env_volume = VOLUME_TABLE[level] as i32;
-    }
-
-    fn update_mixer_masks(&mut self) {
-        for ch in 0..3 {
-            let tone_disabled = (self.mixer_r7 >> ch) & 0x01 != 0;
-            let noise_disabled = (self.mixer_r7 >> (ch + 3)) & 0x01 != 0;
-
-            // Apply user mute after considering overrides – mute forces full mask
-            let tone_mask = tone_disabled && !self.mixer_overrides.force_tone[ch];
-            self.mixer_tone_mask[ch] = if self.user_mute[ch] || tone_mask {
-                0xffff
-            } else {
-                0
-            };
-
-            self.mixer_noise_mask[ch] = if self.user_mute[ch]
-                || noise_disabled
-                || self.mixer_overrides.force_noise_mute[ch]
-            {
-                0xffff
-            } else {
-                0
-            };
-        }
-    }
-
-    /// Mute or unmute a channel (0=A,1=B,2=C)
-    pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        if channel < 3 {
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        if channel < self.user_mute.len() {
             self.user_mute[channel] = mute;
-            self.update_mixer_masks();
         }
     }
 
-    /// Get current mute state of a channel
-    pub fn is_channel_muted(&self, channel: usize) -> bool {
-        channel < 3 && self.user_mute[channel]
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.user_mute.get(channel).copied().unwrap_or(false)
     }
 
-    fn rnd_compute(&mut self) -> u32 {
-        let r_bit = (self.rnd_rack & 1) ^ ((self.rnd_rack >> 2) & 1);
-        self.rnd_rack = (self.rnd_rack >> 1) | (r_bit << 16);
-        if r_bit != 0 { 0 } else { 0xffff }
+    fn set_color_filter(&mut self, _enabled: bool) {
+        // No post filter in this backend.
+    }
+
+    fn trigger_envelope(&mut self) {
+        self.env_pos = -64;
+        self.env_counter = 0;
+    }
+
+    fn set_drum_sample_override(&mut self, channel: usize, sample: Option<f32>) {
+        if channel < self.drum_overrides.len() {
+            self.drum_overrides[channel] = sample.map(|s| s.round() as i32);
+        }
+    }
+
+    fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
+        self.mixer_overrides = MixerOverrides {
+            force_tone,
+            force_noise_mute,
+        };
+    }
+}
+
+// Inherent helpers mirroring the legacy Ym2149 API.
+impl Ym2149 {
+    /// Create a chip with Atari ST defaults (2 MHz, 44.1 kHz).
+    pub fn new() -> Self {
+        <Self as Ym2149Backend>::new()
+    }
+    /// Create a chip with custom master clock and sample rate.
+    pub fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
+        <Self as Ym2149Backend>::with_clocks(master_clock, sample_rate)
+    }
+    /// Reset chip state.
+    pub fn reset(&mut self) {
+        <Self as Ym2149Backend>::reset(self)
+    }
+    /// Write a PSG register (R0-R15).
+    pub fn write_register(&mut self, addr: u8, value: u8) {
+        <Self as Ym2149Backend>::write_register(self, addr, value)
+    }
+    /// Read a PSG register.
+    pub fn read_register(&self, addr: u8) -> u8 {
+        <Self as Ym2149Backend>::read_register(self, addr)
+    }
+    /// Load all 16 registers.
+    pub fn load_registers(&mut self, regs: &[u8; 16]) {
+        <Self as Ym2149Backend>::load_registers(self, regs)
+    }
+    /// Dump all 16 registers.
+    pub fn dump_registers(&self) -> [u8; 16] {
+        <Self as Ym2149Backend>::dump_registers(self)
+    }
+    /// Advance one host sample, internally stepping YM at clk/8.
+    pub fn clock(&mut self) {
+        <Self as Ym2149Backend>::clock(self)
+    }
+    /// Get last mixed sample (-1.0..1.0).
+    pub fn get_sample(&self) -> f32 {
+        <Self as Ym2149Backend>::get_sample(self)
+    }
+    /// Get per-channel outputs (A,B,C) normalized to [-1,1].
+    pub fn get_channel_outputs(&self) -> (f32, f32, f32) {
+        <Self as Ym2149Backend>::get_channel_outputs(self)
+    }
+    /// Mute/unmute a channel (0=A,1=B,2=C).
+    pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        <Self as Ym2149Backend>::set_channel_mute(self, channel, mute)
+    }
+    /// Check if a channel is muted.
+    pub fn is_channel_muted(&self, channel: usize) -> bool {
+        <Self as Ym2149Backend>::is_channel_muted(self, channel)
+    }
+    /// Enable/disable color filter (no-op in this backend).
+    pub fn set_color_filter(&mut self, enabled: bool) {
+        <Self as Ym2149Backend>::set_color_filter(self, enabled)
+    }
+    /// Restart envelope (used by buzzer effects).
+    pub fn trigger_envelope(&mut self) {
+        <Self as Ym2149Backend>::trigger_envelope(self)
+    }
+    /// Inject a drum sample (Digidrums).
+    pub fn set_drum_sample_override(&mut self, channel: usize, sample: Option<f32>) {
+        <Self as Ym2149Backend>::set_drum_sample_override(self, channel, sample)
+    }
+    /// Force mixer tone/noise bits (effects).
+    pub fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
+        <Self as Ym2149Backend>::set_mixer_overrides(self, force_tone, force_noise_mute)
     }
 }
 
 impl Default for Ym2149 {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-fn tone_step_compute(period_lo: u8, period_hi: u8, master_clock: u32, sample_rate: u32) -> u32 {
-    let per = ((period_hi as u16 & 0x0F) << 8) | (period_lo as u16);
-    if per <= 5 {
-        return 0;
-    }
-    let per_u32 = per as u32;
-    let numerator = (master_clock as u128) << (15 + 16 - 3);
-    let denominator = (per_u32 as u128) * (sample_rate as u128);
-    if denominator == 0 {
-        0
-    } else {
-        (numerator / denominator) as u32
-    }
-}
-
-fn noise_step_compute(register_value: u8, master_clock: u32, sample_rate: u32) -> u32 {
-    let per = (register_value & 0x1F) as u32;
-    if per < 3 {
-        return 0;
-    }
-    let numerator = (master_clock as u128) << (16 - 1 - 3);
-    let denominator = (per as u128) * (sample_rate as u128);
-    if denominator == 0 {
-        0
-    } else {
-        (numerator / denominator) as u32
-    }
-}
-
-fn envelope_step_compute(lo: u8, hi: u8, master_clock: u32, sample_rate: u32) -> u32 {
-    let per = (((hi as u16) << 8) | (lo as u16)) as u32;
-    if per < 3 {
-        return 0;
-    }
-    let numerator = (master_clock as u128) << (16 + 16 - 9);
-    let denominator = (per as u128) * (sample_rate as u128);
-    if denominator == 0 {
-        0
-    } else {
-        (numerator / denominator) as u32
-    }
-}
-
-static ENV_DATA: OnceLock<[[[u8; 32]; 2]; 16]> = OnceLock::new();
-
-fn envelope_data() -> &'static [[[u8; 32]; 2]; 16] {
-    ENV_DATA.get_or_init(build_envelope_data)
-}
-
-const ENV_WAVES: [[i32; 8]; 16] = [
-    // 0x00-0x03: Attack-Decay (all the same)
-    [1, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0, 0, 0, 0],
-    // 0x04-0x07: Attack-Sustain-Release variant (all the same)
-    [0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 1, 0, 0, 0, 0, 0, 0],
-    // 0x08: Sawtooth-Down repeating (BUZZER!)
-    [1, 0, 1, 0, 1, 0, 1, 0],
-    // 0x09: Attack-Sawtooth-Down
-    [1, 0, 0, 0, 0, 0, 0, 0],
-    // 0x0A: Sustain-Sawtooth-Down
-    [1, 0, 0, 1, 1, 0, 0, 1],
-    // 0x0B: Attack-Sustain-Sawtooth
-    [1, 0, 1, 1, 1, 1, 1, 1],
-    // 0x0C: Sawtooth-Up repeating (BUZZER!)
-    [0, 1, 0, 1, 0, 1, 0, 1],
-    // 0x0D: Attack-Hold
-    [0, 1, 1, 1, 1, 1, 1, 1],
-    // 0x0E: Sawtooth-Down once then silence
-    [0, 1, 1, 0, 0, 1, 1, 0],
-    // 0x0F: Attack-Hold (same as 0x0D)
-    [0, 1, 0, 0, 0, 0, 0, 0],
-];
-
-fn build_envelope_data() -> [[[u8; 32]; 2]; 16] {
-    let mut data = [[[0u8; 32]; 2]; 16];
-    for (env_idx, wave) in ENV_WAVES.iter().enumerate() {
-        for phase in 0..4 {
-            let mut a = wave[phase * 2] * 15;
-            let delta = wave[phase * 2 + 1] - wave[phase * 2];
-            for step in 0..16 {
-                let mut val = a;
-                val = val.clamp(0, 15);
-                let target_phase = phase / 2;
-                let offset = (phase % 2) * 16 + step;
-                data[env_idx][target_phase][offset] = val as u8;
-                a += delta;
-            }
-        }
-    }
-    data
-}
-
-// Implement the Ym2149Backend trait for the hardware-accurate chip
-impl Ym2149Backend for Ym2149 {
-    fn new() -> Self {
-        Ym2149::new()
-    }
-
-    fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
-        Ym2149::with_clocks(master_clock, sample_rate)
-    }
-
-    fn reset(&mut self) {
-        self.reset();
-    }
-
-    fn write_register(&mut self, addr: u8, value: u8) {
-        self.write_register(addr, value);
-    }
-
-    fn read_register(&self, addr: u8) -> u8 {
-        self.read_register(addr)
-    }
-
-    fn load_registers(&mut self, regs: &[u8; 16]) {
-        self.load_registers(regs);
-    }
-
-    fn dump_registers(&self) -> [u8; 16] {
-        self.dump_registers()
-    }
-
-    fn clock(&mut self) {
-        self.clock();
-    }
-
-    fn get_sample(&self) -> f32 {
-        self.get_sample()
-    }
-
-    fn get_channel_outputs(&self) -> (f32, f32, f32) {
-        self.get_channel_outputs()
-    }
-
-    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        self.set_channel_mute(channel, mute);
-    }
-
-    fn is_channel_muted(&self, channel: usize) -> bool {
-        self.is_channel_muted(channel)
-    }
-
-    fn set_color_filter(&mut self, enabled: bool) {
-        self.set_color_filter(enabled);
-    }
-
-    fn trigger_envelope(&mut self) {
-        Ym2149::trigger_envelope(self);
-    }
-
-    fn set_drum_sample_override(&mut self, channel: usize, sample: Option<f32>) {
-        // Digi-drum path injects raw PCM-like values; keep scale and clamp to i32 range
-        let sample_i32 = sample.map(|s| s as i32);
-        Ym2149::set_drum_sample_override(self, channel, sample_i32);
-    }
-
-    fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
-        Ym2149::set_mixer_overrides(self, force_tone, force_noise_mute);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tone_step_zero_period() {
-        let step = tone_step_compute(0, 0, 2_000_000, 44_100);
-        assert_eq!(step, 0);
-    }
-
-    #[test]
-    fn test_volume_table_matches_reference() {
-        assert_eq!(VOLUME_TABLE[0], 20);
-        assert_eq!(VOLUME_TABLE[15], 10922);
-    }
-
-    #[test]
-    fn test_envelope_generation() {
-        let data = build_envelope_data();
-        assert_eq!(data[0][0][0], 15);
-        assert_eq!(data[0][0][31], 0);
-    }
-
-    #[test]
-    fn test_clock_produces_output() {
-        let mut chip = Ym2149::new();
-        chip.write_register(0, 0x1C);
-        chip.write_register(1, 0x01);
-        chip.write_register(8, 0x0F);
-        for _ in 0..10 {
-            chip.clock();
-        }
-        let sample = chip.get_sample();
-        assert!(sample.abs() > 0.0);
     }
 }

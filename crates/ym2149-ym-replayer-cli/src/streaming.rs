@@ -94,6 +94,7 @@ fn run_producer_loop(
         let mut player = player.lock();
         if let Err(e) = player.play() {
             eprintln!("Failed to start playback: {}", e);
+            running.store(false, Ordering::Relaxed);
             return;
         }
     }
@@ -107,12 +108,27 @@ fn run_producer_loop(
 
             // Restart if stopped
             if player.state() == PlaybackState::Stopped {
+                if let Some(reason) = player.unsupported_reason() {
+                    eprintln!("{reason}");
+                    running.store(false, Ordering::Relaxed);
+                    break;
+                }
                 let _ = player.stop();
-                let _ = player.play();
+                if let Err(e) = player.play() {
+                    eprintln!("Failed to restart playback: {}", e);
+                    running.store(false, Ordering::Relaxed);
+                    break;
+                }
             }
 
             // Use zero-allocation API - no Vec allocation, no copy
             player.generate_samples_into(&mut sample_buffer);
+
+            if let Some(reason) = player.unsupported_reason() {
+                eprintln!("{reason}");
+                running.store(false, Ordering::Relaxed);
+                break;
+            }
         }
 
         // Write to ring buffer

@@ -14,8 +14,6 @@ use std::fmt;
 pub enum ChipChoice {
     /// YM2149 hardware emulation backend
     Ym2149,
-    /// Tiny 250kHz-step backend inspired by AtariAudio
-    TinyYm2149,
 }
 
 impl ChipChoice {
@@ -23,7 +21,6 @@ impl ChipChoice {
     pub fn from_str(value: &str) -> Option<Self> {
         match value.to_ascii_lowercase().as_str() {
             "ym2149" => Some(ChipChoice::Ym2149),
-            "tiny" | "ym2149-tiny" => Some(ChipChoice::TinyYm2149),
             _ => None,
         }
     }
@@ -32,7 +29,6 @@ impl ChipChoice {
     pub fn as_str(&self) -> &'static str {
         match self {
             ChipChoice::Ym2149 => "ym2149",
-            ChipChoice::TinyYm2149 => "ym2149-tiny",
         }
     }
 }
@@ -124,7 +120,6 @@ impl CliArgs {
              \x20 --no-color-filter    Disable ST-style color filter globally (default enabled)\n\
              \x20 --chip <mode>        Select synthesis engine:\n\
              \x20                        - ym2149 (default)\n\
-             \x20                        - ym2149-tiny | tiny (250kHz step, DC filter)\n\
              \x20 -h, --help           Show this help\n\n\
              Examples:\n\
              \x20 ym2149 examples/Scaven6.ym\n"

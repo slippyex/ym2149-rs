@@ -32,7 +32,9 @@
 
 use wasm_bindgen::prelude::*;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
-use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer};
+use ym2149_ay_replayer::{
+    AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer, CPC_UNSUPPORTED_MSG,
+};
 use ym2149_ym_replayer::{LoadSummary, PlaybackController, PlaybackState, load_song};
 
 const YM_SAMPLE_RATE_F32: f32 = 44_100.0;
@@ -241,6 +243,7 @@ impl ArkosWasmPlayer {
 struct AyWasmPlayer {
     player: AyPlayer,
     frame_count: usize,
+    unsupported: bool,
 }
 
 impl AyWasmPlayer {
@@ -251,13 +254,18 @@ impl AyWasmPlayer {
             Self {
                 player,
                 frame_count,
+                unsupported: false,
             },
             metadata,
         )
     }
 
     fn play(&mut self) -> Result<(), String> {
-        self.player.play().map_err(|e| e.to_string())
+        if self.unsupported {
+            return Err(CPC_UNSUPPORTED_MSG.to_string());
+        }
+        self.player.play().map_err(|e| e.to_string())?;
+        self.check_support()
     }
 
     fn pause(&mut self) -> Result<(), String> {
@@ -290,11 +298,21 @@ impl AyWasmPlayer {
     }
 
     fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        self.player.generate_samples(count)
+        if self.unsupported {
+            return vec![0.0; count];
+        }
+        let mut samples = self.player.generate_samples(count);
+        if self.check_support().is_err() {
+            samples.fill(0.0);
+        }
+        samples
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         self.player.generate_samples_into(buffer);
+        if self.check_support().is_err() {
+            buffer.fill(0.0);
+        }
     }
 
     fn set_channel_mute(&mut self, channel: usize, mute: bool) {
@@ -311,6 +329,15 @@ impl AyWasmPlayer {
 
     fn set_color_filter(&mut self, enabled: bool) {
         self.player.set_color_filter(enabled);
+    }
+
+    fn check_support(&mut self) -> Result<(), String> {
+        if self.unsupported || self.player.requires_cpc_firmware() {
+            self.unsupported = true;
+            Err(CPC_UNSUPPORTED_MSG.to_string())
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -607,6 +634,9 @@ fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), S
 
     let (player, meta) =
         AyPlayer::load_from_bytes(data, 0).map_err(|e| format!("Failed to load AY file: {e}"))?;
+    if player.requires_cpc_firmware() {
+        return Err(CPC_UNSUPPORTED_MSG.to_string());
+    }
     let (wrapper, metadata) = AyWasmPlayer::new(player, &meta);
     Ok((BrowserSongPlayer::Ay(Box::new(wrapper)), metadata))
 }
