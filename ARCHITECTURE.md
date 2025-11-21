@@ -129,6 +129,11 @@ sequenceDiagram
     end
 ```
 
+> **Firmware limit**: AY playback only supports tracks that keep all
+> logic inside their bundled code. Calls into the Spectrum/CPC ROM jump
+> tables are treated as unsupported and playback stops (no ROMs are
+> bundled or emulated).
+
 ---
 
 ## Layer 1: Backend Trait

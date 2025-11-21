@@ -10,6 +10,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::error::{BevyYm2149Error, Result};
+use crate::playback::ToneSettings;
 use crate::song_player::{SharedSongPlayer, load_song_from_bytes};
 
 /// A loaded YM2149 audio file ready to be played
@@ -27,6 +28,8 @@ pub struct Ym2149AudioSource {
     player: SharedSongPlayer,
     /// Shared stereo gains (left, right) applied during decoding
     stereo_gain: Arc<RwLock<(f32, f32)>>,
+    /// Shared tone settings applied during decoding
+    tone_settings: Arc<RwLock<ToneSettings>>,
     /// Sample rate for playback
     sample_rate: u32,
     /// Total number of samples in the track
@@ -51,11 +54,28 @@ pub struct Ym2149Metadata {
 impl Ym2149AudioSource {
     /// Create a new audio source from raw YM file data
     pub fn new(data: Vec<u8>) -> Result<Self> {
-        Self::new_with_gains(data, Arc::new(RwLock::new((1.0, 1.0))))
+        Self::new_with_shared(
+            data,
+            Arc::new(RwLock::new((1.0, 1.0))),
+            Arc::new(RwLock::new(ToneSettings::default())),
+        )
     }
 
     /// Create a new audio source from raw YM file data with shared stereo gains
     pub fn new_with_gains(data: Vec<u8>, stereo_gain: Arc<RwLock<(f32, f32)>>) -> Result<Self> {
+        Self::new_with_shared(
+            data,
+            stereo_gain,
+            Arc::new(RwLock::new(ToneSettings::default())),
+        )
+    }
+
+    /// Create a new audio source with externally managed stereo/tone settings.
+    pub fn new_with_shared(
+        data: Vec<u8>,
+        stereo_gain: Arc<RwLock<(f32, f32)>>,
+        tone_settings: Arc<RwLock<ToneSettings>>,
+    ) -> Result<Self> {
         // Load the song to create a player
         let (mut player, metrics, metadata) =
             load_song_from_bytes(&data).map_err(BevyYm2149Error::MetadataExtraction)?;
@@ -72,6 +92,7 @@ impl Ym2149AudioSource {
             metadata,
             player: Arc::new(RwLock::new(player)),
             stereo_gain,
+            tone_settings,
             sample_rate,
             total_samples,
         })
@@ -82,12 +103,14 @@ impl Ym2149AudioSource {
         metadata: Ym2149Metadata,
         total_samples: usize,
         stereo_gain: Arc<RwLock<(f32, f32)>>,
+        tone_settings: Arc<RwLock<ToneSettings>>,
     ) -> Self {
         Self {
             data: Vec::new(),
             metadata,
             player,
             stereo_gain,
+            tone_settings,
             sample_rate: crate::playback::YM2149_SAMPLE_RATE,
             total_samples,
         }
@@ -153,6 +176,11 @@ pub struct Ym2149Decoder {
     player: SharedSongPlayer,
     /// Shared stereo gains (left, right)
     stereo_gain: Arc<RwLock<(f32, f32)>>,
+    /// Shared tone settings read on demand
+    tone_settings: Arc<RwLock<ToneSettings>>,
+    filter_prev0: f32,
+    filter_prev1: f32,
+    envelope: f32,
     /// Sample rate in Hz
     sample_rate: u32,
     /// Current sample position
@@ -174,10 +202,15 @@ impl Ym2149Decoder {
         stereo_gain: Arc<RwLock<(f32, f32)>>,
         sample_rate: u32,
         total_samples: usize,
+        tone_settings: Arc<RwLock<ToneSettings>>,
     ) -> Self {
         Self {
             player,
             stereo_gain,
+            tone_settings,
+            filter_prev0: 0.0,
+            filter_prev1: 0.0,
+            envelope: 0.0,
             sample_rate,
             current_sample: 0,
             total_samples,
@@ -205,10 +238,39 @@ impl Ym2149Decoder {
         player.generate_samples_into(&mut self.mono_buffer);
 
         let (left_gain, right_gain) = *self.stereo_gain.read();
+        let ToneSettings {
+            saturation,
+            accent,
+            widen,
+            color_filter,
+        } = *self.tone_settings.read();
         for (i, sample) in self.mono_buffer.iter().copied().enumerate() {
+            let mut s = sample;
+            if accent > 0.0 {
+                let target = s.abs();
+                self.envelope += 0.001 * (target - self.envelope);
+                let boost = 1.0 + self.envelope * accent;
+                s *= boost;
+            }
+            if saturation > 0.0 {
+                let drive = 1.0 + saturation * 0.5;
+                let t = (s * drive).tanh() / drive;
+                s = t;
+            }
+            if color_filter {
+                let filtered = (self.filter_prev0 * 0.25) + (self.filter_prev1 * 0.5) + (s * 0.25);
+                self.filter_prev0 = self.filter_prev1;
+                self.filter_prev1 = s;
+                s = filtered;
+            } else {
+                self.filter_prev0 = s;
+                self.filter_prev1 = s;
+            }
+            s = s.clamp(-1.0, 1.0);
             let base = i * 2;
-            self.buffer[base] = sample * left_gain;
-            self.buffer[base + 1] = sample * right_gain;
+            let width = widen.clamp(-0.5, 0.5);
+            self.buffer[base] = s * (left_gain + width);
+            self.buffer[base + 1] = s * (right_gain - width);
         }
         self.buffer_pos = 0;
     }
@@ -277,6 +339,7 @@ impl Decodable for Ym2149AudioSource {
             Arc::clone(&self.stereo_gain),
             self.sample_rate,
             self.total_samples,
+            Arc::clone(&self.tone_settings),
         )
     }
 }

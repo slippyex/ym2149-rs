@@ -20,6 +20,7 @@ pub struct Ym2149PluginConfig {
     pub music_state: bool,
     pub diagnostics: bool,
     pub bevy_audio_bridge: bool,
+    pub pattern_events: bool,
     /// Optional frames-per-beat override for BeatHit events (default None => 50 frames => 60 BPM at 50Hz).
     pub frames_per_beat: Option<u64>,
 }
@@ -33,6 +34,7 @@ impl Default for Ym2149PluginConfig {
             music_state: true,
             diagnostics: true,
             bevy_audio_bridge: true,
+            pattern_events: true,
             frames_per_beat: None,
         }
     }

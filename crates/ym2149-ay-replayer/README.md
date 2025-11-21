@@ -60,6 +60,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Firmware Limitations
+
+The player only handles AY drivers that run entirely out of their own
+code/data; once a track calls into the Spectrum or CPC ROM jump table we
+stop playback and report that firmware emulation is unsupported. ZX
+files that stay self-contained work fine; CPC AY rips and ROM-heavy ZX
+rips should be played in a full emulator instead.
+
 ### When to use it
 
 - Integrate `.ay` playback into tooling alongside `.ym` and `.aks` files

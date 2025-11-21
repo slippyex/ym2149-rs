@@ -2,9 +2,11 @@ use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
 use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
 use crate::events::{
-    BeatHit, ChannelSnapshot, PlaybackFrameMarker, TrackFinished, TrackStarted, YmSfxRequest,
+    BeatHit, ChannelSnapshot, PatternTriggered, PlaybackFrameMarker, TrackFinished, TrackStarted,
+    YmSfxRequest,
 };
 use crate::oscilloscope::OscilloscopeBuffer;
+use crate::patterns::{PatternTriggerRuntime, PatternTriggerSet};
 use crate::playback::{
     PlaybackMetrics, PlaybackState, YM2149_SAMPLE_RATE_F32, Ym2149Playback, Ym2149Settings,
 };
@@ -184,6 +186,72 @@ pub(in crate::plugin) fn update_audio_reactive_state(
     }
 }
 
+pub(in crate::plugin) fn detect_pattern_triggers(
+    config: Res<Ym2149PluginConfig>,
+    mut frames: MessageReader<FrameAudioData>,
+    pattern_sets: Query<&PatternTriggerSet>,
+    mut runtime: ResMut<PatternTriggerRuntime>,
+    mut pattern_events: MessageWriter<PatternTriggered>,
+) {
+    if !config.pattern_events {
+        return;
+    }
+
+    for frame in frames.read() {
+        let Ok(set) = pattern_sets.get(frame.entity) else {
+            runtime.0.remove(&frame.entity);
+            continue;
+        };
+
+        if set.patterns.is_empty() {
+            runtime.0.remove(&frame.entity);
+            continue;
+        }
+
+        let samples = frame.samples_per_frame.max(1) as f32;
+        let entry = runtime.0.entry(frame.entity).or_default();
+        if entry.len() < set.patterns.len() {
+            entry.resize(set.patterns.len(), u64::MAX);
+        }
+
+        for (idx, trigger) in set.patterns.iter().enumerate() {
+            let channel = trigger.channel.min(2);
+            let avg_amp = (frame.channel_energy[channel] / samples).clamp(0.0, 1.0);
+            if avg_amp < trigger.min_amplitude {
+                continue;
+            }
+
+            if let Some(target) = trigger.frequency_hz {
+                let Some(actual) = frame.frequencies[channel] else {
+                    continue;
+                };
+                let tolerance = trigger.frequency_tolerance_hz.max(0.0);
+                if (actual - target).abs() > tolerance {
+                    continue;
+                }
+            }
+
+            let last_frame = entry[idx];
+            let on_cooldown = last_frame != u64::MAX
+                && frame.frame_index < last_frame.saturating_add(trigger.cooldown_frames);
+            if on_cooldown {
+                continue;
+            }
+
+            entry[idx] = frame.frame_index;
+            pattern_events.write(PatternTriggered {
+                entity: frame.entity,
+                pattern_id: trigger.id.clone(),
+                channel,
+                amplitude: avg_amp,
+                frequency: frame.frequencies[channel],
+                frame: frame.frame_index,
+                elapsed_seconds: frame.elapsed_seconds,
+            });
+        }
+    }
+}
+
 pub(in crate::plugin) fn emit_beat_hits(
     mut frames: MessageReader<PlaybackFrameMarker>,
     mut beats: MessageWriter<BeatHit>,
@@ -318,6 +386,7 @@ pub(in crate::plugin) fn initialize_playback(
                 metadata,
                 total_samples,
                 playback.stereo_gain.clone(),
+                playback.tone_settings.clone(),
             );
             let audio_handle = audio_assets.add(audio_source);
             let settings = if playback.state == PlaybackState::Playing {
@@ -355,6 +424,7 @@ pub(in crate::plugin) fn initialize_playback(
                 metadata,
                 total_samples,
                 playback.stereo_gain.clone(),
+                playback.tone_settings.clone(),
             );
             let audio_handle = audio_assets.add(audio_source);
 
@@ -432,9 +502,10 @@ pub(in crate::plugin) fn initialize_playback(
             playback.needs_reload = false;
 
             // Create a Ym2149AudioSource asset from the loaded data
-            let audio_source = match Ym2149AudioSource::new_with_gains(
+            let audio_source = match Ym2149AudioSource::new_with_shared(
                 data_for_audio,
                 playback.stereo_gain.clone(),
+                playback.tone_settings.clone(),
             ) {
                 Ok(source) => source,
                 Err(err) => {
@@ -792,6 +863,78 @@ pub(in crate::plugin) fn process_playback_frames(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::patterns::PatternTrigger;
+    use bevy::prelude::Messages;
+    use std::sync::Arc;
+
+    fn drain_hits(app: &mut App) -> Vec<PatternTriggered> {
+        let mut events = app.world_mut().resource_mut::<Messages<PatternTriggered>>();
+        events.drain().collect()
+    }
+
+    fn send_frame(
+        app: &mut App,
+        entity: Entity,
+        frame_index: u64,
+        amplitude: f32,
+        freq: Option<f32>,
+    ) {
+        let mut events = app.world_mut().resource_mut::<Messages<FrameAudioData>>();
+        events.write(FrameAudioData {
+            entity,
+            frame_index,
+            elapsed_seconds: frame_index as f32 * 0.02,
+            looped: false,
+            stereo: Arc::from(vec![0.0; 2].into_boxed_slice()),
+            channel_samples: Arc::from(vec![[0.0; 3]; 1].into_boxed_slice()),
+            channel_energy: [amplitude, 0.0, 0.0],
+            frequencies: [freq, None, None],
+            samples_per_frame: 1,
+        });
+    }
+
+    #[test]
+    fn pattern_trigger_emits_and_respects_cooldown() {
+        let mut app = App::new();
+        app.insert_resource(Ym2149PluginConfig {
+            pattern_events: true,
+            ..Default::default()
+        });
+        app.add_message::<FrameAudioData>();
+        app.add_message::<PatternTriggered>();
+        app.insert_resource(PatternTriggerRuntime::default());
+
+        let entity = app
+            .world_mut()
+            .spawn(PatternTriggerSet::from_patterns(vec![
+                PatternTrigger::new("lead", 0)
+                    .with_min_amplitude(0.2)
+                    .with_frequency(440.0, 5.0)
+                    .with_cooldown(2),
+            ]))
+            .id();
+
+        app.add_systems(Update, detect_pattern_triggers);
+
+        send_frame(&mut app, entity, 1, 0.4, Some(441.0));
+        app.update();
+        assert_eq!(drain_hits(&mut app).len(), 1);
+
+        // Within cooldown -> suppressed
+        send_frame(&mut app, entity, 2, 0.4, Some(441.0));
+        app.update();
+        assert!(drain_hits(&mut app).is_empty());
+
+        // After cooldown -> fires again
+        send_frame(&mut app, entity, 4, 0.4, Some(441.0));
+        app.update();
+        assert_eq!(drain_hits(&mut app).len(), 1);
     }
 }
 

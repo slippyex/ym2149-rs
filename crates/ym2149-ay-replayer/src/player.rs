@@ -105,14 +105,12 @@ impl AyPlayer {
             .ok_or_else(|| AyError::InvalidData {
                 msg: "AY song is missing points data".to_string(),
             })?;
-        if points.interrupt == 0 {
-            return Err(AyError::InvalidData {
-                msg: "AY song does not define an interrupt routine".to_string(),
-            });
-        }
-
         let init_address = resolve_init_address(&song, &points)?;
-        let interrupt_address = points.interrupt;
+        let interrupt_address = if points.interrupt != 0 {
+            points.interrupt
+        } else {
+            init_address
+        };
 
         let samples_per_frame = (SAMPLE_RATE as f32 / FRAME_RATE_HZ).round() as usize;
         let metadata = build_metadata(&header, song_index, file.songs.len(), &song);

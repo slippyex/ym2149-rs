@@ -25,6 +25,8 @@ pub struct PlayerInfo {
     pub total_samples: usize,
     /// Human-readable song information
     pub song_info: String,
+    /// Whether to run the ST-style post filter
+    pub color_filter: bool,
 }
 
 /// Load an Arkos Tracker (AKS) file.
@@ -32,6 +34,7 @@ fn load_arkos_file(
     file_data: &[u8],
     file_path: &str,
     _chip_choice: ChipChoice,
+    color_filter_override: Option<bool>,
 ) -> ym2149_ym_replayer::Result<PlayerInfo> {
     let song = load_aks(file_data).map_err(|e| format!("Failed to load AKS file: {}", e))?;
 
@@ -75,10 +78,13 @@ fn load_arkos_file(
         subsong.replay_frequency_hz,
     );
 
+    let color_filter = color_filter_override.unwrap_or(true);
+
     Ok(PlayerInfo {
         player: Box::new(ArkosPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
         total_samples,
         song_info: info_str,
+        color_filter,
     })
 }
 
@@ -122,10 +128,13 @@ fn load_ay_file(
             .unwrap_or_else(|| "unknown".into()),
     );
 
+    let color_filter = color_filter_override.unwrap_or(true);
+
     Ok(PlayerInfo {
         player: Box::new(AyPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
         total_samples,
         song_info: info_str,
+        color_filter,
     })
 }
 
@@ -159,7 +168,7 @@ pub fn create_player(
 
     if extension == "aks" {
         println!("Detected format: Arkos Tracker 3 (AKS)\n");
-        return load_arkos_file(&file_data, file_path, chip_choice);
+        return load_arkos_file(&file_data, file_path, chip_choice, color_filter_override);
     } else if extension == "ay" {
         println!("Detected format: AY (ZXAY/EMUL)\n");
         return load_ay_file(&file_data, file_path, color_filter_override);
@@ -170,6 +179,7 @@ pub fn create_player(
 
     match chip_choice {
         ChipChoice::Ym2149 => {
+            let color_filter = color_filter_override.unwrap_or(true);
             if let Some(cf) = color_filter_override {
                 ym_player.get_chip_mut().set_color_filter(cf);
             }
@@ -187,6 +197,7 @@ pub fn create_player(
                 player: Box::new(ym_player) as Box<dyn RealtimeChip>,
                 total_samples,
                 song_info: info_str,
+                color_filter,
             })
         }
     }
@@ -223,6 +234,7 @@ pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result
                 player: Box::new(demo_player) as Box<dyn RealtimeChip>,
                 total_samples,
                 song_info: info_str,
+                color_filter: true,
             })
         }
     }

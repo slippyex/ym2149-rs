@@ -311,7 +311,7 @@ fn main() -> ym2149_ym_replayer::Result<()> {
 
     // Start streaming
     let playback_start = Instant::now();
-    let context = StreamingContext::start(player_info.player, config)?;
+    let context = StreamingContext::start(player_info.player, config, player_info.color_filter)?;
 
     // Run visualization loop
     run_visualization_loop(&context);

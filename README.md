@@ -126,7 +126,7 @@ fn main() -> anyhow::Result<()> {
 
 ```bash
 # Real-time playback with scope overlay
-cargo run -p ym2149-ym-replayer-cli -- examples/ND-Toxygene.ym
+cargo run -p ym2149-ym-replayer-cli -- examples/ym/ND-Toxygene.ym
 
 # Interactive chip demo with audio output
 cargo run --example chip_demo -p ym2149 --features streaming
@@ -208,6 +208,7 @@ cargo test -p ym2149 --features streaming
 - Rust 1.83+ (Rust 2024 edition) with `cargo` and `rustfmt`
 - `libmp3lame` (or `lame`) on your system if you plan to build the CLI with the `export-mp3` feature
 - Audio backend libraries for CPAL/Rodio (ALSA/PulseAudio, CoreAudio, WASAPI, etc.) when testing real-time playback
+- AY playback: ZX-only, firmware calls are unsupported (CPC/ROM-heavy AY files will be rejected)
 - Optional tooling:
   - [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) for building the web player
   - `node`/`npm` or `python -m http.server` for serving the WASM demo locally

@@ -47,6 +47,7 @@ Advanced features including:
 - File drag-and-drop loading
 - Audio bridge mixing with volume and pan controls
 - Keyboard-based playback control
+- Optional frame-derived BPM indicator (helper available in code comments/snippets)
 
 **Run:** `cargo run --example advanced_example -p bevy_ym2149_examples`
 

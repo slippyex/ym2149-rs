@@ -67,3 +67,15 @@ pub struct BeatHit {
     pub beat_index: u64,
     pub elapsed_seconds: f32,
 }
+
+/// Fired when a [`PatternTrigger`](crate::patterns::PatternTrigger) matches.
+#[derive(Event, Message, Clone, Debug)]
+pub struct PatternTriggered {
+    pub entity: Entity,
+    pub pattern_id: String,
+    pub channel: usize,
+    pub amplitude: f32,
+    pub frequency: Option<f32>,
+    pub frame: u64,
+    pub elapsed_seconds: f32,
+}

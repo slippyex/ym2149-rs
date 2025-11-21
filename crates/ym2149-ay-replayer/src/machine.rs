@@ -43,7 +43,7 @@ impl AyMachine {
         }
     }
 
-    /// Reset AY chip + memory to the ZX Spectrum defaults.
+    /// Reset AY chip + memory to the ZX defaults.
     pub fn reset_layout(&mut self) {
         self.memory[..=0x00FF].fill(0xC9);
         self.memory[0x0100..=0x3FFF].fill(0xFF);
@@ -83,8 +83,8 @@ impl AyMachine {
         self.cpc_clock_active
     }
 
-    /// Whether CPC playback would require real firmware support.
-    pub(crate) fn requires_cpc_firmware(&self) -> bool {
+    /// Whether the current track requires unsupported CPC firmware.
+    pub fn requires_cpc_firmware(&self) -> bool {
         self.cpc_requires_firmware
     }
 
