@@ -8,8 +8,11 @@
 use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
-use bevy_ym2149::{Ym2149Playback, Ym2149Plugin, Ym2149Settings};
-use bevy_ym2149_examples::{embedded_asset_plugin, ASSET_BASE};
+use bevy_ym2149::{
+    PatternTrigger, PatternTriggerSet, PatternTriggered, PlaybackState, Ym2149Playback,
+    Ym2149Plugin, Ym2149Settings,
+};
+use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
 use bevy_ym2149_viz::{
     Ym2149VizPlugin, create_channel_visualization, create_detailed_channel_display,
     create_oscilloscope, create_status_display,
@@ -35,7 +38,10 @@ fn main() {
         .add_plugins(Ym2149Plugin::default())
         .add_plugins(Ym2149VizPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_file_drop, playback_controls))
+        .add_systems(
+            Update,
+            (handle_file_drop, playback_controls, log_pattern_hits),
+        )
         .run();
 }
 
@@ -48,11 +54,16 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Text::new(
             "Controls:\n\
-             - Drag & Drop: Load YM/AKS file\n\
+             - Drag & Drop: Load YM/AKS/AY file\n\
              - SPACE: Play/Pause\n\
              - R: Restart\n\
              - L: Toggle Looping\n\
-             - UP/DOWN: Volume Control",
+             - S: Toggle Saturation\n\
+             - A: Toggle Accent Boost\n\
+             - B: Toggle Stereo Widen\n\
+             - C: Toggle Color Filter\n\
+             - UP/DOWN: Volume Control\n\
+             - Pattern hits are logged to the console",
         ),
         TextFont {
             font_size: 18.0,
@@ -71,7 +82,16 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Load the default song via Bevy's asset system
     let asset_handle = asset_server.load("music/ND-Toxygene.ym");
     let playback = Ym2149Playback::from_asset(asset_handle);
-    commands.spawn(playback);
+    let triggers = PatternTriggerSet::from_patterns(vec![
+        PatternTrigger::new("Channel A Accent", 0)
+            .with_min_amplitude(0.35)
+            .with_cooldown(4),
+        PatternTrigger::new("Lead A4", 1)
+            .with_min_amplitude(0.2)
+            .with_frequency(440.0, 12.0)
+            .with_cooldown(6),
+    ]);
+    commands.spawn((playback, triggers));
 
     // Create detailed channel information display
     create_detailed_channel_display(&mut commands);
@@ -95,9 +115,15 @@ fn playback_controls(
     if let Some(mut playback) = playbacks.iter_mut().next() {
         // Play/Pause toggle on spacebar
         if keyboard.just_pressed(KeyCode::Space) {
-            if playback.is_playing() {
+            // Resume from pause without resetting; otherwise start from beginning.
+            // If a song ended, restart from frame 0.
+            let target_state = playback.state;
+            if target_state == PlaybackState::Paused {
+                playback.play(); // do not reset frame
+            } else if target_state == PlaybackState::Playing {
                 playback.pause();
             } else {
+                playback.restart();
                 playback.play();
             }
         }
@@ -114,6 +140,60 @@ fn playback_controls(
             info!(
                 "Looping {}",
                 if settings.loop_enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+        }
+
+        // Tone shaping toggles
+        if keyboard.just_pressed(KeyCode::KeyS) {
+            let mut tone = playback.tone_settings();
+            tone.saturation = if tone.saturation > 0.0 { 0.0 } else { 0.15 };
+            playback.set_tone_settings(tone);
+            info!(
+                "Soft saturation {}",
+                if tone.saturation > 0.0 {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+        }
+        if keyboard.just_pressed(KeyCode::KeyA) {
+            let mut tone = playback.tone_settings();
+            tone.accent = if tone.accent > 0.0 { 0.0 } else { 0.25 };
+            playback.set_tone_settings(tone);
+            info!(
+                "Accent boost {}",
+                if tone.accent > 0.0 {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+        }
+        if keyboard.just_pressed(KeyCode::KeyB) {
+            let mut tone = playback.tone_settings();
+            tone.widen = if tone.widen > 0.0 { 0.0 } else { 0.15 };
+            playback.set_tone_settings(tone);
+            info!(
+                "Stereo widen {}",
+                if tone.widen > 0.0 {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+        }
+        if keyboard.just_pressed(KeyCode::KeyC) {
+            let mut tone = playback.tone_settings();
+            tone.color_filter = !tone.color_filter;
+            playback.set_tone_settings(tone);
+            info!(
+                "Color filter {}",
+                if tone.color_filter {
                     "enabled"
                 } else {
                     "disabled"
@@ -144,16 +224,35 @@ fn handle_file_drop(
         if let FileDragAndDrop::DroppedFile { path_buf, .. } = event {
             let path_str = path_buf.to_string_lossy().to_string();
             let lower = path_str.to_lowercase();
-            if !lower.ends_with(".ym") && !lower.ends_with(".aks") {
-                warn!("Dropped file is not a YM/AKS file: {}", path_str);
+            let is_ym = lower.ends_with(".ym");
+            let is_aks = lower.ends_with(".aks");
+            let is_ay = lower.ends_with(".ay");
+            if !(is_ym || is_aks || is_ay) {
+                warn!("Dropped file is not a YM/AKS/AY file: {}", path_str);
                 continue;
             }
 
             if let Some(mut playback) = playbacks.iter_mut().next() {
                 playback.set_source_path(path_str.clone());
                 playback.play();
-                info!("Loaded song from drag-and-drop: {}", path_str);
+                if is_ay {
+                    info!(
+                        "Loaded AY file (ZX-only; CPC AY tracks will report unsupported firmware): {}",
+                        path_str
+                    );
+                } else {
+                    info!("Loaded song from drag-and-drop: {}", path_str);
+                }
             }
         }
+    }
+}
+
+fn log_pattern_hits(mut hits: MessageReader<PatternTriggered>) {
+    for hit in hits.read() {
+        info!(
+            "Pattern '{}' hit on channel {} (amp {:.2}, freq {:?})",
+            hit.pattern_id, hit.channel, hit.amplitude, hit.frequency
+        );
     }
 }

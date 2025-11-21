@@ -55,7 +55,7 @@ let sample = synth.get_sample();
 
 ## Architecture
 
-This crate was extracted from `ym2149-core` v0.6.0 as part of the backend trait abstraction:
+This crate was extracted from `ym2149-core` v0.6.x as part of the backend trait abstraction:
 
 - **ym2149-core**: Hardware-accurate emulation (production-ready)
 - **ym2149-softsynth**: Experimental synthesizer (this crate)

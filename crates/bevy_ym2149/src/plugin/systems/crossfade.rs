@@ -64,9 +64,10 @@ pub(super) fn process_pending_crossfade(
     let duration = request.duration.max(0.001);
     let player_arc = Arc::new(RwLock::new(load.player));
 
-    let crossfade_audio_source = match Ym2149AudioSource::new_with_gains(
+    let crossfade_audio_source = match Ym2149AudioSource::new_with_shared(
         data_for_crossfade_source,
         playback.stereo_gain.clone(),
+        playback.tone_settings.clone(),
     ) {
         Ok(source) => source,
         Err(err) => {

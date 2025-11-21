@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "bevy",
@@ -1581,12 +1581,13 @@ dependencies = [
  "thiserror 1.0.69",
  "ym2149",
  "ym2149-arkos-replayer",
+ "ym2149-ay-replayer",
  "ym2149-ym-replayer",
 ]
 
 [[package]]
 name = "bevy_ym2149_examples"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "bevy",
  "bevy_embedded_assets",
@@ -1600,7 +1601,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_viz"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "bevy",
  "bevy_ym2149",
@@ -2422,7 +2423,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3013,6 +3014,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
+name = "iz80"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbbaa28ccb42e344cc845d267f4ed6fb25edaf547b9d8e4c53244fcdc01081f7"
+
+[[package]]
 name = "jni"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3427,7 +3434,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4292,7 +4299,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4683,7 +4690,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5444,7 +5451,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6040,7 +6047,7 @@ checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "ym2149"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "approx",
  "bitflags 2.10.0",
@@ -6052,7 +6059,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-arkos-replayer"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -6066,15 +6073,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ym2149-ay-replayer"
+version = "0.6.1"
+dependencies = [
+ "iz80",
+ "thiserror 1.0.69",
+ "ym2149",
+]
+
+[[package]]
 name = "ym2149-bevy"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "bevy_ym2149",
 ]
 
 [[package]]
 name = "ym2149-softsynth"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "approx",
  "ym2149",
@@ -6082,7 +6098,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-wasm"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "bitflags 2.10.0",
  "console_error_panic_hook",
@@ -6095,12 +6111,13 @@ dependencies = [
  "web-sys",
  "ym2149",
  "ym2149-arkos-replayer",
+ "ym2149-ay-replayer",
  "ym2149-ym-replayer",
 ]
 
 [[package]]
 name = "ym2149-ym-replayer"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "approx",
  "bitflags 2.10.0",
@@ -6111,17 +6128,16 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "ym2149",
- "ym2149-softsynth",
 ]
 
 [[package]]
 name = "ym2149-ym-replayer-cli"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "parking_lot",
  "ym2149",
  "ym2149-arkos-replayer",
- "ym2149-softsynth",
+ "ym2149-ay-replayer",
  "ym2149-ym-replayer",
 ]
 

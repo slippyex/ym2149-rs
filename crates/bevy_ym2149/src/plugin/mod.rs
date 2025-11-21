@@ -9,9 +9,9 @@ mod systems;
 pub use config::Ym2149PluginConfig;
 
 use self::systems::{
-    FrameAudioData, drive_playback_state, emit_beat_hits, emit_frame_markers,
-    emit_playback_diagnostics, initialize_playback, process_playback_frames, process_sfx_requests,
-    publish_bridge_audio, update_audio_reactive_state,
+    FrameAudioData, detect_pattern_triggers, drive_playback_state, emit_beat_hits,
+    emit_frame_markers, emit_playback_diagnostics, initialize_playback, process_playback_frames,
+    process_sfx_requests, publish_bridge_audio, update_audio_reactive_state,
 };
 use crate::audio_bridge::{
     AudioBridgeBuffers, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice, BridgeAudioSinks,
@@ -21,10 +21,11 @@ use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Loader};
 use crate::diagnostics::{register as register_diagnostics, update_diagnostics};
 use crate::events::{
-    AudioBridgeRequest, BeatHit, ChannelSnapshot, MusicStateRequest, PlaybackFrameMarker,
-    PlaylistAdvanceRequest, TrackFinished, TrackStarted, YmSfxRequest,
+    AudioBridgeRequest, BeatHit, ChannelSnapshot, MusicStateRequest, PatternTriggered,
+    PlaybackFrameMarker, PlaylistAdvanceRequest, TrackFinished, TrackStarted, YmSfxRequest,
 };
 use crate::music_state::{MusicStateGraph, process_music_state_requests};
+use crate::patterns::PatternTriggerRuntime;
 use crate::playback::Ym2149Settings;
 use crate::playlist::{
     Ym2149Playlist, advance_playlist_players, drive_crossfade_playlists, handle_playlist_requests,
@@ -87,7 +88,9 @@ impl Plugin for Ym2149Plugin {
         app.add_message::<PlaybackFrameMarker>();
         app.add_message::<BeatHit>();
         app.add_message::<YmSfxRequest>();
+        app.add_message::<PatternTriggered>();
         app.init_resource::<AudioReactiveState>();
+        app.init_resource::<PatternTriggerRuntime>();
 
         // Core playback lifecycle.
         app.add_systems(PreUpdate, (initialize_playback, drive_playback_state));
@@ -98,6 +101,7 @@ impl Plugin for Ym2149Plugin {
                 process_playback_frames,
                 emit_frame_markers.after(process_playback_frames),
                 update_audio_reactive_state.after(process_playback_frames),
+                detect_pattern_triggers.after(process_playback_frames),
                 emit_beat_hits.after(emit_frame_markers),
             ),
         );

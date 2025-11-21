@@ -22,7 +22,7 @@ use bevy_ym2149::{
     AudioBridgeTargets, FRAME_POSITION_PATH, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig,
     Ym2149Settings,
 };
-use bevy_ym2149_examples::{embedded_asset_plugin, ASSET_BASE};
+use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
 
 #[derive(Resource)]
 struct DemoPlayback(Entity);
@@ -70,16 +70,16 @@ fn setup_demo(
     let playlist_handle = playlists.add(Ym2149Playlist {
         tracks: vec![
             PlaylistSource::File {
-                path: "examples/ND-Toxygene.ym".into(),
+                path: "examples/ym/ND-Toxygene.ym".into(),
             },
             PlaylistSource::File {
-                path: "examples/Credits.ym".into(),
+                path: "examples/ym/Credits.ym".into(),
             },
             PlaylistSource::File {
-                path: "examples/Ashtray.ym".into(),
+                path: "examples/ym/Ashtray.ym".into(),
             },
             PlaylistSource::File {
-                path: "examples/Scout.ym".into(),
+                path: "examples/ym/Scout.ym".into(),
             },
         ],
         mode: PlaylistMode::Loop,
@@ -96,7 +96,7 @@ fn setup_demo(
     // Secondary playback for simultaneous music playback demonstration
     // This shows that multiple YM2149 players can run independently
     let secondary_entity = commands
-        .spawn(Ym2149Playback::new("examples/Scout.ym"))
+        .spawn(Ym2149Playback::new("examples/ym/Scout.ym"))
         .id();
 
     commands.insert_resource(DemoPlayback(playback_entity));
@@ -107,11 +107,11 @@ fn setup_demo(
     graph.set_target(playback_entity);
     graph.insert(
         "title",
-        MusicStateDefinition::SourcePath("examples/ND-Toxygene.ym".into()),
+        MusicStateDefinition::SourcePath("examples/ym/ND-Toxygene.ym".into()),
     );
     graph.insert(
         "intense",
-        MusicStateDefinition::SourcePath("examples/Steps.ym".into()),
+        MusicStateDefinition::SourcePath("examples/ym/Steps.ym".into()),
     );
     graph.insert("playlist", MusicStateDefinition::Playlist(playlist_handle));
     commands.insert_resource(graph);

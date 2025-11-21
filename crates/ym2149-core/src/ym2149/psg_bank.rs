@@ -24,7 +24,7 @@
 //! bank.generate_samples_interleaved(&mut buffer);
 //! ```
 
-use super::chip::Ym2149;
+use super::Ym2149;
 use crate::backend::Ym2149Backend;
 
 const DEFAULT_SAMPLE_RATE: u32 = 44_100;

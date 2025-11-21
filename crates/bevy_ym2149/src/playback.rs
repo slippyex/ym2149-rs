@@ -70,6 +70,30 @@ impl From<&ym2149_ym_replayer::LoadSummary> for PlaybackMetrics {
     }
 }
 
+/// Per-playback tone shaping options.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ToneSettings {
+    /// Soft saturation amount (0.0 = off).
+    pub saturation: f32,
+    /// Dynamic accent amount (0.0 = off).
+    pub accent: f32,
+    /// Stereo widening amount (0.0 = mono).
+    pub widen: f32,
+    /// ST-style color filter applied after tone shaping.
+    pub color_filter: bool,
+}
+
+impl Default for ToneSettings {
+    fn default() -> Self {
+        Self {
+            saturation: 0.0,
+            accent: 0.0,
+            widen: 0.0,
+            color_filter: true,
+        }
+    }
+}
+
 /// Source descriptor used when queueing a crossfade request.
 #[derive(Clone)]
 pub(crate) enum TrackSource {
@@ -177,6 +201,8 @@ pub struct Ym2149Playback {
     pub song_title: String,
     /// Song author extracted from YM file metadata
     pub song_author: String,
+    /// Tone-shaping configuration shared with the decoder
+    pub tone_settings: Arc<RwLock<ToneSettings>>,
     /// Summary of the currently loaded song (if available).
     pub(crate) metrics: Option<PlaybackMetrics>,
     /// Pending playlist index update once a crossfade completed.
@@ -238,6 +264,7 @@ impl Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
 
@@ -264,6 +291,7 @@ impl Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
 
@@ -290,6 +318,7 @@ impl Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
 
@@ -323,6 +352,7 @@ impl Ym2149Playback {
             inline_player: true,
             inline_audio_ready: false,
             inline_metadata: Some(metadata),
+            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
 
@@ -400,6 +430,16 @@ impl Ym2149Playback {
     /// Set the playback volume (global gain, unclamped upper bound).
     pub fn set_volume(&mut self, volume: f32) {
         self.volume = volume.max(0.0);
+    }
+
+    /// Current tone settings (copied out of the shared state).
+    pub fn tone_settings(&self) -> ToneSettings {
+        *self.tone_settings.read()
+    }
+
+    /// Update tone-shaping settings (saturation/accent/widen).
+    pub fn set_tone_settings(&mut self, settings: ToneSettings) {
+        *self.tone_settings.write() = settings;
     }
 
     /// Set stereo gains (pan/attenuation) applied during mixing.
@@ -561,6 +601,7 @@ impl Default for Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
 }

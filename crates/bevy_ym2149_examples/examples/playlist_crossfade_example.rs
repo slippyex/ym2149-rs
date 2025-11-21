@@ -6,7 +6,7 @@ use bevy_ym2149::playlist::{
     Ym2149PlaylistPlayer,
 };
 use bevy_ym2149::{Ym2149Playback, Ym2149Plugin};
-use bevy_ym2149_examples::{embedded_asset_plugin, ASSET_BASE};
+use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
 use std::path::Path;
 use std::sync::OnceLock;
 

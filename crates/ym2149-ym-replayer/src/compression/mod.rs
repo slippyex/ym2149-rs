@@ -511,14 +511,14 @@ mod tests {
         use std::fs;
         use std::path::Path;
 
-        let test_file = Path::new("examples/Great.ym");
+        let test_file = Path::new("examples/ym/Great.ym");
         if !test_file.exists() {
-            eprintln!("Skipping integration test - examples/Great.ym not found");
+            eprintln!("Skipping integration test - examples/ym/Great.ym not found");
             return;
         }
 
         // Read the compressed file
-        let compressed = fs::read(test_file).expect("Should read examples/Great.ym");
+        let compressed = fs::read(test_file).expect("Should read examples/ym/Great.ym");
 
         // Verify it's detected as LHA compressed
         assert!(

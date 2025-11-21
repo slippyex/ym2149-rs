@@ -11,10 +11,11 @@ use std::fs;
 use std::path::Path;
 use ym2149::streaming::DEFAULT_SAMPLE_RATE;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
+use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
 use ym2149_ym_replayer::{Player, load_song};
 
 use crate::args::ChipChoice;
-use crate::{ArkosPlayerWrapper, RealtimeChip};
+use crate::{ArkosPlayerWrapper, AyPlayerWrapper, RealtimeChip};
 
 /// Information about a loaded player.
 pub struct PlayerInfo {
@@ -24,6 +25,8 @@ pub struct PlayerInfo {
     pub total_samples: usize,
     /// Human-readable song information
     pub song_info: String,
+    /// Whether to run the ST-style post filter
+    pub color_filter: bool,
 }
 
 /// Load an Arkos Tracker (AKS) file.
@@ -31,6 +34,7 @@ fn load_arkos_file(
     file_data: &[u8],
     file_path: &str,
     _chip_choice: ChipChoice,
+    color_filter_override: Option<bool>,
 ) -> ym2149_ym_replayer::Result<PlayerInfo> {
     let song = load_aks(file_data).map_err(|e| format!("Failed to load AKS file: {}", e))?;
 
@@ -74,10 +78,63 @@ fn load_arkos_file(
         subsong.replay_frequency_hz,
     );
 
+    let color_filter = color_filter_override.unwrap_or(true);
+
     Ok(PlayerInfo {
         player: Box::new(ArkosPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
         total_samples,
         song_info: info_str,
+        color_filter,
+    })
+}
+
+/// Load an AY (ZXAY/EMUL) file.
+fn load_ay_file(
+    file_data: &[u8],
+    file_path: &str,
+    color_filter_override: Option<bool>,
+) -> ym2149_ym_replayer::Result<PlayerInfo> {
+    let (mut player, metadata) =
+        AyPlayer::load_from_bytes(file_data, 0).map_err(|e| format!("AY load failed: {e}"))?;
+
+    if let Some(cf) = color_filter_override {
+        player.set_color_filter(cf);
+    }
+
+    if player.requires_cpc_firmware() {
+        return Err(CPC_UNSUPPORTED_MSG.into());
+    }
+
+    let samples_per_frame = (DEFAULT_SAMPLE_RATE as f32 / 50.0).round() as usize;
+    let total_samples = metadata
+        .frame_count
+        .map(|frames| frames * samples_per_frame)
+        .unwrap_or(DEFAULT_SAMPLE_RATE as usize * 180);
+
+    let info_str = format!(
+        "File: {}\nFormat: AY/EMUL\nTitle: {}\nAuthor: {}\nSongs: {}/{}\nFrame length: {}\n",
+        file_path,
+        metadata.song_name,
+        if metadata.author.is_empty() {
+            "(unknown)"
+        } else {
+            &metadata.author
+        },
+        metadata.song_index + 1,
+        metadata.song_count,
+        metadata
+            .frame_count
+            .map(|f| f.to_string())
+            .unwrap_or_else(|| "unknown".into()),
+    );
+
+    let color_filter = color_filter_override.unwrap_or(true);
+
+    Ok(PlayerInfo {
+        player: Box::new(AyPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
+        total_samples,
+        song_info: info_str,
+        color_filter,
     })
 }
 
@@ -101,17 +158,20 @@ pub fn create_player(
     let file_data =
         fs::read(file_path).map_err(|e| format!("Failed to read file '{}': {}", file_path, e))?;
 
-    // Check if it's an AKS file
+    // Check file extension
     let path = Path::new(file_path);
-    let is_aks = path
+    let extension = path
         .extension()
         .and_then(|ext| ext.to_str())
-        .map(|ext| ext.eq_ignore_ascii_case("aks"))
-        .unwrap_or(false);
+        .map(|ext| ext.to_ascii_lowercase())
+        .unwrap_or_default();
 
-    if is_aks {
+    if extension == "aks" {
         println!("Detected format: Arkos Tracker 3 (AKS)\n");
-        return load_arkos_file(&file_data, file_path, chip_choice);
+        return load_arkos_file(&file_data, file_path, chip_choice, color_filter_override);
+    } else if extension == "ay" {
+        println!("Detected format: AY (ZXAY/EMUL)\n");
+        return load_ay_file(&file_data, file_path, color_filter_override);
     }
 
     let (mut ym_player, summary) = load_song(&file_data)?;
@@ -119,6 +179,7 @@ pub fn create_player(
 
     match chip_choice {
         ChipChoice::Ym2149 => {
+            let color_filter = color_filter_override.unwrap_or(true);
             if let Some(cf) = color_filter_override {
                 ym_player.get_chip_mut().set_color_filter(cf);
             }
@@ -136,6 +197,7 @@ pub fn create_player(
                 player: Box::new(ym_player) as Box<dyn RealtimeChip>,
                 total_samples,
                 song_info: info_str,
+                color_filter,
             })
         }
     }
@@ -172,6 +234,7 @@ pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result
                 player: Box::new(demo_player) as Box<dyn RealtimeChip>,
                 total_samples,
                 song_info: info_str,
+                color_filter: true,
             })
         }
     }

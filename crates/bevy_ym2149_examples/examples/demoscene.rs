@@ -26,7 +26,7 @@ use bevy::{
 };
 use bevy_mesh::Mesh2d;
 use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin, Ym2149Settings};
-use bevy_ym2149_examples::{embedded_asset_plugin, ASSET_BASE};
+use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
 use bevy_ym2149_viz::Ym2149VizPlugin;
 
 use demoscene::{

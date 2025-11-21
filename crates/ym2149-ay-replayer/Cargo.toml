@@ -1,0 +1,22 @@
+[package]
+name = "ym2149-ay-replayer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Project AY (ZXAY/EMUL) parser and Z80-based YM2149 player"
+readme = "README.md"
+documentation = "https://docs.rs/ym2149-ay-replayer"
+keywords = ["ym2149", "ay", "zx-spectrum", "amstrad", "chiptune"]
+categories = ["multimedia::audio", "emulators"]
+
+[dependencies]
+thiserror.workspace = true
+iz80 = "0.4.4"
+ym2149 = { path = "../ym2149-core", version = "0.6" }
+
+[features]
+default = []
+trace-ports = []

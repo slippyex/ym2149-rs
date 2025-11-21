@@ -122,7 +122,7 @@ impl CliArgs {
              \x20                        - ym2149 (default)\n\
              \x20 -h, --help           Show this help\n\n\
              Examples:\n\
-             \x20 ym2149 examples/Scaven6.ym\n"
+             \x20 ym2149 examples/ym/Scaven6.ym\n"
         );
     }
 }

@@ -9,9 +9,9 @@ Thank you for your interest in contributing to the YM2149 PSG emulator! This doc
 Constants should be clearly named and well-documented. We organize constants into logical modules:
 
 **Module Organization**:
-- **`src/ym2149/constants.rs`** - Hardware-specific constants (frequency tables, volume table, etc.)
-- **`src/replayer/mod.rs`** - Application-level timing configuration (sample rates, VBL frequencies)
-- **`src/streaming/mod.rs`** - Streaming constants (buffer backoff time, update intervals)
+- **`crates/ym2149-core/src/ym2149/constants.rs`** – Hardware-specific constants (frequency tables, envelope steps, logarithmic volume tables).
+- **`crates/ym2149-ym-replayer/src/player/mod.rs`** – Application-level timing configuration (sample cadence, digidrum limits, effect envelopes).
+- **`crates/ym2149-core/src/streaming/mod.rs`** – Streaming defaults reused by the CLI (ring-buffer sizes, producer back-off delays, visualization refresh).
 
 **Constant Documentation Pattern**:
 
@@ -116,22 +116,20 @@ cargo fmt
 
 ## Architecture
 
-The codebase is organized into domain-based modules with clear separation of concerns:
+The repository is a Cargo workspace composed of loosely-coupled crates:
 
-- **`ym2149/`** - YM2149 PSG emulation (chip implementation with section markers, registers, envelope, mixer, oscillators)
-- **`mfp/`** - Atari ST MFP timer infrastructure (timer constants and utilities)
-- **`ym_parser/`** - YM file format parsing (YM3/4/5/6 formats, raw frames, and special effects decoding)
-- **`ym_loader/`** - YM file I/O and loading with auto-detection
-- **`replayer/`** - Playback engine (player, VBL synchronization, cycle counting, timing config)
-- **`compression/`** - Data decompression utilities (LHA/LZH support)
-- **`streaming/`** - Real-time audio streaming (ring buffer, audio device, playback)
-- **`visualization/`** - Terminal UI utilities for real-time displays
+- **`crates/ym2149-core/`** – The PSG implementation plus shared utilities (`ym2149` module, streaming helpers, visualization helpers, backend abstraction).
+- **`crates/ym2149-ym-replayer/`** – YM file parser + replayer (YM3/4/5/6 parsers, loader, compression helpers, YM player core).
+- **`crates/ym2149-ay-replayer/`** – Project AY (`.ay`) parser and Z80-based player.
+- **`crates/ym2149-arkos-replayer/`** – Arkos Tracker player + support types.
+- **`crates/ym2149-ym-replayer-cli/`** – Command-line frontend (streaming pipeline, visualization, input handling).
+- **Engine/Visualization crates** – `crates/bevy_ym2149*`, `crates/ym2149-wasm`, etc. that embed the core library into downstream apps.
 
 ### Design Principles
 
 - **Single Concern**: Each domain handles one business concern (not a catch-all utils folder)
-- **Format-Specific Logic**: Effects decoding is part of `ym_parser/` because it's YM file format-specific
-- **Tight Coupling**: PSG effects (Sync Buzzer, SID, DigiDrum) remain in `ym2149/chip.rs` because they're core modulation behaviors, not separate features
+- **Format-Specific Logic**: YM parsing/decoding lives in `crates/ym2149-ym-replayer/parser`, AY parsing lives in `crates/ym2149-ay-replayer/parser`, etc.
+- **Tight Coupling**: PSG effects (Sync Buzzer, SID, DigiDrum) belong in `crates/ym2149-core/src/ym2149/chip.rs` because they shape waveform generation.
 
 When adding features, place code in the appropriate domain module.
 

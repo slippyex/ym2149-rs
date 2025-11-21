@@ -2,7 +2,25 @@
 
 All notable changes to the ym2149-rs project.
 
-## [v0.6.0] - Current Release
+## [v0.6.1] - 2025-11-20
+
+### Added
+- AY/ZX playback path via new `ym2149-ay-replayer` crate; integrated into CLI backend selection and workspace.
+- Pattern-triggered events in `bevy_ym2149` via `PatternTriggerSet` + `PatternTriggered`.
+- Tone-shaping controls (soft saturation, accent, stereo widen, color filter toggle) exposed through `ToneSettings` and wired into the advanced Bevy example.
+
+### Changed
+- Complete rewrite of the YM2149 core emulation layer. Removed unnecessary code. Simplified implementation.
+- YM2149 core unified to a single clk/8 implementation (`ym2149/` now only `chip.rs`); removed legacy submodules.
+- Docs/architecture updated to reflect the clk/8 backend and simplified module layout.
+- CLI backend selection simplified to the single hardware core.
+- YM replayer CLI now applies the ST-style color filter as a post-process (default on unless `--no-color-filter`) and shares the same filter pipeline as Bevy replay.
+
+### Fixed
+- DigiDrum clipping in the clk/8 backend (integer drum injection, DC adjust).
+- Buzzers/envelopes aligned to hardware tables and timing.
+
+## [v0.6.0] - Previous Release
 
 ### Added
 - Arkos Tracker support end-to-end: `ym2149-arkos-replayer` crate, Bevy/wrapper integration, curated fixtures in `examples/arkos`, wasm auto-detection for `.aks`

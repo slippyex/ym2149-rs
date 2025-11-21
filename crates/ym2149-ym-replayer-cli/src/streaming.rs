@@ -15,6 +15,35 @@ use ym2149_ym_replayer::PlaybackState;
 
 use crate::RealtimeChip;
 
+#[derive(Clone, Copy)]
+struct ColorFilter {
+    enabled: bool,
+    z1: f32,
+    z2: f32,
+}
+
+impl ColorFilter {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            z1: 0.0,
+            z2: 0.0,
+        }
+    }
+
+    fn process(&mut self, samples: &mut [f32]) {
+        if !self.enabled {
+            return;
+        }
+        for sample in samples.iter_mut() {
+            let filtered = (self.z2 * 0.25) + (self.z1 * 0.5) + (*sample * 0.25);
+            self.z2 = self.z1;
+            self.z1 = *sample;
+            *sample = filtered;
+        }
+    }
+}
+
 /// Audio streaming context with device and producer thread.
 pub struct StreamingContext {
     /// Audio device handle
@@ -41,6 +70,7 @@ impl StreamingContext {
     pub fn start(
         player: Box<dyn RealtimeChip>,
         config: StreamConfig,
+        color_filter_enabled: bool,
     ) -> ym2149_ym_replayer::Result<Self> {
         let streamer = Arc::new(RealtimePlayer::new(config)?);
         let audio_device =
@@ -56,7 +86,12 @@ impl StreamingContext {
         let streamer_clone = Arc::clone(&streamer);
 
         let producer_thread = std::thread::spawn(move || {
-            run_producer_loop(player_clone, streamer_clone, running_clone);
+            run_producer_loop(
+                player_clone,
+                streamer_clone,
+                running_clone,
+                ColorFilter::new(color_filter_enabled),
+            );
         });
 
         Ok(StreamingContext {
@@ -86,6 +121,7 @@ fn run_producer_loop(
     player: Arc<Mutex<Box<dyn RealtimeChip>>>,
     streamer: Arc<RealtimePlayer>,
     running: Arc<AtomicBool>,
+    mut color_filter: ColorFilter,
 ) {
     let mut sample_buffer = [0.0f32; 4096];
 
@@ -94,6 +130,7 @@ fn run_producer_loop(
         let mut player = player.lock();
         if let Err(e) = player.play() {
             eprintln!("Failed to start playback: {}", e);
+            running.store(false, Ordering::Relaxed);
             return;
         }
     }
@@ -107,13 +144,30 @@ fn run_producer_loop(
 
             // Restart if stopped
             if player.state() == PlaybackState::Stopped {
+                if let Some(reason) = player.unsupported_reason() {
+                    eprintln!("{reason}");
+                    running.store(false, Ordering::Relaxed);
+                    break;
+                }
                 let _ = player.stop();
-                let _ = player.play();
+                if let Err(e) = player.play() {
+                    eprintln!("Failed to restart playback: {}", e);
+                    running.store(false, Ordering::Relaxed);
+                    break;
+                }
             }
 
             // Use zero-allocation API - no Vec allocation, no copy
             player.generate_samples_into(&mut sample_buffer);
+
+            if let Some(reason) = player.unsupported_reason() {
+                eprintln!("{reason}");
+                running.store(false, Ordering::Relaxed);
+                break;
+            }
         }
+
+        color_filter.process(&mut sample_buffer[..batch_size]);
 
         // Write to ring buffer
         let written = streamer.write_blocking(&sample_buffer[..batch_size]);

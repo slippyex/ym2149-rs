@@ -99,6 +99,7 @@ pub mod error;
 pub mod events;
 pub mod music_state;
 pub mod oscilloscope;
+pub mod patterns;
 pub mod playback;
 pub mod playlist;
 pub mod plugin;
@@ -116,11 +117,12 @@ pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
 pub use diagnostics::{BUFFER_FILL_PATH, FRAME_POSITION_PATH, update_diagnostics};
 pub use error::{BevyYm2149Error, Result};
 pub use events::{
-    AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaybackFrameMarker,
+    AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PatternTriggered, PlaybackFrameMarker,
     PlaylistAdvanceRequest, TrackFinished, TrackStarted, YmSfxRequest,
 };
 pub use music_state::{MusicStateDefinition, MusicStateGraph, process_music_state_requests};
 pub use oscilloscope::OscilloscopeBuffer;
+pub use patterns::{PatternTrigger, PatternTriggerSet};
 pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 pub use playlist::{
     CrossfadeConfig, CrossfadeTrigger, CrossfadeWindow, PlaylistMode, PlaylistSource,

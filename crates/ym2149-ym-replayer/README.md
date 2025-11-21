@@ -24,7 +24,7 @@ Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ym2149-ym-replayer = "0.6"
+ym2149-ym-replayer = "0.6.1"
 ```
 
 ## Usage
@@ -67,7 +67,7 @@ Internally the player is split into three layers:
 
 ## Architecture
 
-This crate was extracted from `ym2149-core` v0.6.0 to provide better separation of concerns:
+This crate was extracted from `ym2149-core` v0.6.1 to provide better separation of concerns:
 
 - **ym2149-core**: Pure YM2149 chip emulation
 - **ym2149-ym-replayer**: YM file parsing and playback (this crate)

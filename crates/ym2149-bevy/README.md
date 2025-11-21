@@ -10,10 +10,10 @@ Update your `Cargo.toml`:
 
 ```toml
 # Old (deprecated)
-ym2149-bevy = "0.6"
+ym2149-bevy = "0.6.1"
 
 # New (recommended)
-bevy_ym2149 = "0.6"
+bevy_ym2149 = "0.6.1"
 ```
 
 Update your imports:
