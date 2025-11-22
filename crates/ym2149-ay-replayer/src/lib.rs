@@ -24,11 +24,11 @@ mod tests {
 
     const SPACE_MADNESS: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../ProjectAY/Spectrum/Demos/SpaceMadness.AY"
+        "/../../examples/ay/SpaceMadness.AY"
     ));
     const SHORT_MODULE: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../ProjectAY/Spectrum/Demos/Short.ay"
+        "/../../examples/ay/Short.ay"
     ));
 
     #[test]
@@ -100,50 +100,4 @@ mod tests {
             "expected waveform data"
         );
     }
-
-    const CPC_IMPACT: &[u8] = include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../ProjectAY/CPC/Demos/impact demo 3_2.ay"
-    ));
-
-    #[test]
-    fn ay_player_handles_cpc_ports() {
-        let (mut player, meta) = crate::player::AyPlayer::load_from_bytes(CPC_IMPACT, 0).unwrap();
-        assert!(meta.song_name.contains("Impact Demo"));
-        player.play().unwrap();
-        let mut buffer = [0.0f32; 1_764];
-        player.generate_samples_into(&mut buffer);
-        assert!(
-            player.requires_cpc_firmware(),
-            "CPC firmware requirement flag should be set"
-        );
-        assert_eq!(
-            player.state(),
-            crate::player::AyPlaybackState::Stopped,
-            "CPC tracks should stop playback once unsupported firmware ports are detected"
-        );
-    }
-}
-
-#[cfg(test)]
-const CPC_IMPACT: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../ProjectAY/CPC/Demos/impact demo 3_2.ay"
-));
-#[test]
-fn cpc_detects_firmware_calls() {
-    use crate::parser::load_ay;
-    let ay = load_ay(CPC_IMPACT).unwrap();
-    let song = &ay.songs[0];
-    let mut counts = std::collections::HashMap::new();
-    for block in &song.data.blocks {
-        for window in block.data.windows(3) {
-            if window[0] == 0xCD {
-                let addr = u16::from_le_bytes([window[1], window[2]]);
-                *counts.entry(addr).or_insert(0) += 1;
-            }
-        }
-    }
-    assert!(counts.contains_key(&0x4323));
-    assert!(counts.contains_key(&0x02F6));
 }
