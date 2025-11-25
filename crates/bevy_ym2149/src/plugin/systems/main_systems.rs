@@ -477,14 +477,13 @@ pub(in crate::plugin) fn initialize_playback(
             // Clone data for both player and audio source creation
             let data_for_audio = loaded.data.clone();
 
-            let mut load =
-                match load_player_from_bytes(loaded.data.clone(), loaded.metadata.as_ref()) {
-                    Ok(load) => load,
-                    Err(err) => {
-                        error!("Failed to initialize YM2149 player: {}", err);
-                        continue;
-                    }
-                };
+            let mut load = match load_player_from_bytes(&loaded.data, loaded.metadata.as_ref()) {
+                Ok(load) => load,
+                Err(err) => {
+                    error!("Failed to initialize YM2149 player: {}", err);
+                    continue;
+                }
+            };
 
             playback.song_title = load.metadata.title.clone();
             playback.song_author = load.metadata.author.clone();
@@ -945,10 +944,10 @@ pub(super) struct LoadResult {
 }
 
 pub(super) fn load_player_from_bytes(
-    data: Vec<u8>,
+    data: &[u8],
     override_metadata: Option<&Ym2149Metadata>,
 ) -> Result<LoadResult, String> {
-    let (player, metrics, mut metadata) = load_song_from_bytes(&data)?;
+    let (player, metrics, mut metadata) = load_song_from_bytes(data)?;
     if let Some(meta) = override_metadata {
         metadata.title = meta.title.clone();
         metadata.author = meta.author.clone();

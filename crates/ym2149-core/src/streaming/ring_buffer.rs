@@ -8,7 +8,6 @@
 //! Uses mutex-based synchronization with atomic position tracking for visibility.
 
 use parking_lot::Mutex;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Ring buffer for streaming audio samples
@@ -18,14 +17,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// - One consumer thread (audio playback)
 /// - Uses parking_lot::Mutex for buffer access with atomic variables for position tracking
 /// - Position tracking uses atomic operations for memory visibility without explicit locks
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RingBuffer {
     /// Shared buffer storage (protected by mutex for thread safety)
-    buffer: Arc<Mutex<Vec<f32>>>,
+    buffer: Mutex<Vec<f32>>,
     /// Write position (producer)
-    write_pos: Arc<AtomicUsize>,
+    write_pos: AtomicUsize,
     /// Read position (consumer)
-    read_pos: Arc<AtomicUsize>,
+    read_pos: AtomicUsize,
     /// Capacity (power of 2 for efficient modulo operation)
     capacity: usize,
     /// Capacity mask for fast modulo: `pos & mask == pos % capacity`
@@ -63,9 +62,9 @@ impl RingBuffer {
         let mask = capacity - 1;
 
         Ok(RingBuffer {
-            buffer: Arc::new(Mutex::new(vec![0.0; capacity])),
-            write_pos: Arc::new(AtomicUsize::new(0)),
-            read_pos: Arc::new(AtomicUsize::new(0)),
+            buffer: Mutex::new(vec![0.0; capacity]),
+            write_pos: AtomicUsize::new(0),
+            read_pos: AtomicUsize::new(0),
             capacity,
             mask,
         })
@@ -96,7 +95,7 @@ impl RingBuffer {
     /// Write samples to the buffer (producer)
     /// Returns the number of samples successfully written
     /// Returns 0 if buffer is full (would block on write)
-    pub fn write(&mut self, samples: &[f32]) -> usize {
+    pub fn write(&self, samples: &[f32]) -> usize {
         let mut buf = self.buffer.lock();
 
         // Calculate available space while holding the lock (prevents TOCTOU race)
@@ -139,7 +138,7 @@ impl RingBuffer {
 
     /// Read samples from the buffer (consumer)
     /// Returns the number of samples successfully read
-    pub fn read(&mut self, dest: &mut [f32]) -> usize {
+    pub fn read(&self, dest: &mut [f32]) -> usize {
         let buf = self.buffer.lock();
 
         // Calculate available data while holding the lock (prevents TOCTOU race)
@@ -180,7 +179,7 @@ impl RingBuffer {
     }
 
     /// Drain and discard all samples from the buffer
-    pub fn flush(&mut self) {
+    pub fn flush(&self) {
         let write_pos = self.write_pos.load(Ordering::Acquire);
         self.read_pos.store(write_pos, Ordering::Release);
     }
@@ -222,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read() {
-        let mut rb = RingBuffer::new(16).unwrap();
+        let rb = RingBuffer::new(16).unwrap();
         let samples = vec![0.1, 0.2, 0.3, 0.4];
 
         let written = rb.write(&samples);
@@ -237,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_ring_buffer_wrap() {
-        let mut rb = RingBuffer::new(16).unwrap();
+        let rb = RingBuffer::new(16).unwrap();
 
         // Write, read, and write again to cause wrap-around
         let data1 = vec![1.0; 10];
@@ -263,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_fill_percentage() {
-        let mut rb = RingBuffer::new(128).unwrap(); // Explicitly use power of 2
+        let rb = RingBuffer::new(128).unwrap(); // Explicitly use power of 2
         assert_eq!(rb.fill_percentage(), 0.0);
 
         rb.write(&vec![1.0; 64]);
@@ -278,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_flush() {
-        let mut rb = RingBuffer::new(16).unwrap();
+        let rb = RingBuffer::new(16).unwrap();
         rb.write(&[1.0; 8]);
         assert!(!rb.is_empty());
 

@@ -11,7 +11,7 @@ use std::time::Duration;
 
 /// Audio source that reads from the ring buffer
 struct RingBufferSource {
-    ring_buffer: Arc<parking_lot::Mutex<super::RingBuffer>>,
+    ring_buffer: Arc<super::RingBuffer>,
     current_pos: usize,
     sample_rate: u32,
     channels: u16,
@@ -24,7 +24,7 @@ struct RingBufferSource {
 
 impl RingBufferSource {
     fn new(
-        ring_buffer: Arc<parking_lot::Mutex<super::RingBuffer>>,
+        ring_buffer: Arc<super::RingBuffer>,
         sample_rate: u32,
         channels: u16,
         finished: Arc<AtomicBool>,
@@ -44,8 +44,7 @@ impl RingBufferSource {
 impl Source for RingBufferSource {
     fn current_frame_len(&self) -> Option<usize> {
         // Return None to indicate stream continues as long as data is available
-        let buffer = self.ring_buffer.lock();
-        let available = buffer.available_read();
+        let available = self.ring_buffer.available_read();
         if available > 0 {
             Some(available)
         } else {
@@ -78,9 +77,7 @@ impl Iterator for RingBufferSource {
         // Check if we need to refill the internal buffer
         if self.buffer_pos >= self.buffer.len() {
             // Refill internal buffer from ring buffer (batch read)
-            let mut ring_buffer = self.ring_buffer.lock();
-            let read = ring_buffer.read(&mut self.buffer);
-            drop(ring_buffer);
+            let read = self.ring_buffer.read(&mut self.buffer);
 
             if read > 0 {
                 self.buffer_pos = 0;
@@ -125,7 +122,7 @@ impl AudioDevice {
     pub fn new(
         sample_rate: u32,
         channels: u16,
-        ring_buffer: Arc<parking_lot::Mutex<super::RingBuffer>>,
+        ring_buffer: Arc<super::RingBuffer>,
     ) -> Result<Self> {
         // Create output stream
         let (stream, stream_handle) = OutputStream::try_default()
@@ -199,10 +196,9 @@ mod tests {
         buffer_len: usize,
         sample_rate: u32,
         channels: u16,
-    ) -> Option<(AudioDevice, Arc<parking_lot::Mutex<RingBuffer>>)> {
-        let ring_buffer = Arc::new(parking_lot::Mutex::new(
-            RingBuffer::new(buffer_len).expect("Failed to create ring buffer"),
-        ));
+    ) -> Option<(AudioDevice, Arc<RingBuffer>)> {
+        let ring_buffer =
+            Arc::new(RingBuffer::new(buffer_len).expect("Failed to create ring buffer"));
 
         match AudioDevice::new(sample_rate, channels, Arc::clone(&ring_buffer)) {
             Ok(device) => Some((device, ring_buffer)),
@@ -263,9 +259,7 @@ mod tests {
 
     #[test]
     fn test_ring_buffer_source_creation() {
-        let ring_buffer = Arc::new(parking_lot::Mutex::new(
-            RingBuffer::new(4096).expect("Failed to create ring buffer"),
-        ));
+        let ring_buffer = Arc::new(RingBuffer::new(4096).expect("Failed to create ring buffer"));
         let finished = Arc::new(AtomicBool::new(false));
 
         let source = RingBufferSource::new(ring_buffer, 44100, 1, finished);
@@ -277,9 +271,7 @@ mod tests {
 
     #[test]
     fn test_ring_buffer_source_silence_on_underrun() {
-        let ring_buffer = Arc::new(parking_lot::Mutex::new(
-            RingBuffer::new(4096).expect("Failed to create ring buffer"),
-        ));
+        let ring_buffer = Arc::new(RingBuffer::new(4096).expect("Failed to create ring buffer"));
         let finished = Arc::new(AtomicBool::new(false));
 
         let mut source = RingBufferSource::new(ring_buffer, 44100, 1, finished);
@@ -299,9 +291,7 @@ mod tests {
 
     #[test]
     fn test_ring_buffer_source_finished_signal() {
-        let ring_buffer = Arc::new(parking_lot::Mutex::new(
-            RingBuffer::new(4096).expect("Failed to create ring buffer"),
-        ));
+        let ring_buffer = Arc::new(RingBuffer::new(4096).expect("Failed to create ring buffer"));
         let finished = Arc::new(AtomicBool::new(false));
 
         let mut source =
@@ -340,9 +330,7 @@ mod tests {
             return;
         };
         let source = RingBufferSource::new(
-            Arc::new(parking_lot::Mutex::new(
-                RingBuffer::new(8192).expect("Failed to create ring buffer"),
-            )),
+            Arc::new(RingBuffer::new(8192).expect("Failed to create ring buffer")),
             44100,
             2,
             Arc::new(AtomicBool::new(false)),
@@ -365,9 +353,7 @@ mod tests {
             };
             succeeded = true;
             let source = RingBufferSource::new(
-                Arc::new(parking_lot::Mutex::new(
-                    RingBuffer::new(4096).expect("Failed to create ring buffer"),
-                )),
+                Arc::new(RingBuffer::new(4096).expect("Failed to create ring buffer")),
                 rate,
                 1,
                 Arc::new(AtomicBool::new(false)),

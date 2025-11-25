@@ -31,7 +31,6 @@ bitflags.workspace = true
 
 # Export dependencies (optional)
 hound = { version = "3.5", optional = true }
-mp3lame-encoder = { version = "0.2", optional = true }
 
 [dev-dependencies]
 approx.workspace = true
@@ -57,4 +56,3 @@ softsynth = []
 
 # Export functionality
 export-wav = ["dep:hound"]
-export-mp3 = ["dep:mp3lame-encoder"]

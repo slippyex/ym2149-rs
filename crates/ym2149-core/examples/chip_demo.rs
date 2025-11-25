@@ -27,9 +27,7 @@ fn main() {
 
     // Setup audio streaming
     let config = StreamConfig::default();
-    let buffer = Arc::new(parking_lot::Mutex::new(
-        RingBuffer::new(config.ring_buffer_size).unwrap(),
-    ));
+    let buffer = Arc::new(RingBuffer::new(config.ring_buffer_size).unwrap());
 
     let audio_device =
         match AudioDevice::new(config.sample_rate, config.channels, Arc::clone(&buffer)) {
@@ -72,7 +70,7 @@ fn main() {
         }
 
         // Write to ring buffer
-        buffer.lock().write(&samples_buffer);
+        buffer.write(&samples_buffer);
         samples_generated += samples_buffer.len();
 
         // Small sleep to prevent CPU spinning

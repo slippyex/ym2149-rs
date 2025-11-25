@@ -25,7 +25,7 @@
 
 | 🧠 Core Emulator | 🪕 Audio Pipelines | 🕹️ Game & Bevy |
 |------------------|-------------------|----------------|
-| Integer-accurate PSG, YM1–YM6 & tracker helpers | Streaming playback, WAV/MP3 export, playlist automation | Plug-and-play Bevy plugins with diagnostics, viz, playlists |
+| Integer-accurate PSG, YM1–YM6 & tracker helpers | Streaming playback, WAV export, playlist automation | Plug-and-play Bevy plugins with diagnostics, viz, playlists |
 | 🌐 Browser Ready | 📦 Monorepo Cohesion | 🧪 Quality |
 | WASM player (147 KB) with LHA support & drag-drop | Shared versioning, unified docs, cross-crate tests | 165+ tests, curated fixtures, demoscene examples |
 
@@ -137,22 +137,20 @@ cargo run --example chip_demo -p ym2149 --features streaming
 ### Export to Audio Files
 
 ```rust
-use ym2149_ym_replayer::{load_song, export::export_to_wav_default, export::export_to_mp3_with_config, export::ExportConfig};
+use ym2149_ym_replayer::{load_song, export::export_to_wav_default, export::ExportConfig};
 
 fn main() -> anyhow::Result<()> {
     let data = std::fs::read("song.ym")?;
     let (mut player, info) = load_song(&data)?;
 
     // Export to WAV (feature: export-wav)
-    export_to_wav_default(&mut player, info.clone(), "output.wav")?;
-
-    // Export to MP3 with normalization and fade-out (feature: export-mp3)
-    let config = ExportConfig::stereo().normalize(true).fade_out(2.0);
-    export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
+    export_to_wav_default(&mut player, info, "output.wav")?;
 
     Ok(())
 }
 ```
+
+> Note: MP3 export was removed because the system-dependent LAME/Autotools toolchain proved too brittle. Export WAV instead and transcode externally (e.g. `ffmpeg -i output.wav -b:a 192k output.mp3`).
 
 ### Add the Bevy Plugin
 
@@ -206,7 +204,6 @@ cargo test -p ym2149 --features streaming
 ## Development Prerequisites
 
 - Rust 1.83+ (Rust 2024 edition) with `cargo` and `rustfmt`
-- `libmp3lame` (or `lame`) on your system if you plan to build the CLI with the `export-mp3` feature
 - Audio backend libraries for CPAL/Rodio (ALSA/PulseAudio, CoreAudio, WASAPI, etc.) when testing real-time playback
 - AY playback: ZX-only, firmware calls are unsupported (CPC/ROM-heavy AY files will be rejected)
 - Optional tooling:

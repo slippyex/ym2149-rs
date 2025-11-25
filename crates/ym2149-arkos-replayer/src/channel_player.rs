@@ -556,7 +556,9 @@ impl ChannelPlayer {
         };
 
         let legacy_song = self.song.format == SongFormat::Legacy;
-        let apply_pitch_slide = legacy_song || self.new_played_note.is_none();
+        // Pitch slides should apply on first tick when a slide is active (AT3 behaviour).
+        let slide_active = self.pitch_slide.slide != FixedPoint::default();
+        let apply_pitch_slide = legacy_song || self.new_played_note.is_none() || slide_active;
 
         // Apply slides if still within line
         if still_within_line {

@@ -244,7 +244,6 @@ pub trait Ym2149Backend: Send {
 
 **Supported Formats:**
 - **WAV** - Uncompressed PCM audio (feature: `export-wav`)
-- **MP3** - LAME-encoded compressed audio (feature: `export-mp3`)
 
 **Features:**
 - Configurable sample rate (default: 44,100 Hz)
@@ -255,11 +254,9 @@ pub trait Ym2149Backend: Send {
 
 **Usage:**
 
-Enable export features in `Cargo.toml`:
+Enable export feature in `Cargo.toml`:
 ```toml
 ym2149-ym-replayer = { version = "0.6", features = ["export-wav"] }
-# or
-ym2149-ym-replayer = { version = "0.6", features = ["export-mp3"] }
 ```
 
 Example code:
@@ -271,21 +268,8 @@ let (mut player, info) = load_song(&data)?;
 export_to_wav_default(&mut player, info, "output.wav")?;
 ```
 
-**Advanced Configuration:**
-```rust
-use ym2149_ym_replayer::export::{export_to_mp3_with_config, ExportConfig};
-
-let config = ExportConfig::stereo()
-    .normalize(true)
-    .fade_out(2.0); // 2-second fade out
-
-export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
-```
-
 **Implementation Notes:**
 - WAV export uses pure Rust `hound` crate
-- MP3 export uses `mp3lame-encoder` (requires LAME library)
-- Both formats support custom `ExportConfig` for fine-grained control
 - Export is synchronous - blocks until rendering completes
 
 ---
@@ -360,7 +344,6 @@ ym2149-ym-replayer/src/
 │   └── tracker_player.rs  # YMT tracker support
 ├── export/                # Audio export (feature-gated)
 │   ├── wav.rs             # WAV export (feature: export-wav)
-│   ├── mp3.rs             # MP3 export (feature: export-mp3)
 │   └── mod.rs             # ExportConfig, normalize_samples, apply_fade_out
 └── lib.rs                 # Public exports
 ```
@@ -785,7 +768,6 @@ let samples = player.generate_samples(882);
 | `digidrums` | - | ✓ (default) | - | Mad Max digi-drums |
 | `softsynth` | - | ✓ (optional) | - | Experimental synthesizer backend |
 | `export-wav` | - | ✓ (optional) | - | WAV file export (uses `hound`) |
-| `export-mp3` | - | ✓ (optional) | - | MP3 file export (requires LAME) |
 
 ---
 

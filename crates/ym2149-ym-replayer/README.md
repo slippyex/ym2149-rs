@@ -95,8 +95,9 @@ use ym2149_ym_replayer::loader;
 - `digidrums`: Enable Mad Max digi-drums
 - `streaming`: Enable real-time audio output (requires `rodio`) - for CLI/standalone use; Bevy integration uses native audio
 - `export-wav`: Enable WAV file export (requires `hound`)
-- `export-mp3`: Enable MP3 file export (requires `mp3lame-encoder`)
 - `softsynth`: Workspace-only hook for experimental software synthesizer backends (requires providing your own `ym2149-softsynth` via `[patch]`)
+
+> MP3 export was removed because the LAME/Autotools toolchain is fragile across environments. Export WAV and transcode externally (e.g., `ffmpeg`).
 
 ## License
 

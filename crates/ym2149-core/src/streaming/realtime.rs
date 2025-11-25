@@ -21,7 +21,7 @@ pub enum PlaybackState {
 /// Real-time audio player with streaming
 pub struct RealtimePlayer {
     /// Ring buffer for sample storage
-    buffer: Arc<Mutex<RingBuffer>>,
+    buffer: Arc<RingBuffer>,
     /// Stream configuration
     config: StreamConfig,
     /// Playback statistics
@@ -31,7 +31,7 @@ pub struct RealtimePlayer {
 }
 
 /// Playback statistics for monitoring overruns and buffer health
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PlaybackStats {
     /// Number of overrun events (producer write failed due to full buffer)
     pub overrun_count: usize,
@@ -44,7 +44,7 @@ pub struct PlaybackStats {
 impl RealtimePlayer {
     /// Create a new real-time player with streaming
     pub fn new(config: StreamConfig) -> crate::Result<Self> {
-        let buffer = Arc::new(Mutex::new(RingBuffer::new(config.ring_buffer_size)?));
+        let buffer = Arc::new(RingBuffer::new(config.ring_buffer_size)?);
 
         let stats = Arc::new(Mutex::new(PlaybackStats {
             overrun_count: 0,
@@ -70,15 +70,14 @@ impl RealtimePlayer {
 
         // Keep retrying until all samples are written
         while !remaining.is_empty() {
-            let mut buffer = self.buffer.lock();
-            let written = buffer.write(remaining);
+            let written = self.buffer.write(remaining);
 
-            // Update stats
-            let mut stats = self.stats.lock();
-            stats.samples_played += written;
-            stats.fill_percentage = buffer.fill_percentage();
-            drop(stats);
-            drop(buffer);
+            {
+                // Update stats
+                let mut stats = self.stats.lock();
+                stats.samples_played += written;
+                stats.fill_percentage = self.buffer.fill_percentage();
+            }
 
             total_written += written;
 
@@ -96,10 +95,8 @@ impl RealtimePlayer {
 
     /// Write samples without blocking (returns 0 if buffer full)
     pub fn write_nonblocking(&self, samples: &[f32]) -> usize {
-        let mut buffer = self.buffer.lock();
-        let written = buffer.write(samples);
-        let fill_pct = buffer.fill_percentage();
-        drop(buffer);
+        let written = self.buffer.write(samples);
+        let fill_pct = self.buffer.fill_percentage();
 
         let mut stats = self.stats.lock();
         if written < samples.len() {
@@ -113,22 +110,22 @@ impl RealtimePlayer {
 
     /// Get the number of samples that can be written without blocking
     pub fn available_write(&self) -> usize {
-        self.buffer.lock().available_write()
+        self.buffer.available_write()
     }
 
     /// Get current playback statistics
     pub fn get_stats(&self) -> PlaybackStats {
-        self.stats.lock().clone()
+        *self.stats.lock()
     }
 
     /// Flush the buffer (clear all pending samples)
     pub fn flush(&self) {
-        self.buffer.lock().flush();
+        self.buffer.flush();
     }
 
     /// Get buffer fill percentage (0.0 to 1.0)
     pub fn fill_percentage(&self) -> f32 {
-        self.buffer.lock().fill_percentage()
+        self.buffer.fill_percentage()
     }
 
     /// Get buffer latency in milliseconds
@@ -159,7 +156,7 @@ impl RealtimePlayer {
     pub fn stop(&mut self) {
         let mut state = self.state.lock();
         *state = PlaybackState::Stopped;
-        self.buffer.lock().flush();
+        self.buffer.flush();
     }
 
     /// Get current playback state
@@ -168,7 +165,7 @@ impl RealtimePlayer {
     }
     /// Get reference to the ring buffer for audio device integration
     /// This allows the audio device to read samples as they're produced
-    pub fn get_buffer(&self) -> Arc<parking_lot::Mutex<RingBuffer>> {
+    pub fn get_buffer(&self) -> Arc<RingBuffer> {
         Arc::clone(&self.buffer)
     }
 }
