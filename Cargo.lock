@@ -6065,6 +6065,17 @@ name = "ym2149-common"
 version = "0.7.0"
 
 [[package]]
+name = "ym2149-replayer-cli"
+version = "0.7.0"
+dependencies = [
+ "parking_lot",
+ "ym2149",
+ "ym2149-arkos-replayer",
+ "ym2149-ay-replayer",
+ "ym2149-ym-replayer",
+]
+
+[[package]]
 name = "ym2149-softsynth"
 version = "0.7.0"
 dependencies = [
@@ -6104,17 +6115,6 @@ dependencies = [
  "thiserror 1.0.69",
  "ym2149",
  "ym2149-common",
-]
-
-[[package]]
-name = "ym2149-ym-replayer-cli"
-version = "0.7.0"
-dependencies = [
- "parking_lot",
- "ym2149",
- "ym2149-arkos-replayer",
- "ym2149-ay-replayer",
- "ym2149-ym-replayer",
 ]
 
 [[package]]

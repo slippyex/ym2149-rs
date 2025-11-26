@@ -58,7 +58,7 @@ Try it live: **[slippyex.github.io/ym2149-rs](https://slippyex.github.io/ym2149-
 | [`ym2149`](crates/ym2149-core) | Core YM2149 chip emulator (cycle-accurate) | [crates.io/crates/ym2149](https://crates.io/crates/ym2149) | [docs.rs/ym2149](https://docs.rs/ym2149) |
 | [`ym2149-common`](crates/ym2149-common) | Shared traits (`ChiptunePlayer`, `PlaybackMetadata`) and types | [crates.io/crates/ym2149-common](https://crates.io/crates/ym2149-common) | [docs.rs/ym2149-common](https://docs.rs/ym2149-common) |
 | [`ym2149-ym-replayer`](crates/ym2149-ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | [crates.io/crates/ym2149-ym-replayer](https://crates.io/crates/ym2149-ym-replayer) | [docs.rs/ym2149-ym-replayer](https://docs.rs/ym2149-ym-replayer) |
-| [`ym2149-ym-replayer-cli`](crates/ym2149-ym-replayer-cli) | Standalone CLI player with streaming and export | Unpublished (workspace) | – |
+| [`ym2149-replayer-cli`](crates/ym2149-replayer-cli) | Standalone CLI player with streaming and export | Unpublished (workspace) | – |
 | [`ym2149-softsynth`](crates/ym2149-softsynth) | Experimental software synthesizer backend (proof-of-concept) | Unpublished (workspace) | [crates/ym2149-softsynth/README.md](crates/ym2149-softsynth/README.md) |
 | [`ym2149-arkos-replayer`](crates/ym2149-arkos-replayer) | Arkos Tracker 2/3 (.aks) parser and native multi-PSG player (pure Rust) | [crates.io/crates/ym2149-arkos-replayer](https://crates.io/crates/ym2149-arkos-replayer) | [docs.rs/ym2149-arkos-replayer](https://docs.rs/ym2149-arkos-replayer) |
 | [`ym2149-ay-replayer`](crates/ym2149-ay-replayer) | ZXAY/EMUL AY file parser with integrated Z80 replayer | [crates.io/crates/ym2149-ay-replayer](https://crates.io/crates/ym2149-ay-replayer) | [docs.rs/ym2149-ay-replayer](https://docs.rs/ym2149-ay-replayer) |
@@ -132,7 +132,7 @@ fn main() -> anyhow::Result<()> {
 
 ```bash
 # Real-time playback with scope overlay
-cargo run -p ym2149-ym-replayer-cli -- examples/ym/ND-Toxygene.ym
+cargo run -p ym2149-replayer-cli -- examples/ym/ND-Toxygene.ym
 
 # Interactive chip demo with audio output
 cargo run --example chip_demo -p ym2149 --features streaming
@@ -229,7 +229,7 @@ ym2149-rs/
 │   ├── ym2149-ym-replayer/     # YM parser + playback engine
 │   ├── ym2149-arkos-replayer/  # Arkos Tracker (.aks) parser/player
 │   ├── ym2149-ay-replayer/     # ZXAY/EMUL parser + Z80 runner (ZX-only; CPC AY rejected)
-│   ├── ym2149-ym-replayer-cli/ # Terminal streamer/exporter built on the replayers
+│   ├── ym2149-replayer-cli/   # Terminal streamer/exporter built on the replayers
 │   ├── ym2149-wasm/            # WASM bindings + browser demo
 │   ├── bevy_ym2149/            # Bevy plugin (playback, playlists, crossfade, diagnostics)
 │   ├── bevy_ym2149_viz/        # Optional visualization ECS systems

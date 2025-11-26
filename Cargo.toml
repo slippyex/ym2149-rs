@@ -3,7 +3,7 @@ members = [
     "crates/ym2149-core",
     "crates/ym2149-common",
     "crates/ym2149-ym-replayer",
-    "crates/ym2149-ym-replayer-cli",
+    "crates/ym2149-replayer-cli",
     "crates/ym2149-softsynth",
     "crates/ym2149-arkos-replayer",
     "crates/bevy_ym2149",

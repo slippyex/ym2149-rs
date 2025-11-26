@@ -109,7 +109,7 @@ converters.
 - `bevy_ym2149` automatically consumes Arkos songs via
   `YmSongPlayer::Arkos`, so Bevy apps can spawn `.aks` files alongside
   YM playbacks.
-- `ym2149-ym-replayer-cli` ships an Arkos demo mode where the CLI exposes both
+- `ym2149-replayer-cli` ships an Arkos demo mode where the CLI exposes both
   YM and AKS playback through the same visualization stack.
 - All PSG backends in the workspace implement `Ym2149Backend`, so the
   Arkos player can share the execution path with YM files, exports, and

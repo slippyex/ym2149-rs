@@ -15,7 +15,7 @@ graph TB
         BEVY_VIZ["bevy_ym2149_viz<br/>Visualization Components"]
         BEVY["bevy_ym2149<br/>Bevy Audio Plugin"]
         WASM["ym2149-wasm<br/>WASM/Browser"]
-        CLI["ym2149-ym-replayer-cli<br/>CLI / Export"]
+        CLI["ym2149-replayer-cli<br/>CLI / Export"]
     end
 
     subgraph "Layer 3: Playback Engines"
@@ -66,7 +66,7 @@ graph TB
 | **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization ECS systems | Consumed by example scenes |
 | **bevy_ym2149_examples** | 4 | Runnable Bevy demos | Example scenes | Demonstrates plugin usage |
 | **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | Auto-detects YM/AKS/AY (CPC AY disabled) |
-| **ym2149-ym-replayer-cli** | 4 | Terminal streaming/export CLI | `main.rs` | Streams YM/AKS/ZX-AY (CPC AY rejected with warning) |
+| **ym2149-replayer-cli** | 4 | Terminal streaming/export CLI | `main.rs` | Streams YM/AKS/ZX-AY (CPC AY rejected with warning) |
 
 ---
 
@@ -534,7 +534,7 @@ Ym2149VizPlugin
 
 ### CLI / Streaming
 
-`ym2149-ym-replayer-cli` wraps `ym2149-ym-replayer` + `ym2149-arkos-replayer` under a single
+`ym2149-replayer-cli` wraps `ym2149-ym-replayer` + `ym2149-arkos-replayer` under a single
 `RealtimeChip` trait. It wires streaming audio (`ym2149::streaming`),
 terminal visualization, and hotkeys for muting, color filter toggles,
 and tracker metadata.
@@ -645,7 +645,7 @@ bevy_ym2149_examples
         │
         └──────────────────────────────────────────────┐
                                                        ↓
-ym2149-ym-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
+ym2149-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
 
 ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
 

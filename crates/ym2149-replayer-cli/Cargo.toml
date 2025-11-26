@@ -1,5 +1,5 @@
 [package]
-name = "ym2149-ym-replayer-cli"
+name = "ym2149-replayer-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

@@ -122,7 +122,7 @@ The repository is a Cargo workspace composed of loosely-coupled crates:
 - **`crates/ym2149-ym-replayer/`** – YM file parser + replayer (YM3/4/5/6 parsers, loader, compression helpers, YM player core).
 - **`crates/ym2149-ay-replayer/`** – Project AY (`.ay`) parser and Z80-based player.
 - **`crates/ym2149-arkos-replayer/`** – Arkos Tracker player + support types.
-- **`crates/ym2149-ym-replayer-cli/`** – Command-line frontend (streaming pipeline, visualization, input handling).
+- **`crates/ym2149-replayer-cli/`** – Command-line frontend (streaming pipeline, visualization, input handling).
 - **Engine/Visualization crates** – `crates/bevy_ym2149*`, `crates/ym2149-wasm`, etc. that embed the core library into downstream apps.
 
 ### Design Principles
