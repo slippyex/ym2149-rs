@@ -2,11 +2,11 @@
 //!
 //! Wraps `AyPlayer` to provide a consistent interface for the browser player.
 
+use crate::metadata::{YmMetadata, metadata_from_ay};
 use ym2149_ay_replayer::{
     AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyState,
 };
 use ym2149_ym_replayer::PlaybackState;
-use crate::metadata::{metadata_from_ay, YmMetadata};
 
 /// AY player wrapper for WebAssembly.
 pub struct AyWasmPlayer {

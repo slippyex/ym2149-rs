@@ -29,8 +29,8 @@
 //! ```
 
 mod chiptune_player;
-mod sample_voice;
 mod psg_output;
+mod sample_voice;
 mod tick;
 
 pub use chiptune_player::ArkosMetadata;
@@ -40,9 +40,9 @@ mod tests;
 
 use std::sync::Arc;
 
-use crate::channel_player::ChannelPlayer;
 #[cfg(all(test, feature = "extended-tests"))]
 use crate::channel_player::ChannelFrame;
+use crate::channel_player::ChannelPlayer;
 use crate::effect_context::EffectContext;
 use crate::error::{ArkosError, Result};
 use crate::format::{AksSong, SongMetadata};
@@ -51,7 +51,7 @@ use ym2149::ym2149::PsgBank;
 use ym2149::ym2149::Ym2149;
 
 use sample_voice::{HardwareEnvelopeState, SampleVoiceMixer};
-use tick::{determine_speed_for_location, TickContext};
+use tick::{TickContext, determine_speed_for_location};
 
 // Re-export for tests
 #[cfg(all(test, feature = "extended-tests"))]

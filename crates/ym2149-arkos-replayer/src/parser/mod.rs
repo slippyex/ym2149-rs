@@ -51,16 +51,16 @@
 //! - Effects use `<effect>` with `<logicalValue>`
 //! - Explicit `<positions>` block separate from patterns
 
-mod state;
 mod helpers;
+mod state;
 mod xml_parser;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export public API
-pub use state::{FormatVersion, ParseState, SampleInstrumentBuilder, DEFAULT_DIGIDRUM_NOTE};
 pub use helpers::{parse_positions_block, skip_block};
+pub use state::{DEFAULT_DIGIDRUM_NOTE, FormatVersion, ParseState, SampleInstrumentBuilder};
 
 use crate::error::{ArkosError, Result};
 use crate::format::AksSong;

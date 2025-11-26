@@ -7,7 +7,7 @@ use ym2149_ay_replayer::{
     AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyState,
 };
 use ym2149_common::{PlaybackMetadata, PlaybackState as SndhState};
-use ym2149_sndh_replayer::{is_sndh_data, load_sndh, SndhPlayer};
+use ym2149_sndh_replayer::{SndhPlayer, is_sndh_data, load_sndh};
 use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
 
 use crate::audio_source::Ym2149Metadata;
@@ -606,8 +606,9 @@ pub struct SndhBevyPlayer {
 
 impl SndhBevyPlayer {
     fn new(player: SndhPlayer, metadata: Ym2149Metadata) -> Self {
-        let samples_per_frame =
-            (YM2149_SAMPLE_RATE_F32 / player.player_rate() as f32).round().max(1.0) as u32;
+        let samples_per_frame = (YM2149_SAMPLE_RATE_F32 / player.player_rate() as f32)
+            .round()
+            .max(1.0) as u32;
 
         Self {
             player,

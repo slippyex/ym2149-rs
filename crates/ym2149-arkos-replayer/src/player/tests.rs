@@ -2,8 +2,8 @@
 
 #![cfg(all(test, feature = "extended-tests"))]
 
-use super::*;
 use super::psg_output::frames_to_registers;
+use super::*;
 use crate::parser::load_aks;
 use std::path::PathBuf;
 use ym2149_ym_replayer::parser::ym6::Ym6Parser;

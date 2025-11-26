@@ -45,7 +45,7 @@ use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
 use ym2149_ym_replayer::{PlaybackState, load_song};
 
-use metadata::{metadata_from_summary, YmMetadata};
+use metadata::{YmMetadata, metadata_from_summary};
 use players::{BrowserSongPlayer, arkos::ArkosWasmPlayer, ay::AyWasmPlayer, sndh::SndhWasmPlayer};
 
 /// Sample rate used for audio generation.

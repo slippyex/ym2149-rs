@@ -49,7 +49,9 @@ pub fn ice_original_size(data: &[u8]) -> u32 {
 /// Decompressed data, or error if decompression fails.
 pub fn ice_depack(src: &[u8]) -> Result<Vec<u8>> {
     if !is_ice_packed(src) {
-        return Err(SndhError::IceDepackError("No ICE! header found".to_string()));
+        return Err(SndhError::IceDepackError(
+            "No ICE! header found".to_string(),
+        ));
     }
 
     let packed_size = ice_packed_size(src) as usize;
@@ -238,7 +240,8 @@ impl<'a> IceState<'a> {
                     break;
                 }
             }
-            let mut pos = POS_OFFSET[table_pos] + self.get_bits(POS_EXTRA_BITS[table_pos])? as usize;
+            let mut pos =
+                POS_OFFSET[table_pos] + self.get_bits(POS_EXTRA_BITS[table_pos])? as usize;
             if pos != 0 {
                 pos += len;
             }

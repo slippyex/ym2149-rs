@@ -3,11 +3,11 @@
 //! Wraps `SndhPlayer` to provide a consistent interface for the browser player.
 
 use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState as SndhState};
-use ym2149_sndh_replayer::{load_sndh, SndhPlayer};
+use ym2149_sndh_replayer::{SndhPlayer, load_sndh};
 use ym2149_ym_replayer::PlaybackState;
 
-use crate::metadata::YmMetadata;
 use crate::YM_SAMPLE_RATE_F32;
+use crate::metadata::YmMetadata;
 
 /// SNDH player wrapper for WebAssembly.
 pub struct SndhWasmPlayer {

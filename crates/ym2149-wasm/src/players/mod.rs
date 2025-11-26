@@ -7,10 +7,10 @@ pub mod arkos;
 pub mod ay;
 pub mod sndh;
 
-use ym2149_ym_replayer::{PlaybackController, PlaybackState};
 use arkos::ArkosWasmPlayer;
 use ay::AyWasmPlayer;
 use sndh::SndhWasmPlayer;
+use ym2149_ym_replayer::{PlaybackController, PlaybackState};
 
 /// Unified player enum for all supported formats.
 pub enum BrowserSongPlayer {

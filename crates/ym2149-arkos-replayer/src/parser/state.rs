@@ -4,8 +4,8 @@
 //! including the parse state enum and temporary builder structs for
 //! constructing complex data structures.
 
-use crate::format::SampleInstrument;
 use crate::error::{ArkosError, Result};
+use crate::format::SampleInstrument;
 use std::sync::Arc;
 
 /// Default digidrum note (octave 6, middle C)

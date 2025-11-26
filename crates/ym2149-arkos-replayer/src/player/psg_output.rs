@@ -3,8 +3,8 @@
 //! This module handles writing channel data to the YM2149 PSG registers,
 //! including tone periods, volumes, mixer settings, noise, and hardware envelopes.
 
-use crate::channel_player::{ChannelFrame, ChannelOutput};
 use super::sample_voice::HardwareEnvelopeState;
+use crate::channel_player::{ChannelFrame, ChannelOutput};
 use ym2149::ym2149::PsgBank;
 
 /// Writes channel frames to PSG registers.

@@ -1,7 +1,7 @@
 //! Sample voice state and conversion to playback parameters.
 
-use std::sync::Arc;
 use super::output::SamplePlaybackParams;
+use std::sync::Arc;
 
 /// Internal sample voice state for tracking active sample playback
 #[derive(Clone)]

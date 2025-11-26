@@ -1,8 +1,8 @@
 //! Handles XML end element events during AKS parsing.
 
-use std::collections::HashMap;
 use crate::error::Result;
 use crate::format::*;
+use std::collections::HashMap;
 
 use super::super::state::*;
 
@@ -72,8 +72,7 @@ pub fn handle_end_element(
                     if format_version == FormatVersion::Legacy {
                         let mut transpositions = current_pattern_transpositions.clone();
                         if transpositions.len() < current_pattern_track_indexes.len() {
-                            transpositions
-                                .resize(current_pattern_track_indexes.len(), 0);
+                            transpositions.resize(current_pattern_track_indexes.len(), 0);
                         }
                         subsong.positions.push(Position {
                             pattern_index,
@@ -150,8 +149,7 @@ pub fn handle_end_element(
         "arpeggioCell" if *current_state == ParseState::LegacyArpeggioCell => {
             if let Some(arp) = current_arpeggio.as_mut() {
                 let value = (legacy_arpeggio_octave * 12 + legacy_arpeggio_note)
-                    .clamp(i8::MIN as i32, i8::MAX as i32)
-                    as i8;
+                    .clamp(i8::MIN as i32, i8::MAX as i32) as i8;
                 arp.values.push(value);
             }
             *current_state = ParseState::Arpeggio;
@@ -181,9 +179,7 @@ pub fn handle_end_element(
             *current_state = ParseState::Root;
         }
         "psg" | "psgMetadata" if *current_state == ParseState::SubsongPsg => {
-            if let (Some(psg), Some(subsong)) =
-                (current_psg.take(), current_subsong.as_mut())
-            {
+            if let (Some(psg), Some(subsong)) = (current_psg.take(), current_subsong.as_mut()) {
                 subsong.psgs.push(psg);
             }
             *current_state = if format_version == FormatVersion::Legacy {
@@ -197,9 +193,7 @@ pub fn handle_end_element(
         }
         "effect" if *current_state == ParseState::Effect => {
             if *current_effect_container == Some(EffectContainer::Modern) {
-                if let (Some(eff), Some(cell)) =
-                    (current_effect.take(), current_cell.as_mut())
-                {
+                if let (Some(eff), Some(cell)) = (current_effect.take(), current_cell.as_mut()) {
                     cell.effects.push(eff);
                 }
                 *current_effect_container = None;
@@ -207,26 +201,20 @@ pub fn handle_end_element(
             }
         }
         "effectAndValue" if *current_state == ParseState::Effect => {
-            if let (Some(eff), Some(cell)) =
-                (current_effect.take(), current_cell.as_mut())
-            {
+            if let (Some(eff), Some(cell)) = (current_effect.take(), current_cell.as_mut()) {
                 cell.effects.push(eff);
             }
             *current_effect_container = None;
             *current_state = ParseState::Cell;
         }
         "cell" if *current_state == ParseState::Cell => {
-            if let (Some(cell), Some(track)) =
-                (current_cell.take(), current_track.as_mut())
-            {
+            if let (Some(cell), Some(track)) = (current_cell.take(), current_track.as_mut()) {
                 track.cells.push(cell);
             }
             *current_state = ParseState::Track;
         }
         "track" if *current_state == ParseState::Track => {
-            if let (Some(track), Some(subsong)) =
-                (current_track.take(), current_subsong.as_mut())
-            {
+            if let (Some(track), Some(subsong)) = (current_track.take(), current_subsong.as_mut()) {
                 let track_index = track.index;
                 subsong.tracks.insert(track_index, track);
             }

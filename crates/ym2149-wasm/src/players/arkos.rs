@@ -2,10 +2,10 @@
 //!
 //! Wraps `ArkosPlayer` to provide a consistent interface for the browser player.
 
+use crate::YM_SAMPLE_RATE_F32;
+use crate::metadata::YmMetadata;
 use ym2149_arkos_replayer::ArkosPlayer;
 use ym2149_ym_replayer::PlaybackState;
-use crate::metadata::YmMetadata;
-use crate::YM_SAMPLE_RATE_F32;
 
 /// Arkos player wrapper for WebAssembly.
 pub struct ArkosWasmPlayer {

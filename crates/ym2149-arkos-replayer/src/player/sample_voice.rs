@@ -3,8 +3,8 @@
 //! This module handles the playback of PCM samples alongside PSG audio,
 //! supporting features like looping, pitch shifting, and volume control.
 
-use std::sync::Arc;
 use crate::channel_player::{SampleCommand, SamplePlaybackParams};
+use std::sync::Arc;
 
 /// Mixes sample playback into the audio output.
 ///

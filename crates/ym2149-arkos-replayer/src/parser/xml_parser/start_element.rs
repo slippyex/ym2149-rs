@@ -1,12 +1,12 @@
 //! Handles XML start element events during AKS parsing.
 
-use std::collections::HashMap;
 use crate::error::Result;
 use crate::format::*;
 use quick_xml::Reader;
+use std::collections::HashMap;
 
-use super::super::state::*;
 use super::super::helpers::*;
+use super::super::state::*;
 
 /// Handles XML start element events.
 ///

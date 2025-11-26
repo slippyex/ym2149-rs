@@ -166,7 +166,8 @@ impl AtariMemory {
                 self.ym_selected_reg = ((value >> 8) as u8) & 0x0F;
             } else {
                 // Port 2: Write to selected register (using high byte)
-                self.ym2149.write_register(self.ym_selected_reg, (value >> 8) as u8);
+                self.ym2149
+                    .write_register(self.ym_selected_reg, (value >> 8) as u8);
             }
             return;
         }
@@ -335,12 +336,14 @@ impl AtariMachine {
     }
 
     fn configure_return_by_rts(&mut self) {
-        self.memory.write_long(RAM_SIZE as u32 - 4, RESET_INSTRUCTION_ADDR);
+        self.memory
+            .write_long(RAM_SIZE as u32 - 4, RESET_INSTRUCTION_ADDR);
         self.memory.write_long(0, RAM_SIZE as u32 - 4);
     }
 
     fn configure_return_by_rte(&mut self) {
-        self.memory.write_long(RAM_SIZE as u32 - 4, RESET_INSTRUCTION_ADDR);
+        self.memory
+            .write_long(RAM_SIZE as u32 - 4, RESET_INSTRUCTION_ADDR);
         self.memory.write_word(RAM_SIZE as u32 - 6, 0x2300);
         self.memory.write_long(0, RAM_SIZE as u32 - 6);
     }

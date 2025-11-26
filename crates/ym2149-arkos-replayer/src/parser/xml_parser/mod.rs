@@ -9,15 +9,15 @@
 //! - [`text_content`] - Handles text content between elements
 //! - [`end_element`] - Handles XML end element events
 
+mod end_element;
 mod start_element;
 mod text_content;
-mod end_element;
 
-use std::collections::HashMap;
 use crate::error::{ArkosError, Result};
 use crate::format::*;
 use quick_xml::Reader;
 use quick_xml::events::Event;
+use std::collections::HashMap;
 
 use super::state::*;
 

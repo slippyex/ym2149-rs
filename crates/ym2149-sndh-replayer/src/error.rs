@@ -54,7 +54,10 @@ impl fmt::Display for SndhError {
             Self::InvalidHeader(msg) => write!(f, "Invalid SNDH header: {msg}"),
             Self::IceDepackError(msg) => write!(f, "ICE decompression failed: {msg}"),
             Self::InvalidSubsong { index, available } => {
-                write!(f, "Invalid subsong index {index} (available: 1-{available})")
+                write!(
+                    f,
+                    "Invalid subsong index {index} (available: 1-{available})"
+                )
             }
             Self::CpuError(msg) => write!(f, "CPU execution error: {msg}"),
             Self::MemoryError { address, msg } => {

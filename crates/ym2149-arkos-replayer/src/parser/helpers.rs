@@ -3,11 +3,11 @@
 //! Utility functions for common parsing operations like skipping blocks,
 //! parsing positions, and reading text content.
 
+use super::state::local_name_from_bytes;
 use crate::error::{ArkosError, Result};
 use crate::format::Position;
 use quick_xml::Reader;
 use quick_xml::events::Event;
-use super::state::local_name_from_bytes;
 
 /// Parses the `<positions>` block from subsong XML.
 ///

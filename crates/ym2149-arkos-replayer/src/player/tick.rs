@@ -8,11 +8,11 @@
 
 use std::sync::Arc;
 
+use super::psg_output::write_frames_to_psg;
+use super::sample_voice::{HardwareEnvelopeState, SampleVoiceMixer, note_frequency};
 use crate::channel_player::{ChannelFrame, ChannelPlayer, SampleCommand, SamplePlaybackParams};
 use crate::effect_context::EffectContext;
 use crate::format::{AksSong, InstrumentType, Subsong};
-use super::sample_voice::{note_frequency, HardwareEnvelopeState, SampleVoiceMixer};
-use super::psg_output::write_frames_to_psg;
 use ym2149::ym2149::PsgBank;
 
 /// Tick processing context containing all mutable state needed for a tick.
@@ -80,13 +80,23 @@ impl TickContext<'_> {
         if is_first_tick {
             for (channel_idx, channel_player) in self.channel_players.iter_mut().enumerate() {
                 if *self.current_position >= position_count {
-                    frames.push(channel_player.play_frame(None, 0, is_first_tick, still_within_line));
+                    frames.push(channel_player.play_frame(
+                        None,
+                        0,
+                        is_first_tick,
+                        still_within_line,
+                    ));
                     continue;
                 }
 
                 let (cell, transposition) = {
                     let subsong = &self.song.subsongs[self.subsong_index];
-                    resolve_cell(subsong, *self.current_position, *self.current_line, channel_idx)
+                    resolve_cell(
+                        subsong,
+                        *self.current_position,
+                        *self.current_line,
+                        channel_idx,
+                    )
                 };
 
                 if let Some(context) = self
@@ -97,7 +107,12 @@ impl TickContext<'_> {
                     channel_player.apply_line_context(&context);
                 }
 
-                let frame = channel_player.play_frame(cell, transposition, is_first_tick, still_within_line);
+                let frame = channel_player.play_frame(
+                    cell,
+                    transposition,
+                    is_first_tick,
+                    still_within_line,
+                );
                 frames.push(frame);
             }
         } else {

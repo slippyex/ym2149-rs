@@ -1,11 +1,11 @@
 //! Handles XML text content during AKS parsing.
 
-use std::collections::HashMap;
 use crate::effects::EffectType;
 use crate::error::{ArkosError, Result};
 use crate::format::*;
 use crate::psg::split_note;
 use base64::{Engine as _, engine::general_purpose};
+use std::collections::HashMap;
 
 use super::super::state::*;
 
@@ -189,8 +189,7 @@ pub fn handle_text_content(
                 (current_sample_builder.as_mut(), current_instrument.as_ref())
                 && instr.instrument_type == InstrumentType::Digi
             {
-                builder.digidrum_note =
-                    current_text.parse().unwrap_or(DEFAULT_DIGIDRUM_NOTE);
+                builder.digidrum_note = current_text.parse().unwrap_or(DEFAULT_DIGIDRUM_NOTE);
             }
         }
         (ParseState::Instrument, "sampleUnsigned8BitsBase64") => {
@@ -202,10 +201,9 @@ pub fn handle_text_content(
                     .chars()
                     .filter(|c| !c.is_whitespace())
                     .collect();
-                let decoded =
-                    general_purpose::STANDARD.decode(sanitized).map_err(|e| {
-                        ArkosError::InvalidFormat(format!("Invalid sample data: {e}"))
-                    })?;
+                let decoded = general_purpose::STANDARD
+                    .decode(sanitized)
+                    .map_err(|e| ArkosError::InvalidFormat(format!("Invalid sample data: {e}")))?;
                 let pcm: Vec<f32> = decoded
                     .into_iter()
                     .map(|byte| (byte as f32 - 128.0) / 128.0)
@@ -233,8 +231,7 @@ pub fn handle_text_content(
         }
         (ParseState::InstrumentCell, "primaryArpeggioNoteInOctave") => {
             if let Some(cell) = current_instrument_cell {
-                cell.primary_arpeggio_note_in_octave =
-                    current_text.parse().unwrap_or(0);
+                cell.primary_arpeggio_note_in_octave = current_text.parse().unwrap_or(0);
             }
         }
         (ParseState::InstrumentCell, "softwareArpeggio") => {
@@ -259,20 +256,12 @@ pub fn handle_text_content(
         (ParseState::InstrumentCell, "link") => {
             if let Some(cell) = current_instrument_cell {
                 cell.link = match current_text {
-                    "noSoftwareNoHardware" | "noSoftNoHard" => {
-                        ChannelLink::NoSoftwareNoHardware
-                    }
+                    "noSoftwareNoHardware" | "noSoftNoHard" => ChannelLink::NoSoftwareNoHardware,
                     "softwareOnly" | "softOnly" => ChannelLink::SoftwareOnly,
                     "hardwareOnly" | "hardOnly" => ChannelLink::HardwareOnly,
-                    "softwareAndHardware" | "softAndHard" => {
-                        ChannelLink::SoftwareAndHardware
-                    }
-                    "softwareToHardware" | "softToHard" => {
-                        ChannelLink::SoftwareToHardware
-                    }
-                    "hardwareToSoftware" | "hardToSoft" => {
-                        ChannelLink::HardwareToSoftware
-                    }
+                    "softwareAndHardware" | "softAndHard" => ChannelLink::SoftwareAndHardware,
+                    "softwareToHardware" | "softToHard" => ChannelLink::SoftwareToHardware,
+                    "hardwareToSoftware" | "hardToSoft" => ChannelLink::HardwareToSoftware,
                     _ => ChannelLink::NoSoftwareNoHardware,
                 };
             }
@@ -296,8 +285,7 @@ pub fn handle_text_content(
         }
         (ParseState::InstrumentCell, "secondaryArpeggioNoteInOctave") => {
             if let Some(cell) = current_instrument_cell {
-                cell.secondary_arpeggio_note_in_octave =
-                    current_text.parse().unwrap_or(0);
+                cell.secondary_arpeggio_note_in_octave = current_text.parse().unwrap_or(0);
             }
         }
         (ParseState::InstrumentCell, "hardwareArpeggio") => {
@@ -435,13 +423,11 @@ pub fn handle_text_content(
                 pat.event_track_index = current_text.parse().unwrap_or(0);
             }
         }
-        (ParseState::PatternCell, "trackNumber")
-        | (ParseState::PatternCell, "trackIndex") => {
+        (ParseState::PatternCell, "trackNumber") | (ParseState::PatternCell, "trackIndex") => {
             *current_pattern_cell_track_number = Some(current_text.parse().unwrap_or(0));
         }
         (ParseState::PatternCell, "transposition") => {
-            *current_pattern_cell_transposition =
-                current_text.parse::<i32>().unwrap_or(0) as i8;
+            *current_pattern_cell_transposition = current_text.parse::<i32>().unwrap_or(0) as i8;
         }
         (ParseState::Pattern, "colorArgb") => {
             if let Some(pat) = current_pattern {
@@ -495,14 +481,12 @@ pub fn handle_text_content(
                 s.end_position = current_text.parse().unwrap_or(0);
             }
         }
-        (ParseState::Subsong, "loopStartPosition")
-        | (ParseState::Subsong, "loopStartIndex") => {
+        (ParseState::Subsong, "loopStartPosition") | (ParseState::Subsong, "loopStartIndex") => {
             if let Some(s) = current_subsong {
                 s.loop_start_position = current_text.parse().unwrap_or(0);
             }
         }
-        (ParseState::Subsong, "replayFrequencyHz")
-        | (ParseState::Subsong, "replayFrequency") => {
+        (ParseState::Subsong, "replayFrequencyHz") | (ParseState::Subsong, "replayFrequency") => {
             if let Some(s) = current_subsong {
                 s.replay_frequency_hz = current_text.parse().unwrap_or(50.0);
             }
@@ -523,8 +507,7 @@ pub fn handle_text_content(
                 };
             }
         }
-        (ParseState::SubsongPsg, "frequencyHz")
-        | (ParseState::SubsongPsg, "psgFrequency") => {
+        (ParseState::SubsongPsg, "frequencyHz") | (ParseState::SubsongPsg, "psgFrequency") => {
             if let Some(psg) = current_psg {
                 psg.psg_frequency = current_text.parse().unwrap_or(2_000_000);
             }
@@ -634,9 +617,7 @@ pub fn handle_text_content(
                                     }
                                 }
                                 EffectType::PitchTable => {
-                                    if let Some(&mapped) =
-                                        legacy_pitch_map.get(&(value as usize))
-                                    {
+                                    if let Some(&mapped) = legacy_pitch_map.get(&(value as usize)) {
                                         value = mapped as i32;
                                     }
                                 }

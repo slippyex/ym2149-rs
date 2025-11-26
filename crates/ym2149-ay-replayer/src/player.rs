@@ -19,7 +19,10 @@ pub const CPC_UNSUPPORTED_MSG: &str =
     "CPC AY songs currently require full CPC firmware emulation, which is not supported";
 
 /// Backwards compatibility alias for `PlaybackState`.
-#[deprecated(since = "0.7.0", note = "Use `PlaybackState` from `ym2149_common` instead")]
+#[deprecated(
+    since = "0.7.0",
+    note = "Use `PlaybackState` from `ym2149_common` instead"
+)]
 pub type AyPlaybackState = PlaybackState;
 
 /// Runtime metadata about the currently loaded song.

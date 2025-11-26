@@ -4,8 +4,8 @@
 //! providing a common interface for YM file playback alongside other chiptune formats.
 
 use super::PlaybackState as InternalState;
-use super::ym6::Ym6Info;
 use super::ym_player::Ym6PlayerGeneric;
+use super::ym6::Ym6Info;
 use ym2149::Ym2149Backend;
 use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState};
 
