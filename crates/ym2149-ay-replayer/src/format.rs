@@ -1,7 +1,7 @@
 //! Data structures describing parsed AY files.
 
 /// Parsed AY file with header information and available songs.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AyFile {
     /// Header metadata.
     pub header: AyHeader,
@@ -10,7 +10,7 @@ pub struct AyFile {
 }
 
 /// AY file header metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AyHeader {
     /// Container format version.
     pub file_version: u16,
@@ -29,7 +29,7 @@ pub struct AyHeader {
 }
 
 /// AY song entry.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AySong {
     /// Song title as stored in the AY file.
     pub name: String,
@@ -38,7 +38,7 @@ pub struct AySong {
 }
 
 /// Metadata and PSG/memory layout for a single AY song.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AySongData {
     /// Channel routing (Amiga channel order A/B/C/Noise).
     pub channel_map: [u8; 4],
@@ -57,7 +57,7 @@ pub struct AySongData {
 }
 
 /// Z80 register setup extracted from the Points structure.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AyPoints {
     /// Initial stack pointer.
     pub stack: u16,
@@ -68,7 +68,7 @@ pub struct AyPoints {
 }
 
 /// Memory block definition (address + data payload).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AyBlock {
     /// Load address inside the Z80 memory map.
     pub address: u16,

@@ -11,6 +11,7 @@
 
 use super::{ATTR_DRUM_4BIT, FormatParser, decode_4bit_digidrum};
 use crate::Result;
+use ym2149_common::PlaybackMetadata;
 
 /// Type alias for full YM parse result: frames, header, metadata, digidrums
 pub type YmParseResult = (Vec<[u8; 16]>, YmHeader, YmMetadata, Vec<Vec<u8>>);
@@ -32,6 +33,36 @@ pub struct YmMetadata {
     /// Player/VBL frequency in Hz (YM5 only, None for YM4)
     /// Typical values: 50 Hz (PAL), 60 Hz (NTSC)
     pub player_freq: Option<u16>,
+}
+
+impl PlaybackMetadata for YmMetadata {
+    fn title(&self) -> &str {
+        &self.song_name
+    }
+
+    fn author(&self) -> &str {
+        &self.author
+    }
+
+    fn comments(&self) -> &str {
+        &self.comment
+    }
+
+    fn format(&self) -> &str {
+        "YM"
+    }
+
+    fn frame_rate(&self) -> u32 {
+        self.player_freq.map(|f| f as u32).unwrap_or(50)
+    }
+
+    fn loop_frame(&self) -> Option<usize> {
+        if self.loop_frame > 0 {
+            Some(self.loop_frame as usize)
+        } else {
+            None
+        }
+    }
 }
 
 /// Header information for YM4/YM5 formats

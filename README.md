@@ -5,6 +5,7 @@
 | Crate | crates.io | docs.rs |
 |-------|-----------|---------|
 | `ym2149` | [![ym2149](https://img.shields.io/crates/v/ym2149.svg?label=ym2149)](https://crates.io/crates/ym2149) | [![ym2149 docs](https://docs.rs/ym2149/badge.svg)](https://docs.rs/ym2149) |
+| `ym2149-common` | [![ym2149-common](https://img.shields.io/crates/v/ym2149-common.svg?label=ym2149-common)](https://crates.io/crates/ym2149-common) | [![ym2149-common docs](https://docs.rs/ym2149-common/badge.svg)](https://docs.rs/ym2149-common) |
 | `ym2149-ym-replayer` | [![ym2149-ym-replayer](https://img.shields.io/crates/v/ym2149-ym-replayer.svg?label=ym2149-ym-replayer)](https://crates.io/crates/ym2149-ym-replayer) | [![ym2149-ym-replayer docs](https://docs.rs/ym2149-ym-replayer/badge.svg)](https://docs.rs/ym2149-ym-replayer) |
 | `ym2149-arkos-replayer` | [![ym2149-arkos-replayer](https://img.shields.io/crates/v/ym2149-arkos-replayer.svg?label=ym2149-arkos-replayer)](https://crates.io/crates/ym2149-arkos-replayer) | [![ym2149-arkos-replayer docs](https://docs.rs/ym2149-arkos-replayer/badge.svg)](https://docs.rs/ym2149-arkos-replayer) |
 | `ym2149-ay-replayer` | [![ym2149-ay-replayer](https://img.shields.io/crates/v/ym2149-ay-replayer.svg?label=ym2149-ay-replayer)](https://crates.io/crates/ym2149-ay-replayer) | [![ym2149-ay-replayer docs](https://docs.rs/ym2149-ay-replayer/badge.svg)](https://docs.rs/ym2149-ay-replayer) |
@@ -43,9 +44,9 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 - 🎯 Cycle-accurate YM2149 emulation
 
 <details>
-<summary>📸 Web Player Screenshot</summary>
+<summary>📸 Web Player Preview</summary>
 
-![Web Player](docs/screenshots/web-player.png)
+Try it live: **[slippyex.github.io/ym2149-rs](https://slippyex.github.io/ym2149-rs/)**
 
 *Retro CRT-style interface with drag & drop file loading*
 </details>
@@ -55,6 +56,7 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 | Crate | Purpose | Crates.io | Docs |
 |-------|---------|-----------|------|
 | [`ym2149`](crates/ym2149-core) | Core YM2149 chip emulator (cycle-accurate) | [crates.io/crates/ym2149](https://crates.io/crates/ym2149) | [docs.rs/ym2149](https://docs.rs/ym2149) |
+| [`ym2149-common`](crates/ym2149-common) | Shared traits (`ChiptunePlayer`, `PlaybackMetadata`) and types | [crates.io/crates/ym2149-common](https://crates.io/crates/ym2149-common) | [docs.rs/ym2149-common](https://docs.rs/ym2149-common) |
 | [`ym2149-ym-replayer`](crates/ym2149-ym-replayer) | YM file parsing and music playback (YM1-YM6, YMT1/YMT2 tracker) | [crates.io/crates/ym2149-ym-replayer](https://crates.io/crates/ym2149-ym-replayer) | [docs.rs/ym2149-ym-replayer](https://docs.rs/ym2149-ym-replayer) |
 | [`ym2149-ym-replayer-cli`](crates/ym2149-ym-replayer-cli) | Standalone CLI player with streaming and export | Unpublished (workspace) | – |
 | [`ym2149-softsynth`](crates/ym2149-softsynth) | Experimental software synthesizer backend (proof-of-concept) | Unpublished (workspace) | [crates/ym2149-softsynth/README.md](crates/ym2149-softsynth/README.md) |
@@ -99,25 +101,29 @@ In short: Arkos lets artists work with modern ergonomics, and this workspace let
 ```toml
 [dependencies]
 # Core emulator only (minimal dependencies)
-ym2149 = "0.6.1"
+ym2149 = "0.7"
 
 # With streaming audio output
-ym2149 = { version = "0.6.1", features = ["streaming"] }
+ym2149 = { version = "0.7", features = ["streaming"] }
 
 # YM file parsing and playback
-ym2149-ym-replayer = "0.6.1"
+ym2149-ym-replayer = "0.7"
 ```
 
 ```rust
-use ym2149_ym_replayer::{load_song, PlaybackController};
+use ym2149_ym_replayer::{load_song, ChiptunePlayer, PlaybackMetadata};
 
 fn main() -> anyhow::Result<()> {
     let data = std::fs::read("song.ym")?;
     let (mut player, summary) = load_song(&data)?;
 
-    player.play()?;
+    // Use the unified ChiptunePlayer interface
+    player.play();
     let samples = player.generate_samples(summary.samples_per_frame as usize);
-    println!("{} frames • {} samples", summary.frame_count, samples.len());
+
+    // Access metadata via PlaybackMetadata trait
+    let meta = player.metadata();
+    println!("{} by {} • {} frames", meta.title(), meta.author(), summary.frame_count);
     Ok(())
 }
 ```
@@ -218,6 +224,7 @@ cargo test -p ym2149 --features streaming
 ym2149-rs/
 ├── crates/
 │   ├── ym2149-core/            # Core YM2149 chip emulator (crates.io `ym2149`)
+│   ├── ym2149-common/          # Shared traits (ChiptunePlayer, PlaybackMetadata) and types
 │   ├── ym2149-softsynth/       # Experimental soft synth backend implementing the backend trait
 │   ├── ym2149-ym-replayer/     # YM parser + playback engine
 │   ├── ym2149-arkos-replayer/  # Arkos Tracker (.aks) parser/player

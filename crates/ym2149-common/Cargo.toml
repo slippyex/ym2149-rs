@@ -1,0 +1,13 @@
+[package]
+name = "ym2149-common"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Common traits and types for YM2149 chiptune replayers"
+keywords = ["ym2149", "chiptune", "audio", "retro"]
+categories = ["multimedia::audio"]
+
+[dependencies]

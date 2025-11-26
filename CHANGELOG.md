@@ -2,6 +2,52 @@
 
 All notable changes to the ym2149-rs project.
 
+## [Unreleased] - v0.7.0
+
+### Added
+- **`ym2149-common` crate** - New shared crate providing unified traits and types across all replayers:
+  - `ChiptunePlayer` trait - Common playback interface for all player types (play, pause, stop, state, generate_samples)
+  - `PlaybackMetadata` trait - Unified metadata access across YM, AKS, and AY formats
+  - `PlaybackState` enum - Standard playback states (Stopped, Playing, Paused)
+  - `BasicMetadata` struct - Simple metadata container for generic use cases
+- `ChiptunePlayer` implementations for all three player types:
+  - `Ym6PlayerGeneric<B>` in `ym2149-ym-replayer`
+  - `ArkosPlayer` in `ym2149-arkos-replayer`
+  - `AyPlayer` in `ym2149-ay-replayer`
+
+### Changed
+- **Module restructuring** - Split large modules into organized submodules:
+  - `ym2149-ym-replayer`: `parser.rs` → `parser/` module, `player.rs` → `player/` module
+  - `ym2149-arkos-replayer`: `parser.rs` → `parser/` module, `player.rs` → `player/` module, `channel_player.rs` → `channel_player/` module
+- Migrated all error handling to `thiserror` for consistent, idiomatic error types
+- Added `Default` trait implementations to key player configuration types
+- Added `PartialEq`, `Eq` derives to format structs (`AyFile`, `AyHeader`, `AySong`, etc.)
+- Added `PartialEq` to metadata types (`Ym6Metadata`, `ArkosMetadata`, `AyMetadata`, `BasicMetadata`)
+- **`AyPlaybackState` deprecated** - Use `PlaybackState` from `ym2149-common` instead (backwards-compatible alias provided)
+
+### Fixed
+- Removed redundant `AyPlaybackState` enum - now uses unified `PlaybackState` from `ym2149-common`
+- Metadata moved from `ym2149-core` to `ym2149-common` (core crate now only handles YM2149 chip emulation)
+
+### Migration Guide
+```rust
+// Before (0.6.x)
+use ym2149_ay_replayer::AyPlaybackState;
+
+// After (0.7.0)
+use ym2149_ay_replayer::PlaybackState;
+// or
+use ym2149_common::PlaybackState;
+
+// New unified interface
+use ym2149_common::ChiptunePlayer;
+player.play();
+player.pause();
+player.stop();
+let state = player.state(); // Returns PlaybackState
+let meta = player.metadata(); // Returns &impl PlaybackMetadata
+```
+
 ## [v0.6.1] - 2025-11-20
 
 ### Added

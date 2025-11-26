@@ -30,13 +30,13 @@ This crate provides the core YM2149 chip emulation with cycle-accurate behavior.
 
 ```toml
 [dependencies]
-ym2149 = { version = "0.6.1", features = ["emulator"] }
+ym2149 = { version = "0.7", features = ["emulator"] }
 ```
 
 For YM file playback, add:
 
 ```toml
-ym2149-ym-replayer = "0.6.1"
+ym2149-ym-replayer = "0.7"
 ```
 
 ## Quick Start
@@ -110,9 +110,9 @@ fn play_note<B: Ym2149Backend>(chip: &mut B) {
 | `streaming` | Real-time audio output (rodio) |
 | `visualization` | Terminal UI helpers |
 
-## Migration from < 0.6.1
+## Migration from < 0.7
 
-Version 0.6.1 reorganized the crate structure for better separation of concerns.
+Version 0.7 reorganized the crate structure for better separation of concerns.
 All YM file parsing and playback functionality has been moved to the `ym2149-ym-replayer` crate:
 
 ```rust

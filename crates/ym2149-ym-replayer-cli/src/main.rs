@@ -15,7 +15,7 @@ use std::time::Instant;
 use ym2149::Ym2149Backend;
 use ym2149::streaming::{DEFAULT_SAMPLE_RATE, StreamConfig};
 use ym2149_arkos_replayer::ArkosPlayer;
-use ym2149_ay_replayer::{AyPlaybackState, AyPlayer, CPC_UNSUPPORTED_MSG};
+use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyPlaybackState};
 use ym2149_ym_replayer::PlaybackController;
 use ym2149_ym_replayer::player::ym_player::Ym6PlayerGeneric;
 
@@ -220,7 +220,7 @@ impl PlaybackController for AyPlayerWrapper {
     }
 
     fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        match self.player.state() {
+        match self.player.playback_state() {
             AyPlaybackState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
             AyPlaybackState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
             AyPlaybackState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,

@@ -52,5 +52,8 @@ pub mod player;
 // Re-export player types
 pub use player::{
     CycleCounter, EffectsManager, LoadSummary, PlaybackController, PlaybackState, Player,
-    TimingConfig, VblSync, Ym6Info, Ym6Player, YmFileFormat, load_song,
+    TimingConfig, VblSync, Ym6Info, Ym6Metadata, Ym6Player, YmFileFormat, load_song,
 };
+
+// Re-export unified player trait from ym2149-common
+pub use ym2149_common::{ChiptunePlayer, PlaybackMetadata};

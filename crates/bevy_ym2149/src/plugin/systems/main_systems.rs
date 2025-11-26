@@ -1,3 +1,41 @@
+//! Core playback systems for YM2149 audio.
+//!
+//! This module contains the main ECS systems that drive YM2149 playback:
+//!
+//! # Playback Lifecycle
+//!
+//! ```text
+//! ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+//! │ Ym2149Playback  │────▶│ initialize_      │────▶│ PlaybackRuntime │
+//! │ (Component)     │     │ playback         │     │ State           │
+//! └─────────────────┘     └──────────────────┘     └─────────────────┘
+//!                                │
+//!                                ▼
+//!                         ┌──────────────────┐
+//!                         │ drive_playback_  │
+//!                         │ state            │
+//!                         └──────────────────┘
+//!                                │
+//!                                ▼
+//!                         ┌──────────────────┐
+//!                         │ process_playback │────▶ FrameAudioData
+//!                         │ _frames          │      (message event)
+//!                         └──────────────────┘
+//!                                │
+//!                 ┌──────────────┼──────────────┐
+//!                 ▼              ▼              ▼
+//!          ┌───────────┐  ┌───────────┐  ┌───────────┐
+//!          │Diagnostics│  │ Pattern   │  │ Audio     │
+//!          │ Events    │  │ Triggers  │  │ Bridge    │
+//!          └───────────┘  └───────────┘  └───────────┘
+//! ```
+//!
+//! # Key Types
+//!
+//! - [`PlaybackRuntimeState`]: Internal per-entity state (frame timing, SFX layer)
+//! - [`FrameAudioData`]: Per-frame audio samples and channel metrics
+//! - [`SfxLayer`]: Overlay synth for one-shot sound effects
+
 use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
 use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
@@ -27,6 +65,14 @@ use super::loader::{
 };
 use ym2149::util::channel_frequencies;
 
+// ============================================================================
+// Runtime State
+// ============================================================================
+
+/// Internal runtime state for a playback entity.
+///
+/// Tracks frame timing, volume changes, and manages the optional SFX overlay.
+/// This component is automatically added by [`initialize_playback`].
 #[derive(Component)]
 pub(in crate::plugin) struct PlaybackRuntimeState {
     time_since_last_frame: f32,

@@ -16,7 +16,14 @@ pub mod player;
 pub use crate::error::{AyError, Result};
 pub use crate::format::{AyBlock, AyFile, AyHeader, AyPoints, AySong, AySongData};
 pub use crate::parser::load_ay;
-pub use crate::player::{AyMetadata, AyPlaybackState, AyPlayer, CPC_UNSUPPORTED_MSG};
+pub use crate::player::{AyMetadata, AyPlayer, CPC_UNSUPPORTED_MSG};
+
+// Re-export unified player trait from ym2149-common
+pub use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState};
+
+// Backwards compatibility - deprecated alias
+#[allow(deprecated)]
+pub use crate::player::AyPlaybackState;
 
 #[cfg(test)]
 mod tests {

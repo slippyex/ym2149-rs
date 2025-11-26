@@ -55,4 +55,10 @@ pub mod psg_registers_converter;
 pub use error::{ArkosError, Result};
 pub use format::*;
 pub use parser::load_aks;
-pub use player::ArkosPlayer;
+pub use player::{ArkosMetadata, ArkosPlayer};
+
+// Re-export parser types for advanced usage
+pub use parser::{FormatVersion, ParseState};
+
+// Re-export unified player trait from ym2149-common
+pub use ym2149_common::{ChiptunePlayer, PlaybackMetadata};

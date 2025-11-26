@@ -4,7 +4,7 @@ use bevy::prelude::error;
 use parking_lot::RwLock;
 use ym2149_arkos_replayer::{parser::load_aks, player::ArkosPlayer};
 use ym2149_ay_replayer::{
-    AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer, CPC_UNSUPPORTED_MSG,
+    AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyState,
 };
 use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
 
@@ -437,7 +437,7 @@ impl AyBevyPlayer {
     }
 
     fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        match self.player.state() {
+        match self.player.playback_state() {
             AyState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
             AyState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
             AyState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,

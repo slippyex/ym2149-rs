@@ -14,7 +14,7 @@ categories = ["multimedia::audio"]
 
 [dependencies]
 # Core YM2149 backend trait
-ym2149 = { path = "../ym2149-core", version = "0.6.1" }
+ym2149 = { path = "../ym2149-core", version = "0.7" }
 
 [dev-dependencies]
 approx.workspace = true

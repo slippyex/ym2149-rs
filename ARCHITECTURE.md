@@ -256,7 +256,7 @@ pub trait Ym2149Backend: Send {
 
 Enable export feature in `Cargo.toml`:
 ```toml
-ym2149-ym-replayer = { version = "0.6", features = ["export-wav"] }
+ym2149-ym-replayer = { version = "0.7", features = ["export-wav"] }
 ```
 
 Example code:

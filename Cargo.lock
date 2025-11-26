@@ -1561,7 +1561,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "bevy",
@@ -1578,7 +1578,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_examples"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bevy",
  "bevy_embedded_assets",
@@ -1592,7 +1592,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_viz"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bevy",
  "bevy_ym2149",
@@ -6017,7 +6017,7 @@ checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "ym2149"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "approx",
  "bitflags 2.10.0",
@@ -6029,7 +6029,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-arkos-replayer"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -6038,29 +6038,35 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "ym2149",
+ "ym2149-common",
  "ym2149-ym-replayer",
  "zip",
 ]
 
 [[package]]
 name = "ym2149-ay-replayer"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "iz80",
  "thiserror 1.0.69",
  "ym2149",
+ "ym2149-common",
 ]
 
 [[package]]
 name = "ym2149-bevy"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bevy_ym2149",
 ]
 
 [[package]]
+name = "ym2149-common"
+version = "0.7.0"
+
+[[package]]
 name = "ym2149-softsynth"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "approx",
  "ym2149",
@@ -6068,7 +6074,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-wasm"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bitflags 2.10.0",
  "console_error_panic_hook",
@@ -6087,7 +6093,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-ym-replayer"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "approx",
  "bitflags 2.10.0",
@@ -6097,11 +6103,12 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "ym2149",
+ "ym2149-common",
 ]
 
 [[package]]
 name = "ym2149-ym-replayer-cli"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "parking_lot",
  "ym2149",

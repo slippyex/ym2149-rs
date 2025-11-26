@@ -24,7 +24,7 @@ Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ym2149-ym-replayer = "0.6.1"
+ym2149-ym-replayer = "0.7"
 ```
 
 ## Usage
@@ -32,14 +32,17 @@ ym2149-ym-replayer = "0.6.1"
 ### Basic Playback
 
 ```rust
-use ym2149_ym_replayer::{load_song, PlaybackController};
+use ym2149_ym_replayer::{load_song, ChiptunePlayer, PlaybackMetadata};
 
 let data = std::fs::read("song.ym")?;
 let (mut player, summary) = load_song(&data)?;
-player.play()?;
 
-// Generate audio samples
+// Use the unified ChiptunePlayer interface
+player.play();
 let samples = player.generate_samples(summary.samples_per_frame as usize);
+
+// Access metadata
+println!("{} by {}", player.metadata().title(), player.metadata().author());
 ```
 
 ### Loading from Files
@@ -67,7 +70,7 @@ Internally the player is split into three layers:
 
 ## Architecture
 
-This crate was extracted from `ym2149-core` v0.6.1 to provide better separation of concerns:
+This crate was extracted from `ym2149-core` to provide better separation of concerns:
 
 - **ym2149-core**: Pure YM2149 chip emulation
 - **ym2149-ym-replayer**: YM file parsing and playback (this crate)

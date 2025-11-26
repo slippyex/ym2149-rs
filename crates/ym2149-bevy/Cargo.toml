@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "[DEPRECATED] Bevy audio plugin for YM2149 PSG emulator - Use 'bevy_ym2149' instead"
 
 [dependencies]
-bevy_ym2149 = { path = "../bevy_ym2149", version = "0.6" }
+bevy_ym2149 = { path = "../bevy_ym2149", version = "0.7" }
 
 [package.metadata.docs.rs]
 all-features = true

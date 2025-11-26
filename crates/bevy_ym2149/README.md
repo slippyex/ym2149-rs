@@ -25,8 +25,8 @@ Bevy plugin that embeds the cycle-accurate [`ym2149`](../ym2149-core) emulator, 
 ```toml
 [dependencies]
 bevy = "0.17"
-bevy_ym2149 = "0.6.1"
-bevy_ym2149_viz = { version = "0.6.1", optional = true }  # For visualization features
+bevy_ym2149 = "0.7"
+bevy_ym2149_viz = { version = "0.7", optional = true }  # For visualization features
 ```
 
 ```rust

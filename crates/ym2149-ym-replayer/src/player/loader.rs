@@ -418,6 +418,11 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             loop_frame: loop_frame_raw as u32,
             master_clock: 2_000_000,
         };
+
+        // Update cached metadata for ChiptunePlayer trait
+        let loop_point = if loop_enabled { Some(loop_frame) } else { None };
+        self.cached_metadata = super::chiptune_player::Ym6Metadata::from_info(&info, loop_point);
+
         self.info = Some(info);
 
         Ok(())
@@ -477,6 +482,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             info,
         } = params;
 
+        let frame_count = frames.len();
+
         // Set frame data and reset playback position
         self.sequencer.load_frames(frames);
         self.format_profile = create_profile(format_mode);
@@ -489,6 +496,13 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         self.sequencer.set_samples_per_frame(samples_per_frame);
         self.digidrums = digidrums;
         self.attributes = attributes;
+
+        // Update cached metadata for ChiptunePlayer trait
+        self.cached_metadata = if let Some(ref info) = info {
+            super::chiptune_player::Ym6Metadata::from_info(info, loop_frame)
+        } else {
+            super::chiptune_player::Ym6Metadata::from_frames(frame_count, loop_frame)
+        };
 
         // Set metadata
         self.info = info;

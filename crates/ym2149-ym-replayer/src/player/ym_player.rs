@@ -2,6 +2,7 @@
 //!
 //! Plays back YM2-YM6 format chiptune files with proper VBL synchronization.
 
+use super::chiptune_player::Ym6Metadata;
 use super::effects_pipeline::EffectsPipeline;
 use super::format_profile::{FormatMode, FormatProfile, create_profile};
 use super::frame_sequencer::FrameSequencer;
@@ -28,6 +29,8 @@ pub struct Ym6PlayerGeneric<B: Ym2149Backend> {
     pub(in crate::player) sequencer: FrameSequencer,
     /// Song metadata
     pub(in crate::player) info: Option<Ym6Info>,
+    /// Cached metadata for ChiptunePlayer trait
+    pub(in crate::player) cached_metadata: Ym6Metadata,
     /// Digidrum sample bank (raw bytes from file)
     pub(in crate::player) digidrums: Vec<Vec<u8>>,
     /// YM6 attributes bitfield (A_* flags)
@@ -61,6 +64,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             state: PlaybackState::Stopped,
             sequencer: FrameSequencer::new(),
             info: None,
+            cached_metadata: Ym6Metadata::default(),
             digidrums: Vec::new(),
             attributes: 0,
             format_profile: create_profile(FormatMode::Basic),

@@ -3,6 +3,7 @@
 //! Handles playback of YM music files including frame sequencing,
 //! VBL synchronization, cycle counting, and timing control.
 
+mod chiptune_player;
 pub mod cycle_counter;
 pub mod effects_manager;
 /// High-level wrapper around [`EffectsManager`] that tracks active effect state.
@@ -20,6 +21,7 @@ pub mod vbl_sync;
 mod ym6;
 pub mod ym_player;
 
+pub use chiptune_player::Ym6Metadata;
 pub use cycle_counter::CycleCounter;
 pub use effects_manager::EffectsManager;
 pub use effects_pipeline::EffectsPipeline;
