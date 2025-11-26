@@ -1,0 +1,31 @@
+[package]
+name = "ym2149-sndh-replayer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SNDH file parser and Atari ST machine emulation for YM2149 chiptune playback"
+readme = "README.md"
+documentation = "https://docs.rs/ym2149-sndh-replayer"
+keywords = ["ym2149", "sndh", "atari", "chiptune", "68000"]
+categories = ["multimedia::audio", "emulators", "parsing"]
+
+[dependencies]
+# Core YM2149 emulation
+ym2149 = { path = "../ym2149-core", version = "0.7", default-features = false }
+
+# Common traits (PlaybackMetadata, ChiptunePlayer)
+ym2149-common = { path = "../ym2149-common", version = "0.7" }
+
+# Motorola 68000 CPU emulation
+m68000 = "0.2"
+
+[dev-dependencies]
+anyhow.workspace = true
+
+[features]
+default = []
+# Enable STE DAC emulation
+ste-dac = []

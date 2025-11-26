@@ -6,6 +6,8 @@ use ym2149_arkos_replayer::{parser::load_aks, player::ArkosPlayer};
 use ym2149_ay_replayer::{
     AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyState,
 };
+use ym2149_common::{PlaybackMetadata, PlaybackState as SndhState};
+use ym2149_sndh_replayer::{is_sndh_data, load_sndh, SndhPlayer};
 use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
 
 use crate::audio_source::Ym2149Metadata;
@@ -25,6 +27,7 @@ pub enum YmSongPlayer {
     },
     Arkos(Box<ArkosBevyPlayer>),
     Ay(Box<AyBevyPlayer>),
+    Sndh(Box<SndhBevyPlayer>),
     Synth(Box<YmSynthPlayer>),
 }
 
@@ -68,6 +71,28 @@ impl YmSongPlayer {
         Ok(Self::Ay(Box::new(AyBevyPlayer::new(player, ym_meta))))
     }
 
+    pub(crate) fn new_sndh(song_data: &[u8]) -> Result<Self, BevyYm2149Error> {
+        let mut player = load_sndh(song_data, YM2149_SAMPLE_RATE)
+            .map_err(|e| BevyYm2149Error::Other(format!("SNDH load failed: {e}")))?;
+
+        // Initialize default subsong
+        let default_subsong = player.default_subsong();
+        player
+            .init_subsong(default_subsong)
+            .map_err(|e| BevyYm2149Error::Other(format!("SNDH init failed: {e}")))?;
+
+        let meta = ym2149_common::ChiptunePlayer::metadata(&player);
+        let metadata = Ym2149Metadata {
+            title: meta.title().to_string(),
+            author: meta.author().to_string(),
+            comment: meta.comments().to_string(),
+            frame_count: 0, // SNDH doesn't track frames like YM
+            duration_seconds: 0.0,
+        };
+
+        Ok(Self::Sndh(Box::new(SndhBevyPlayer::new(player, metadata))))
+    }
+
     pub(crate) fn new_synth(controller: YmSynthController) -> Self {
         Self::Synth(Box::new(YmSynthPlayer::new(controller)))
     }
@@ -79,6 +104,7 @@ impl YmSongPlayer {
                 .map_err(|e| BevyYm2149Error::Other(format!("YM play failed: {e}"))),
             Self::Arkos(p) => p.play(),
             Self::Ay(p) => p.play(),
+            Self::Sndh(p) => p.play(),
             Self::Synth(p) => {
                 p.play();
                 Ok(())
@@ -93,6 +119,7 @@ impl YmSongPlayer {
                 .map_err(|e| BevyYm2149Error::Other(format!("YM pause failed: {e}"))),
             Self::Arkos(p) => p.pause(),
             Self::Ay(p) => p.pause(),
+            Self::Sndh(p) => p.pause(),
             Self::Synth(p) => {
                 p.pause();
                 Ok(())
@@ -107,6 +134,7 @@ impl YmSongPlayer {
                 .map_err(|e| BevyYm2149Error::Other(format!("YM stop failed: {e}"))),
             Self::Arkos(p) => p.stop(),
             Self::Ay(p) => p.stop(),
+            Self::Sndh(p) => p.stop(),
             Self::Synth(p) => {
                 p.stop();
                 Ok(())
@@ -119,6 +147,7 @@ impl YmSongPlayer {
             Self::Ym { player, .. } => player.state(),
             Self::Arkos(p) => p.state(),
             Self::Ay(p) => p.state(),
+            Self::Sndh(p) => p.state(),
             Self::Synth(p) => p.state(),
         }
     }
@@ -128,6 +157,7 @@ impl YmSongPlayer {
             Self::Ym { player, .. } => player.get_current_frame(),
             Self::Arkos(p) => p.current_frame(),
             Self::Ay(p) => p.current_frame(),
+            Self::Sndh(p) => p.current_frame(),
             Self::Synth(p) => p.current_frame(),
         }
     }
@@ -137,6 +167,7 @@ impl YmSongPlayer {
             Self::Ym { player, .. } => player.samples_per_frame_value(),
             Self::Arkos(p) => p.samples_per_frame(),
             Self::Ay(p) => p.samples_per_frame(),
+            Self::Sndh(p) => p.samples_per_frame(),
             Self::Synth(p) => p.samples_per_frame_value(),
         }
     }
@@ -146,6 +177,7 @@ impl YmSongPlayer {
             Self::Ym { player, .. } => player.generate_sample(),
             Self::Arkos(p) => p.generate_sample(),
             Self::Ay(p) => p.generate_sample(),
+            Self::Sndh(p) => p.generate_sample(),
             Self::Synth(p) => p.generate_sample(),
         }
     }
@@ -155,6 +187,7 @@ impl YmSongPlayer {
             Self::Ym { player, .. } => player.generate_samples_into(buffer),
             Self::Arkos(p) => p.generate_samples_into(buffer),
             Self::Ay(p) => p.generate_samples_into(buffer),
+            Self::Sndh(p) => p.generate_samples_into(buffer),
             Self::Synth(p) => p.generate_samples_into(buffer),
         }
     }
@@ -164,6 +197,7 @@ impl YmSongPlayer {
             Self::Ym { metadata, .. } => metadata,
             Self::Arkos(p) => p.metadata(),
             Self::Ay(p) => p.metadata(),
+            Self::Sndh(p) => p.metadata(),
             Self::Synth(p) => p.metadata(),
         }
     }
@@ -173,6 +207,7 @@ impl YmSongPlayer {
             Self::Ym { metrics, .. } => Some(*metrics),
             Self::Arkos(p) => p.metrics(),
             Self::Ay(p) => Some(p.metrics()),
+            Self::Sndh(p) => Some(p.metrics()),
             Self::Synth(p) => Some(p.metrics()),
         }
     }
@@ -182,6 +217,7 @@ impl YmSongPlayer {
             Self::Ym { player, .. } => Some(player.get_chip()),
             Self::Arkos(p) => p.primary_chip(),
             Self::Ay(p) => Some(p.chip()),
+            Self::Sndh(p) => Some(p.chip()),
             Self::Synth(p) => Some(p.chip()),
         }
     }
@@ -194,6 +230,7 @@ impl YmSongPlayer {
                 .primary_chip()
                 .expect("Arkos player should always expose at least one PSG"),
             Self::Ay(p) => p.chip(),
+            Self::Sndh(p) => p.chip(),
             Self::Synth(p) => p.chip(),
         }
     }
@@ -204,15 +241,33 @@ impl YmSongPlayer {
             Self::Ym { metrics, .. } => metrics.frame_count,
             Self::Arkos(p) => p.frame_count(),
             Self::Ay(p) => p.frame_count(),
+            Self::Sndh(p) => p.frame_count(),
             Self::Synth(p) => p.metrics().frame_count,
         }
     }
 }
 
-/// Load a song (YM or AKS) from raw bytes.
+/// Load a song (YM, AKS, AY, or SNDH) from raw bytes.
 pub(crate) fn load_song_from_bytes(
     data: &[u8],
 ) -> std::result::Result<(YmSongPlayer, PlaybackMetrics, Ym2149Metadata), String> {
+    // Check if this looks like SNDH data first (to avoid wrong format fallback)
+    if is_sndh_data(data) {
+        // Try SNDH first for SNDH-like data, and return error directly if it fails
+        // (don't fall back to AY for SNDH files)
+        return YmSongPlayer::new_sndh(data)
+            .map(|player| {
+                let metadata = player.metadata().clone();
+                let metrics = player.metrics().unwrap_or(PlaybackMetrics {
+                    frame_count: 0,
+                    samples_per_frame: YM2149_SAMPLE_RATE,
+                });
+                (player, metrics, metadata)
+            })
+            .map_err(|e| format!("Failed to load SNDH: {}", e));
+    }
+
+    // Try other formats in order
     if let Ok((player, summary)) = ym2149_ym_replayer::load_song(data) {
         let metadata = metadata_from_player(&player, &summary);
         let metrics = PlaybackMetrics::from(&summary);
@@ -225,6 +280,14 @@ pub(crate) fn load_song_from_bytes(
         let metadata = player.metadata().clone();
         let metrics = player.metrics().unwrap_or(PlaybackMetrics {
             frame_count: metadata.frame_count,
+            samples_per_frame: YM2149_SAMPLE_RATE,
+        });
+        Ok((player, metrics, metadata))
+    } else if let Ok(player) = YmSongPlayer::new_sndh(data) {
+        // Also try SNDH for non-SNDH-looking data (edge cases)
+        let metadata = player.metadata().clone();
+        let metrics = player.metrics().unwrap_or(PlaybackMetrics {
+            frame_count: 0,
             samples_per_frame: YM2149_SAMPLE_RATE,
         });
         Ok((player, metrics, metadata))
@@ -526,5 +589,112 @@ impl AyBevyPlayer {
         } else {
             false
         }
+    }
+}
+
+const SNDH_CACHE_SAMPLES: usize = 512;
+
+/// Adapter that exposes [`SndhPlayer`] through the same interface used by YM playback.
+pub struct SndhBevyPlayer {
+    player: SndhPlayer,
+    metadata: Ym2149Metadata,
+    samples_per_frame: u32,
+    cache: Vec<f32>,
+    cache_pos: usize,
+    cache_len: usize,
+}
+
+impl SndhBevyPlayer {
+    fn new(player: SndhPlayer, metadata: Ym2149Metadata) -> Self {
+        let samples_per_frame =
+            (YM2149_SAMPLE_RATE_F32 / player.player_rate() as f32).round().max(1.0) as u32;
+
+        Self {
+            player,
+            metadata,
+            samples_per_frame,
+            cache: vec![0.0; SNDH_CACHE_SAMPLES],
+            cache_pos: 0,
+            cache_len: 0,
+        }
+    }
+
+    fn play(&mut self) -> Result<(), BevyYm2149Error> {
+        use ym2149_common::ChiptunePlayer;
+        self.player.play();
+        Ok(())
+    }
+
+    fn pause(&mut self) -> Result<(), BevyYm2149Error> {
+        use ym2149_common::ChiptunePlayer;
+        self.player.pause();
+        Ok(())
+    }
+
+    fn stop(&mut self) -> Result<(), BevyYm2149Error> {
+        use ym2149_common::ChiptunePlayer;
+        self.player.stop();
+        Ok(())
+    }
+
+    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
+        use ym2149_common::ChiptunePlayer;
+        match self.player.state() {
+            SndhState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
+            SndhState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
+            SndhState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,
+        }
+    }
+
+    fn current_frame(&self) -> usize {
+        0 // SNDH doesn't track frames like YM
+    }
+
+    fn samples_per_frame(&self) -> u32 {
+        self.samples_per_frame
+    }
+
+    fn generate_sample(&mut self) -> f32 {
+        if self.cache_pos >= self.cache_len {
+            self.fill_cache();
+        }
+        if self.cache_len == 0 {
+            return 0.0;
+        }
+        let sample = self.cache[self.cache_pos];
+        self.cache_pos += 1;
+        sample
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        use ym2149_common::ChiptunePlayer;
+        self.player.generate_samples_into(buffer);
+    }
+
+    fn fill_cache(&mut self) {
+        use ym2149_common::ChiptunePlayer;
+        self.player
+            .generate_samples_into(&mut self.cache[..SNDH_CACHE_SAMPLES]);
+        self.cache_pos = 0;
+        self.cache_len = SNDH_CACHE_SAMPLES;
+    }
+
+    fn metadata(&self) -> &Ym2149Metadata {
+        &self.metadata
+    }
+
+    fn metrics(&self) -> PlaybackMetrics {
+        PlaybackMetrics {
+            frame_count: 0,
+            samples_per_frame: self.samples_per_frame,
+        }
+    }
+
+    fn chip(&self) -> &ym2149::ym2149::Ym2149 {
+        self.player.ym2149()
+    }
+
+    fn frame_count(&self) -> usize {
+        0 // SNDH files don't have a known frame count
     }
 }

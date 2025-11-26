@@ -16,6 +16,8 @@ use ym2149::Ym2149Backend;
 use ym2149::streaming::{DEFAULT_SAMPLE_RATE, StreamConfig};
 use ym2149_arkos_replayer::ArkosPlayer;
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyPlaybackState};
+use ym2149_common::PlaybackState as SndhPlaybackState;
+use ym2149_sndh_replayer::SndhPlayer;
 use ym2149_ym_replayer::PlaybackController;
 use ym2149_ym_replayer::player::ym_player::Ym6PlayerGeneric;
 
@@ -266,6 +268,88 @@ impl RealtimeChip for AyPlayerWrapper {
         self.player
             .requires_cpc_firmware()
             .then_some(CPC_UNSUPPORTED_MSG)
+    }
+}
+
+/// SNDH player wrapper for CLI integration
+pub struct SndhPlayerWrapper {
+    player: SndhPlayer,
+}
+
+impl SndhPlayerWrapper {
+    pub fn new(player: SndhPlayer) -> Self {
+        Self { player }
+    }
+}
+
+impl PlaybackController for SndhPlayerWrapper {
+    fn play(&mut self) -> ym2149_ym_replayer::Result<()> {
+        use ym2149_common::ChiptunePlayer;
+        self.player.play();
+        Ok(())
+    }
+
+    fn pause(&mut self) -> ym2149_ym_replayer::Result<()> {
+        use ym2149_common::ChiptunePlayer;
+        self.player.pause();
+        Ok(())
+    }
+
+    fn stop(&mut self) -> ym2149_ym_replayer::Result<()> {
+        use ym2149_common::ChiptunePlayer;
+        self.player.stop();
+        Ok(())
+    }
+
+    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
+        use ym2149_common::ChiptunePlayer;
+        match self.player.state() {
+            SndhPlaybackState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
+            SndhPlaybackState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
+            SndhPlaybackState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,
+        }
+    }
+}
+
+impl RealtimeChip for SndhPlayerWrapper {
+    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
+        use ym2149_common::ChiptunePlayer;
+        let mut buffer = vec![0.0; count];
+        self.player.generate_samples_into(&mut buffer);
+        buffer
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        use ym2149_common::ChiptunePlayer;
+        self.player.generate_samples_into(buffer);
+    }
+
+    fn visual_snapshot(&self) -> VisualSnapshot {
+        // SNDH uses native 68000 code - extract YM registers from the emulated chip
+        let regs = self.player.ym2149().dump_registers();
+        VisualSnapshot {
+            registers: regs,
+            sync_buzzer: false,
+            sid_active: [false; 3],
+            drum_active: [false; 3],
+        }
+    }
+
+    fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {
+        // TODO: Implement channel muting in SNDH player
+    }
+
+    fn is_channel_muted(&self, _channel: usize) -> bool {
+        false
+    }
+
+    fn get_playback_position(&self) -> f32 {
+        // SNDH doesn't have easy frame position tracking
+        0.0
+    }
+
+    fn set_color_filter(&mut self, _enabled: bool) {
+        // Not applicable for SNDH (uses actual 68000 code)
     }
 }
 

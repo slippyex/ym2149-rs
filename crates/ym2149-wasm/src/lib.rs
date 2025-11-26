@@ -46,7 +46,7 @@ use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
 use ym2149_ym_replayer::{PlaybackState, load_song};
 
 use metadata::{metadata_from_summary, YmMetadata};
-use players::{BrowserSongPlayer, arkos::ArkosWasmPlayer, ay::AyWasmPlayer};
+use players::{BrowserSongPlayer, arkos::ArkosWasmPlayer, ay::AyWasmPlayer, sndh::SndhWasmPlayer};
 
 /// Sample rate used for audio generation.
 pub const YM_SAMPLE_RATE_F32: f32 = 44_100.0;
@@ -252,6 +252,11 @@ fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), S
             ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to init Arkos player: {e}"))?;
         let (wrapper, metadata) = ArkosWasmPlayer::new(arkos_player);
         return Ok((BrowserSongPlayer::Arkos(Box::new(wrapper)), metadata));
+    }
+
+    // Try SNDH format (Atari ST)
+    if let Ok((wrapper, metadata)) = SndhWasmPlayer::new(data) {
+        return Ok((BrowserSongPlayer::Sndh(Box::new(wrapper)), metadata));
     }
 
     // Try AY format

@@ -280,8 +280,8 @@ impl Iterator for Ym2149Decoder {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Check if we've reached the end
-        if self.current_sample >= self.total_samples.saturating_mul(2) {
+        // Check if we've reached the end (0 means unlimited/unknown duration)
+        if self.total_samples > 0 && self.current_sample >= self.total_samples.saturating_mul(2) {
             return None;
         }
 
@@ -306,6 +306,10 @@ impl Iterator for Ym2149Decoder {
 
 impl Source for Ym2149Decoder {
     fn current_frame_len(&self) -> Option<usize> {
+        // Return None for unknown/unlimited duration (SNDH files)
+        if self.total_samples == 0 {
+            return None;
+        }
         Some(
             self.total_samples
                 .saturating_mul(2)
@@ -322,6 +326,10 @@ impl Source for Ym2149Decoder {
     }
 
     fn total_duration(&self) -> Option<Duration> {
+        // Return None for unknown/unlimited duration (SNDH files)
+        if self.total_samples == 0 {
+            return None;
+        }
         Some(Duration::from_secs_f32(
             self.total_samples as f32 / self.sample_rate as f32,
         ))

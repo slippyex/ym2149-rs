@@ -12,10 +12,11 @@ use std::path::Path;
 use ym2149::streaming::DEFAULT_SAMPLE_RATE;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
+use ym2149_sndh_replayer::load_sndh;
 use ym2149_ym_replayer::{Player, load_song};
 
 use crate::args::ChipChoice;
-use crate::{ArkosPlayerWrapper, AyPlayerWrapper, RealtimeChip};
+use crate::{ArkosPlayerWrapper, AyPlayerWrapper, RealtimeChip, SndhPlayerWrapper};
 
 /// Information about a loaded player.
 pub struct PlayerInfo {
@@ -82,6 +83,54 @@ fn load_arkos_file(
 
     Ok(PlayerInfo {
         player: Box::new(ArkosPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
+        total_samples,
+        song_info: info_str,
+        color_filter,
+    })
+}
+
+/// Load an SNDH (Atari ST) file.
+fn load_sndh_file(
+    file_data: &[u8],
+    file_path: &str,
+    color_filter_override: Option<bool>,
+) -> ym2149_ym_replayer::Result<PlayerInfo> {
+    use ym2149_common::{ChiptunePlayer, PlaybackMetadata};
+
+    let mut player =
+        load_sndh(file_data, DEFAULT_SAMPLE_RATE).map_err(|e| format!("SNDH load failed: {e}"))?;
+
+    // Initialize first subsong
+    let default_subsong = player.default_subsong();
+    player
+        .init_subsong(default_subsong)
+        .map_err(|e| format!("SNDH init failed: {e}"))?;
+
+    let metadata = player.metadata();
+    let title = metadata.title();
+    let author = metadata.author();
+
+    let info_str = format!(
+        "File: {}\nFormat: SNDH (Atari ST)\nTitle: {}\nAuthor: {}\n\
+         Subsongs: {}\nDefault subsong: {}\nPlayer rate: {} Hz",
+        file_path,
+        if title.is_empty() { "(unknown)" } else { title },
+        if author.is_empty() {
+            "(unknown)"
+        } else {
+            author
+        },
+        player.subsong_count(),
+        player.default_subsong(),
+        player.player_rate(),
+    );
+
+    // Estimate duration (3 minutes if unknown)
+    let total_samples = DEFAULT_SAMPLE_RATE as usize * 180;
+    let color_filter = color_filter_override.unwrap_or(false); // SNDH uses real ST code
+
+    Ok(PlayerInfo {
+        player: Box::new(SndhPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
         total_samples,
         song_info: info_str,
         color_filter,
@@ -172,6 +221,9 @@ pub fn create_player(
     } else if extension == "ay" {
         println!("Detected format: AY (ZXAY/EMUL)\n");
         return load_ay_file(&file_data, file_path, color_filter_override);
+    } else if extension == "sndh" {
+        println!("Detected format: SNDH (Atari ST)\n");
+        return load_sndh_file(&file_data, file_path, color_filter_override);
     }
 
     let (mut ym_player, summary) = load_song(&file_data)?;

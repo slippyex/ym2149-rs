@@ -25,6 +25,12 @@ ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-a
 # AY format replayer
 ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.7" }
 
+# SNDH format replayer (Atari ST)
+ym2149_sndh_replayer = { package = "ym2149-sndh-replayer", path = "../ym2149-sndh-replayer", version = "0.7" }
+
+# Common types and traits
+ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.7" }
+
 # Synchronization
 parking_lot.workspace = true
 

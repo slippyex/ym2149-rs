@@ -1,14 +1,16 @@
 //! Player wrapper types for different file formats.
 //!
-//! This module provides unified access to YM, Arkos, and AY players
+//! This module provides unified access to YM, Arkos, AY, and SNDH players
 //! through the `BrowserSongPlayer` enum.
 
 pub mod arkos;
 pub mod ay;
+pub mod sndh;
 
 use ym2149_ym_replayer::{PlaybackController, PlaybackState};
 use arkos::ArkosWasmPlayer;
 use ay::AyWasmPlayer;
+use sndh::SndhWasmPlayer;
 
 /// Unified player enum for all supported formats.
 pub enum BrowserSongPlayer {
@@ -18,6 +20,8 @@ pub enum BrowserSongPlayer {
     Arkos(Box<ArkosWasmPlayer>),
     /// AY format player (.ay).
     Ay(Box<AyWasmPlayer>),
+    /// SNDH format player (Atari ST).
+    Sndh(Box<SndhWasmPlayer>),
 }
 
 impl BrowserSongPlayer {
@@ -32,6 +36,7 @@ impl BrowserSongPlayer {
             }
             BrowserSongPlayer::Arkos(_) => false,
             BrowserSongPlayer::Ay(_) => false,
+            BrowserSongPlayer::Sndh(_) => false,
         }
     }
 
@@ -41,6 +46,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.play().map_err(|e| e.to_string()),
             BrowserSongPlayer::Arkos(player) => player.play(),
             BrowserSongPlayer::Ay(player) => player.play(),
+            BrowserSongPlayer::Sndh(player) => player.play(),
         }
     }
 
@@ -50,6 +56,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.pause().map_err(|e| e.to_string()),
             BrowserSongPlayer::Arkos(player) => player.pause(),
             BrowserSongPlayer::Ay(player) => player.pause(),
+            BrowserSongPlayer::Sndh(player) => player.pause(),
         }
     }
 
@@ -59,6 +66,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.stop().map_err(|e| e.to_string()),
             BrowserSongPlayer::Arkos(player) => player.stop(),
             BrowserSongPlayer::Ay(player) => player.stop(),
+            BrowserSongPlayer::Sndh(player) => player.stop(),
         }
     }
 
@@ -68,6 +76,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.state(),
             BrowserSongPlayer::Arkos(player) => player.state(),
             BrowserSongPlayer::Ay(player) => player.state(),
+            BrowserSongPlayer::Sndh(player) => player.state(),
         }
     }
 
@@ -77,6 +86,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.get_current_frame(),
             BrowserSongPlayer::Arkos(player) => player.frame_position(),
             BrowserSongPlayer::Ay(player) => player.frame_position(),
+            BrowserSongPlayer::Sndh(player) => player.frame_position(),
         }
     }
 
@@ -86,6 +96,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.frame_count(),
             BrowserSongPlayer::Arkos(player) => player.frame_count(),
             BrowserSongPlayer::Ay(player) => player.frame_count(),
+            BrowserSongPlayer::Sndh(player) => player.frame_count(),
         }
     }
 
@@ -95,6 +106,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.get_playback_position(),
             BrowserSongPlayer::Arkos(player) => player.playback_position(),
             BrowserSongPlayer::Ay(player) => player.playback_position(),
+            BrowserSongPlayer::Sndh(player) => player.playback_position(),
         }
     }
 
@@ -104,6 +116,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.generate_samples(count),
             BrowserSongPlayer::Arkos(player) => player.generate_samples(count),
             BrowserSongPlayer::Ay(player) => player.generate_samples(count),
+            BrowserSongPlayer::Sndh(player) => player.generate_samples(count),
         }
     }
 
@@ -113,6 +126,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.generate_samples_into(buffer),
             BrowserSongPlayer::Arkos(player) => player.generate_samples_into(buffer),
             BrowserSongPlayer::Ay(player) => player.generate_samples_into(buffer),
+            BrowserSongPlayer::Sndh(player) => player.generate_samples_into(buffer),
         }
     }
 
@@ -122,6 +136,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.set_channel_mute(channel, mute),
             BrowserSongPlayer::Arkos(player) => player.set_channel_mute(channel, mute),
             BrowserSongPlayer::Ay(player) => player.set_channel_mute(channel, mute),
+            BrowserSongPlayer::Sndh(player) => player.set_channel_mute(channel, mute),
         }
     }
 
@@ -131,6 +146,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.is_channel_muted(channel),
             BrowserSongPlayer::Arkos(player) => player.is_channel_muted(channel),
             BrowserSongPlayer::Ay(player) => player.is_channel_muted(channel),
+            BrowserSongPlayer::Sndh(player) => player.is_channel_muted(channel),
         }
     }
 
@@ -140,6 +156,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.get_chip().dump_registers(),
             BrowserSongPlayer::Arkos(player) => player.dump_registers(),
             BrowserSongPlayer::Ay(player) => player.dump_registers(),
+            BrowserSongPlayer::Sndh(player) => player.dump_registers(),
         }
     }
 
@@ -149,6 +166,7 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Ym(player) => player.get_chip_mut().set_color_filter(enabled),
             BrowserSongPlayer::Arkos(player) => player.set_color_filter(enabled),
             BrowserSongPlayer::Ay(player) => player.set_color_filter(enabled),
+            BrowserSongPlayer::Sndh(player) => player.set_color_filter(enabled),
         }
     }
 }

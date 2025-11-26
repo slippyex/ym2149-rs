@@ -5,6 +5,17 @@ All notable changes to the ym2149-rs project.
 ## [Unreleased] - v0.7.0
 
 ### Added
+- **`ym2149-sndh-replayer` crate** - New crate for SNDH file playback with full Atari ST machine emulation:
+  - **ICE! 2.4 Decompression** - Decompress ICE-packed SNDH files
+  - **SNDH Parser** - Parse SNDH headers and metadata (TITL, COMM, YEAR, TIME, timer tags, etc.)
+  - **MFP 68901 Timer Emulation** - Accurate timer support for SID voice and other timer-based effects
+  - **Atari ST Machine** - Memory-mapped I/O emulation with 4MB RAM, YM2149, and MFP timers
+  - **68000 CPU Emulation** - Via the `m68000` crate for executing native SNDH replay code
+  - **ChiptunePlayer Implementation** - Unified interface compatible with other replayers
+  - Supports multiple subsongs, player rate detection (TA/TB/TC/TD/VBL tags), and duration parsing
+- **SNDH support in CLI replayer** - `ym-replayer` now supports `.sndh` files from Atari ST
+- **SNDH support in bevy_ym2149** - Bevy plugin automatically detects and plays SNDH files
+- **SNDH support in ym2149-wasm** - WASM player supports SNDH files in the browser
 - **`ym2149-common` crate** - New shared crate providing unified traits and types across all replayers:
   - `ChiptunePlayer` trait - Common playback interface for all player types (play, pause, stop, state, generate_samples)
   - `PlaybackMetadata` trait - Unified metadata access across YM, AKS, and AY formats

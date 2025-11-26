@@ -12,6 +12,7 @@ members = [
     "crates/bevy_ym2149_viz",
     "crates/ym2149-wasm",
     "crates/ym2149-ay-replayer",
+    "crates/ym2149-sndh-replayer",
 ]
 resolver = "2"
 

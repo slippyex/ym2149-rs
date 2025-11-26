@@ -54,7 +54,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Text::new(
             "Controls:\n\
-             - Drag & Drop: Load YM/AKS/AY file\n\
+             - Drag & Drop: Load YM/AKS/AY/SNDH file\n\
              - SPACE: Play/Pause\n\
              - R: Restart\n\
              - L: Toggle Looping\n\
@@ -227,8 +227,9 @@ fn handle_file_drop(
             let is_ym = lower.ends_with(".ym");
             let is_aks = lower.ends_with(".aks");
             let is_ay = lower.ends_with(".ay");
-            if !(is_ym || is_aks || is_ay) {
-                warn!("Dropped file is not a YM/AKS/AY file: {}", path_str);
+            let is_sndh = lower.ends_with(".sndh");
+            if !(is_ym || is_aks || is_ay || is_sndh) {
+                warn!("Dropped file is not a YM/AKS/AY/SNDH file: {}", path_str);
                 continue;
             }
 
@@ -238,6 +239,11 @@ fn handle_file_drop(
                 if is_ay {
                     info!(
                         "Loaded AY file (ZX-only; CPC AY tracks will report unsupported firmware): {}",
+                        path_str
+                    );
+                } else if is_sndh {
+                    info!(
+                        "Loaded SNDH file (Atari ST native 68000 code): {}",
                         path_str
                     );
                 } else {
