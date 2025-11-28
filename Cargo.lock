@@ -311,6 +311,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atari-audio"
+version = "0.1.0"
+dependencies = [
+ "m68000",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6076,6 +6083,7 @@ version = "0.7.0"
 name = "ym2149-replayer-cli"
 version = "0.7.0"
 dependencies = [
+ "atari-audio",
  "parking_lot",
  "ym2149",
  "ym2149-arkos-replayer",

@@ -565,14 +565,13 @@ impl AtariMachine {
                     };
                     let t = &self.memory.mfp.debug_timer(timer_id);
                     eprintln!(
-                        "TIMER {} FIRED @sample {} (CR={:02X} DR={:02X} EN={} MASK={} FIRES={})",
+                        "TIMER {} FIRED @sample {} (CR={:02X} DR={:02X} EN={} MASK={})",
                         timer_name,
                         self.sample_counter,
                         t.control,
                         t.data,
                         t.enable as u8,
-                        t.mask as u8,
-                        t.fire_count
+                        t.mask as u8
                     );
                 }
             }

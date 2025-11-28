@@ -8,12 +8,25 @@
 //!
 //! Timers A and B are used by many SNDH files for SID voice effects and
 //! other timer-based sound techniques.
+//!
+//! Timer implementation ported from Leonard/Oxygene's AtariAudio.
 
 /// Atari ST MFP clock frequency (2.4576 MHz)
 const ATARI_MFP_CLOCK: u32 = 2_457_600;
 
-/// Timer prescaler values for counter mode (control register bits 0-2)
-const PRESCALE_VALUES: [u32; 8] = [0, 4, 10, 16, 50, 64, 100, 200];
+/// Timer prescaler frequencies (MFP clock divided by prescaler)
+/// This is the key insight from AtariAudio: pre-calculate the frequencies
+/// instead of using raw divisor values with complex fixed-point math.
+const PRESCALE: [u32; 8] = [
+    0,
+    ATARI_MFP_CLOCK / 4,   // = 614400
+    ATARI_MFP_CLOCK / 10,  // = 245760
+    ATARI_MFP_CLOCK / 16,  // = 153600
+    ATARI_MFP_CLOCK / 50,  // = 49152
+    ATARI_MFP_CLOCK / 64,  // = 38400
+    ATARI_MFP_CLOCK / 100, // = 24576
+    ATARI_MFP_CLOCK / 200, // = 12288
+];
 
 /// Timer identifiers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,13 +51,10 @@ struct Timer {
     data: u8,
     /// Data register initial value (reload on timeout)
     data_init: u8,
-    /// Internal cycle accumulator (in MFP clock cycles * 256 for precision)
-    cycle_accum: u64,
+    /// Internal clock accumulator (simple u32 like AtariAudio)
+    inner_clock: u32,
     /// External event flag (for event mode)
     external_event: bool,
-    /// Debug: count firings for sampling purposes
-    #[cfg(debug_assertions)]
-    fire_count: u64,
 }
 
 impl Timer {
@@ -54,16 +64,12 @@ impl Timer {
         self.control = 0;
         self.data = 0;
         self.data_init = 0;
-        self.cycle_accum = 0;
+        self.inner_clock = 0;
         self.external_event = false;
-        #[cfg(debug_assertions)]
-        {
-            self.fire_count = 0;
-        }
     }
 
     fn restart(&mut self) {
-        self.cycle_accum = 0;
+        self.inner_clock = 0;
         self.data = self.data_init;
     }
 
@@ -104,71 +110,38 @@ impl Timer {
     /// Tick the timer by one sample period.
     ///
     /// Returns true if the timer fired (and interrupt is enabled+masked).
+    /// Implementation ported from Leonard/Oxygene's AtariAudio.
     fn tick(&mut self, host_replay_rate: u32) -> bool {
-        if !self.enable {
-            return false;
-        }
+        let mut ret = false;
 
-        let ctrl = self.control & 0x0F;
-
-        // Event mode (bit 3 set)
-        if (ctrl & 8) != 0 {
-            if self.external_event {
-                self.data = self.data.wrapping_sub(1);
-                if self.data == 0 {
-                    self.data = self.data_init;
+        if self.enable {
+            if (self.control & (1 << 3)) != 0 {
+                // Event mode
+                if self.external_event {
+                    self.data = self.data.wrapping_sub(1);
+                    if self.data == 0 {
+                        self.data = self.data_init;
+                        ret = true;
+                    }
                     self.external_event = false;
-                    return self.mask;
                 }
-                self.external_event = false;
-            }
-            return false;
-        }
+            } else if (self.control & 7) != 0 {
+                // Timer counter mode - simple accumulator logic from AtariAudio
+                self.inner_clock += PRESCALE[(self.control & 7) as usize];
 
-        // Counter mode (delay mode)
-        let prescale_index = (ctrl & 7) as usize;
-        if prescale_index == 0 {
-            return false; // Timer stopped
-        }
-
-        // Calculate how many MFP cycles pass per host sample
-        // Using fixed-point arithmetic (8 fractional bits) for precision
-        // cycles_per_sample = MFP_CLOCK / host_rate
-        // But we accumulate in units of (cycles * 256) to avoid floating point
-        let cycles_per_sample_fp = (ATARI_MFP_CLOCK as u64 * 256) / host_replay_rate as u64;
-        self.cycle_accum += cycles_per_sample_fp;
-
-        // Prescaler divides the MFP clock
-        let prescale = PRESCALE_VALUES[prescale_index] as u64;
-
-        // Each timer tick happens every (prescale) MFP cycles
-        // Timer fires when counter reaches 0, then reloads with period
-        // cycles_per_timer_tick = prescale * 256 (in fixed point)
-        let cycles_per_tick_fp = prescale * 256;
-
-        let mut fired = false;
-
-        // Process accumulated cycles
-        while self.cycle_accum >= cycles_per_tick_fp {
-            self.cycle_accum -= cycles_per_tick_fp;
-
-            // Decrement counter (treating 0 as 256)
-            if self.data == 0 {
-                self.data = 255; // 256 - 1 = 255
-            } else if self.data == 1 {
-                // Counter reaches 0 -> fire and reload
-                self.data = self.data_init; // Will be treated as period() on next cycle
-                fired = true;
-                #[cfg(debug_assertions)]
-                {
-                    self.fire_count = self.fire_count.wrapping_add(1);
+                // Most of the time this while will never loop
+                while self.inner_clock >= host_replay_rate {
+                    self.data = self.data.wrapping_sub(1);
+                    if self.data == 0 {
+                        self.data = self.data_init;
+                        ret = true;
+                    }
+                    self.inner_clock -= host_replay_rate;
                 }
-            } else {
-                self.data -= 1;
             }
         }
 
-        fired && self.mask
+        ret && self.mask
     }
 }
 
@@ -369,8 +342,6 @@ impl Mfp68901 {
             data_init: t.data_init,
             enable: t.enable,
             mask: t.mask,
-            #[cfg(debug_assertions)]
-            fire_count: t.fire_count,
         }
     }
 }
@@ -384,8 +355,6 @@ pub struct DebugTimer {
     pub data_init: u8,
     pub enable: bool,
     pub mask: bool,
-    #[cfg(debug_assertions)]
-    pub fire_count: u64,
 }
 
 #[cfg(test)]

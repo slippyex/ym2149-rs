@@ -6,8 +6,10 @@
 //! - Half-rate noise LFSR, randomized power-on tone edges
 //! - DC adjust ring buffer to remove offset drift
 //! - DigiDrum/SID/buzzer hooks via mixer overrides and drum injection
+//! - Empiric DAC table for authentic Atari ST audio mixing
 //! - Matches hardware behaviour as closely as practical for buzzer and digidrums
 
+use super::empiric_dac::empiric_dac_lookup;
 use crate::backend::Ym2149Backend;
 
 const DEFAULT_MASTER_CLOCK: u32 = 2_000_000;
@@ -129,10 +131,13 @@ fn envelope_data() -> &'static [[u8; 128]; 10] {
 }
 
 /// Hardware 32-step volume table (5-bit).
+/// Values from C++ reference: s_ym2149LogLevels[i] = raw[i] / 3
+/// where raw values are computed using 1.f / powf(sqrtf(2.f), level * 0.5f)
+/// Pre-divided by 3 for headroom (3 channels can sum to ~32767).
 fn volume_table_32() -> &'static [i32; 32] {
     static TABLE: [i32; 32] = [
-        50, 60, 71, 85, 101, 120, 143, 170, 202, 240, 286, 340, 404, 479, 568, 682, 811, 964, 1148,
-        1359, 1623, 1929, 2296, 2730, 3252, 3872, 4614, 5506, 6577, 7860, 9401, 11252,
+        50, 60, 71, 85, 101, 120, 143, 170, 202, 241, 287, 341, 405, 482, 574, 682, 811, 965, 1148,
+        1365, 1623, 1930, 2296, 2730, 3247, 3861, 4592, 5461, 6494, 7723, 9184, 10922,
     ];
     &TABLE
 }
@@ -170,6 +175,10 @@ pub struct Ym2149 {
 
     last_channels: [f32; 3],
     last_sample: f32,
+
+    // Square-sync buzzer support (SID voice effects)
+    inside_timer_irq: bool,
+    edge_need_reset: [bool; 3],
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -217,6 +226,8 @@ impl Ym2149 {
             drum_overrides: [None, None, None],
             last_channels: [0.0; 3],
             last_sample: 0.0,
+            inside_timer_irq: false,
+            edge_need_reset: [false; 3],
         };
         // YM power-on state: R7=0x3F, others 0
         for r in 0..14 {
@@ -293,28 +304,33 @@ impl Ym2149 {
         }
         self.inner_cycle = self.inner_cycle.wrapping_sub(self.ym_clock_one_eighth);
 
-        let env_level = self.envelope_level();
+        let env_level = self.envelope_level() as u32;
 
-        let make_level = |reg: u8| -> u8 {
+        // Build channel levels exactly like C++ reference:
+        // levels  = ((m_regs[8] & 0x10) ? envLevel : (m_regs[8]<<1)) << 0;
+        // levels |= ((m_regs[9] & 0x10) ? envLevel : (m_regs[9]<<1)) << 5;
+        // levels |= ((m_regs[10] & 0x10) ? envLevel : (m_regs[10]<<1)) << 10;
+        let make_level = |reg: u8| -> u32 {
             if (reg & 0x10) != 0 {
-                env_level.min(31)
+                env_level
             } else {
-                (reg & 0x0f) << 1
+                ((reg & 0x0f) << 1) as u32
             }
         };
 
-        let mut chan_levels = [
-            make_level(self.regs[8]),
-            make_level(self.regs[9]),
-            make_level(self.regs[10]),
-        ];
+        let mut levels: u32 = 0;
+        levels |= make_level(self.regs[8]);
+        levels |= make_level(self.regs[9]) << 5;
+        levels |= make_level(self.regs[10]) << 10;
 
+        // Apply user mute
         for (i, muted) in self.user_mute.iter().enumerate() {
             if *muted {
-                chan_levels[i] = 0;
+                levels &= !(0x1f << (i * 5));
             }
         }
 
+        // Apply mixer overrides
         if self.mixer_overrides.force_tone.iter().any(|&f| f) {
             for (i, force) in self.mixer_overrides.force_tone.iter().enumerate() {
                 if *force {
@@ -325,51 +341,75 @@ impl Ym2149 {
         if self.mixer_overrides.force_noise_mute.iter().any(|&m| m) {
             for (i, mute) in self.mixer_overrides.force_noise_mute.iter().enumerate() {
                 if *mute {
-                    let shift = i * 5;
-                    let mask = !(0x1f << shift);
-                    high_mask &= mask;
+                    high_mask &= !(0x1f << (i * 5));
                 }
             }
         }
 
-        let idx_a = (high_mask & 0x1f) as usize;
-        let idx_b = ((high_mask >> 5) & 0x1f) as usize;
-        let idx_c = ((high_mask >> 10) & 0x1f) as usize;
+        // C++ reference: levels &= highMask;
+        // This masks the volume levels with the tone/noise output state
+        levels &= high_mask;
 
-        let half_shift = |period: u32| if period > 1 { 0 } else { 1 };
+        // Extract indices for each channel (0-31)
+        let idx_a = (levels & 0x1f) as usize;
+        let idx_b = ((levels >> 5) & 0x1f) as usize;
+        let idx_c = ((levels >> 10) & 0x1f) as usize;
 
-        let vol32 = volume_table_32();
+        // Check for drum overrides - if any channel has a drum override,
+        // we need to use linear mixing for that channel
+        let has_drum_override =
+            self.drum_overrides[0].is_some() || self.drum_overrides[1].is_some() || self.drum_overrides[2].is_some();
 
-        let level_a = if let Some(override_sample) = self.drum_overrides[0] {
-            override_sample
+        let (mixed, per_channel) = if has_drum_override {
+            // Fallback to linear mixing when drum samples are active
+            let vol32 = volume_table_32();
+            let half_shift = |period: u32| if period > 1 { 0 } else { 1 };
+
+            let level_a = if let Some(override_sample) = self.drum_overrides[0] {
+                override_sample
+            } else {
+                (vol32[idx_a] >> half_shift(self.tone_period[0])) as i32
+            };
+            let level_b = if let Some(override_sample) = self.drum_overrides[1] {
+                override_sample
+            } else {
+                (vol32[idx_b] >> half_shift(self.tone_period[1])) as i32
+            };
+            let level_c = if let Some(override_sample) = self.drum_overrides[2] {
+                override_sample
+            } else {
+                (vol32[idx_c] >> half_shift(self.tone_period[2])) as i32
+            };
+
+            let mixed = level_a + level_b + level_c;
+            (
+                mixed,
+                [
+                    level_a as f32 / 32767.0,
+                    level_b as f32 / 32767.0,
+                    level_c as f32 / 32767.0,
+                ],
+            )
         } else {
-            (vol32[(chan_levels[0] as usize & idx_a).min(31)] >> half_shift(self.tone_period[0]))
-                as i32
-        };
-        let level_b = if let Some(override_sample) = self.drum_overrides[1] {
-            override_sample
-        } else {
-            (vol32[(chan_levels[1] as usize & idx_b).min(31)] >> half_shift(self.tone_period[1]))
-                as i32
-        };
-        let level_c = if let Some(override_sample) = self.drum_overrides[2] {
-            override_sample
-        } else {
-            (vol32[(chan_levels[2] as usize & idx_c).min(31)] >> half_shift(self.tone_period[2]))
-                as i32
+            // Use empiric DAC table for authentic Atari ST audio mixing
+            // This models the non-linear behavior of the resistor network
+            let mixed = empiric_dac_lookup(idx_a, idx_b, idx_c);
+
+            // For per-channel outputs, use linear approximation
+            let vol32 = volume_table_32();
+            (
+                mixed,
+                [
+                    vol32[idx_a] as f32 / 32767.0,
+                    vol32[idx_b] as f32 / 32767.0,
+                    vol32[idx_c] as f32 / 32767.0,
+                ],
+            )
         };
 
-        let mixed = level_a + level_b + level_c;
         let adjusted = self.dc_adjust_sample(mixed);
         let norm = adjusted as f32 / 32767.0;
-        (
-            norm,
-            [
-                level_a as f32 / 32767.0,
-                level_b as f32 / 32767.0,
-                level_c as f32 / 32767.0,
-            ],
-        )
+        (norm, per_channel)
     }
 }
 
@@ -405,6 +445,11 @@ impl Ym2149Backend for Ym2149 {
                 let voice = (addr / 2) as usize;
                 let period = ((self.regs[voice * 2 + 1] as u32) << 8) | self.regs[voice * 2] as u32;
                 self.tone_period[voice] = period;
+                // Square-sync buzzer effect: when period <= 1 inside timer IRQ,
+                // schedule an edge reset for when we exit the IRQ
+                if period <= 1 && self.inside_timer_irq {
+                    self.edge_need_reset[voice] = true;
+                }
             }
             6 => {
                 self.noise_period = self.regs[6] as u32;
@@ -413,8 +458,10 @@ impl Ym2149Backend for Ym2149 {
                 self.update_masks();
             }
             11 | 12 => {
+                // C++ reference: m_envPeriod = (m_regs[12] << 8) | m_regs[11];
+                // Period 0 is valid and means envelope advances every YM tick (buzzer effects)
                 let raw = ((self.regs[12] as u32) << 8) | self.regs[11] as u32;
-                self.env_period = raw.max(1);
+                self.env_period = raw;
             }
             13 => {
                 const SHAPE_MAP: [usize; 16] = [0, 0, 0, 0, 1, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -559,9 +606,22 @@ impl Ym2149 {
         <Self as Ym2149Backend>::set_mixer_overrides(self, force_tone, force_noise_mute)
     }
     /// Signal entry/exit of timer IRQ for square-sync buzzer effects.
-    /// No-op stub - used by SNDH player for advanced effects.
-    pub fn set_inside_timer_irq(&mut self, _inside: bool) {
-        // No-op for basic chip
+    ///
+    /// When exiting the timer IRQ (inside=false), any pending edge resets
+    /// are applied. This is used by SID voice effects where the tone period
+    /// is set to 0 or 1 inside the IRQ to create sample-accurate waveforms.
+    pub fn set_inside_timer_irq(&mut self, inside: bool) {
+        if !inside {
+            // When exiting timer IRQ, apply any pending edge resets
+            for v in 0..3 {
+                if self.edge_need_reset[v] {
+                    self.tone_edges ^= 0x1f << (v * 5);
+                    self.tone_counter[v] = 0;
+                    self.edge_need_reset[v] = false;
+                }
+            }
+        }
+        self.inside_timer_irq = inside;
     }
 }
 

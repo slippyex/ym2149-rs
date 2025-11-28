@@ -9,6 +9,7 @@
 // Internal modules
 pub mod chip;
 pub mod constants;
+mod empiric_dac;
 pub mod psg_bank;
 
 // Re-export public API

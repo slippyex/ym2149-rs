@@ -1,0 +1,17 @@
+[package]
+name = "atari-audio"
+version = "0.1.0"
+edition = "2021"
+description = "Atari ST audio emulation - 1:1 port of Leonard/Oxygene's AtariAudio"
+license = "MIT"
+authors = ["Based on AtariAudio by Arnaud Carré (Leonard/Oxygene)"]
+repository = "https://github.com/your/ym2149-rs"
+
+[dependencies]
+m68000 = "0.2"
+
+[dev-dependencies]
+
+[[example]]
+name = "sndh_test"
+path = "examples/sndh_test.rs"
