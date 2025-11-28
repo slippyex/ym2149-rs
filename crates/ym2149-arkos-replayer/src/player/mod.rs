@@ -53,10 +53,6 @@ use ym2149::ym2149::Ym2149;
 use sample_voice::{HardwareEnvelopeState, SampleVoiceMixer};
 use tick::{TickContext, determine_speed_for_location};
 
-// Re-export for tests
-#[cfg(all(test, feature = "extended-tests"))]
-pub(crate) use tick::resolve_cell;
-
 /// Arkos Tracker song player.
 ///
 /// Manages multiple channels, patterns, and PSG chips.

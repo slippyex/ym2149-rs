@@ -162,7 +162,7 @@ impl AssetLoader for Ym2149Loader {
     }
 
     fn extensions(&self) -> &[&str] {
-        &["ym", "aks", "ay"]
+        &["ym", "aks", "ay", "sndh"]
     }
 }
 

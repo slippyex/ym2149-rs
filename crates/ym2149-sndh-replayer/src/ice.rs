@@ -246,12 +246,10 @@ impl<'a> IceState<'a> {
                 pos += len;
             }
             pos
+        } else if self.get_bits(1)? != 0 {
+            64 + self.get_bits(9)? as usize
         } else {
-            if self.get_bits(1)? != 0 {
-                64 + self.get_bits(9)? as usize
-            } else {
-                self.get_bits(6)? as usize
-            }
+            self.get_bits(6)? as usize
         };
 
         len += 2;

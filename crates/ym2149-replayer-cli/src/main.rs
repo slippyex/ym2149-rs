@@ -325,7 +325,7 @@ impl RealtimeChip for SndhPlayerWrapper {
     }
 
     fn visual_snapshot(&self) -> VisualSnapshot {
-        // SNDH uses native 68000 code - extract YM registers from the emulated chip
+        // SNDH uses native 68000 code - extract YM registers from the emulated PSG
         let regs = self.player.ym2149().dump_registers();
         VisualSnapshot {
             registers: regs,

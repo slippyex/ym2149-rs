@@ -12,7 +12,7 @@ use std::path::Path;
 use ym2149::streaming::DEFAULT_SAMPLE_RATE;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
-use ym2149_sndh_replayer::load_sndh;
+use ym2149_sndh_replayer::{is_sndh_data, load_sndh};
 use ym2149_ym_replayer::{Player, load_song};
 
 use crate::args::ChipChoice;
@@ -222,6 +222,12 @@ pub fn create_player(
         println!("Detected format: AY (ZXAY/EMUL)\n");
         return load_ay_file(&file_data, file_path, color_filter_override);
     } else if extension == "sndh" {
+        println!("Detected format: SNDH (Atari ST)\n");
+        return load_sndh_file(&file_data, file_path, color_filter_override);
+    }
+
+    // Header-based detection for SNDH data even if the extension is missing
+    if is_sndh_data(&file_data) {
         println!("Detected format: SNDH (Atari ST)\n");
         return load_sndh_file(&file_data, file_path, color_filter_override);
     }

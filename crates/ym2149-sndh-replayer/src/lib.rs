@@ -49,6 +49,7 @@ mod machine;
 mod mfp68901;
 mod parser;
 mod player;
+mod ste_dac;
 
 pub use error::{Result, SndhError};
 pub use ice::{ice_depack, is_ice_packed};

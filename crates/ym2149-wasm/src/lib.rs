@@ -43,6 +43,7 @@ mod players;
 use wasm_bindgen::prelude::*;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
+use ym2149_sndh_replayer::is_sndh_data;
 use ym2149_ym_replayer::{PlaybackState, load_song};
 
 use metadata::{YmMetadata, metadata_from_summary};
@@ -79,7 +80,7 @@ pub struct Ym2149Player {
 impl Ym2149Player {
     /// Create a new player from file data.
     ///
-    /// Automatically detects the file format (YM, AKS, or AY).
+    /// Automatically detects the file format (YM, AKS, AY, or SNDH).
     ///
     /// # Arguments
     ///
@@ -240,6 +241,13 @@ impl Ym2149Player {
 
 /// Load a file and create the appropriate player.
 fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), String> {
+    // SNDH needs to be detected first to avoid falling back to AY/other formats
+    // when the header already looks like a packed SNDH.
+    if is_sndh_data(data) {
+        let (wrapper, metadata) = SndhWasmPlayer::new(data)?;
+        return Ok((BrowserSongPlayer::Sndh(Box::new(wrapper)), metadata));
+    }
+
     // Try YM format first
     if let Ok((player, summary)) = load_song(data) {
         let metadata = metadata_from_summary(&player, &summary);
@@ -254,7 +262,7 @@ fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), S
         return Ok((BrowserSongPlayer::Arkos(Box::new(wrapper)), metadata));
     }
 
-    // Try SNDH format (Atari ST)
+    // Try SNDH format (Atari ST) even if the heuristic didn't match
     if let Ok((wrapper, metadata)) = SndhWasmPlayer::new(data) {
         return Ok((BrowserSongPlayer::Sndh(Box::new(wrapper)), metadata));
     }

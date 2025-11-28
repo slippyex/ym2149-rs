@@ -558,6 +558,11 @@ impl Ym2149 {
     pub fn set_mixer_overrides(&mut self, force_tone: [bool; 3], force_noise_mute: [bool; 3]) {
         <Self as Ym2149Backend>::set_mixer_overrides(self, force_tone, force_noise_mute)
     }
+    /// Signal entry/exit of timer IRQ for square-sync buzzer effects.
+    /// No-op stub - used by SNDH player for advanced effects.
+    pub fn set_inside_timer_irq(&mut self, _inside: bool) {
+        // No-op for basic chip
+    }
 }
 
 impl Default for Ym2149 {

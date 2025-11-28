@@ -51,6 +51,10 @@ pub struct SndhPlayer {
     loop_count: u32,
     /// Current subsong (1-based)
     current_subsong: usize,
+    /// Max cycles allowed per play call (configurable for heavy drivers)
+    play_cycle_budget: usize,
+    /// Disable warmup/prime phase (env flag)
+    warmup_enabled: bool,
 }
 
 impl SndhPlayer {
@@ -79,6 +83,12 @@ impl SndhPlayer {
 
         let samples_per_tick = sample_rate / sndh.metadata.player_rate;
 
+        let play_cycle_budget = std::env::var("YM2149_PLAY_CYCLES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(400_000);
+        let warmup_enabled = std::env::var_os("YM2149_NO_WARMUP").is_none();
+
         Ok(Self {
             machine: AtariMachine::new(sample_rate),
             sndh,
@@ -91,6 +101,8 @@ impl SndhPlayer {
             frame_count: 0,
             loop_count: 0,
             current_subsong: 0,
+            play_cycle_budget,
+            warmup_enabled,
         })
     }
 
@@ -128,9 +140,39 @@ impl SndhPlayer {
 
         // Setup playback state
         self.current_subsong = subsong_id;
-        self.inner_sample_pos = 0;
         self.frame = 0;
         self.loop_count = 0;
+
+        // CRITICAL: Call play routine IMMEDIATELY after init to set up registers
+        // before any samples are generated. This matches psgplay behavior where
+        // the timer fires immediately after init.
+        let _ = self
+            .machine
+            .jsr_limited(upload_addr + 8, 0, self.play_cycle_budget);
+        self.frame += 1;
+
+        // Set inner_sample_pos to full tick so we don't call play again immediately
+        self.inner_sample_pos = self.samples_per_tick as i32;
+
+        if self.warmup_enabled {
+            // Let hardware timers run for one player tick (20 ms @50 Hz)
+            // so timer-driven effects are "primed".
+            self.machine.warmup_samples(self.samples_per_tick);
+        }
+
+        // Optional debug: dump vectors after init
+        #[cfg(debug_assertions)]
+        {
+            self.machine.dump_vectors();
+            if std::env::var_os("YM2149_FORCE_TIMERB").is_some() {
+                // Typical SID timer rate: /4 prescaler with TBDR=0x4B (~8 kHz)
+                self.machine.force_timer_b(0x01, 0x4B);
+            }
+            // Optional code slice dumps (helpers for disassembly)
+            self.machine.debug_dump_slice(0x0200, 0x20);
+            self.machine.debug_dump_slice(0x0240, 0x20);
+            self.machine.debug_dump_slice(0x0110, 0x20);
+        }
 
         // Calculate frame count from duration
         if let Some(info) = self.sndh.get_subsong_info(subsong_id, self.sample_rate) {
@@ -194,8 +236,14 @@ impl SndhPlayer {
 
             // Call player tick routine when needed
             if self.inner_sample_pos <= 0 {
-                // Call play routine (entry point + 8) with limited cycles
-                let _ = self.machine.jsr_limited(upload_addr + 8, 0, 50000);
+                // Call play routine (entry point + 8) with limited cycles (or unlimited if budget==0)
+                if self.play_cycle_budget == 0 {
+                    let _ = self.machine.jsr(upload_addr + 8, 0);
+                } else {
+                    let _ = self
+                        .machine
+                        .jsr_limited(upload_addr + 8, 0, self.play_cycle_budget);
+                }
                 self.inner_sample_pos = self.samples_per_tick as i32;
                 self.frame += 1;
 
@@ -259,7 +307,13 @@ impl ChiptunePlayer for SndhPlayer {
             if self.inner_sample_pos <= 0 {
                 // Call play routine (entry point + 8) with limited cycles
                 // Most SNDH play routines complete in < 10000 cycles
-                let _ = self.machine.jsr_limited(upload_addr + 8, 0, 50000);
+                if self.play_cycle_budget == 0 {
+                    let _ = self.machine.jsr(upload_addr + 8, 0);
+                } else {
+                    let _ = self
+                        .machine
+                        .jsr_limited(upload_addr + 8, 0, self.play_cycle_budget);
+                }
                 self.inner_sample_pos = self.samples_per_tick as i32;
                 self.frame += 1;
 

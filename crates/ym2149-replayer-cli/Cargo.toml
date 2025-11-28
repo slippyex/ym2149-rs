@@ -25,7 +25,7 @@ ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-a
 # AY format replayer
 ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.7" }
 
-# SNDH format replayer (Atari ST)
+# SNDH format replayer (Atari ST) - working implementation
 ym2149_sndh_replayer = { package = "ym2149-sndh-replayer", path = "../ym2149-sndh-replayer", version = "0.7" }
 
 # Common types and traits

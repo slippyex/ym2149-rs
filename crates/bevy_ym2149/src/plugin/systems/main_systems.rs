@@ -911,6 +911,29 @@ pub(in crate::plugin) fn process_playback_frames(
     }
 }
 
+pub(super) struct LoadResult {
+    pub(super) player: YmSongPlayer,
+    pub(super) metrics: PlaybackMetrics,
+    pub(super) metadata: Ym2149Metadata,
+}
+
+pub(super) fn load_player_from_bytes(
+    data: &[u8],
+    override_metadata: Option<&Ym2149Metadata>,
+) -> Result<LoadResult, String> {
+    let (player, metrics, mut metadata) = load_song_from_bytes(data)?;
+    if let Some(meta) = override_metadata {
+        metadata.title = meta.title.clone();
+        metadata.author = meta.author.clone();
+        metadata.comment = meta.comment.clone();
+    }
+    Ok(LoadResult {
+        player,
+        metrics,
+        metadata,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -981,27 +1004,4 @@ mod tests {
         app.update();
         assert_eq!(drain_hits(&mut app).len(), 1);
     }
-}
-
-pub(super) struct LoadResult {
-    pub(super) player: YmSongPlayer,
-    pub(super) metrics: PlaybackMetrics,
-    pub(super) metadata: Ym2149Metadata,
-}
-
-pub(super) fn load_player_from_bytes(
-    data: &[u8],
-    override_metadata: Option<&Ym2149Metadata>,
-) -> Result<LoadResult, String> {
-    let (player, metrics, mut metadata) = load_song_from_bytes(data)?;
-    if let Some(meta) = override_metadata {
-        metadata.title = meta.title.clone();
-        metadata.author = meta.author.clone();
-        metadata.comment = meta.comment.clone();
-    }
-    Ok(LoadResult {
-        player,
-        metrics,
-        metadata,
-    })
 }
