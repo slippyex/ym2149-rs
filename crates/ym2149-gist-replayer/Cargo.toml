@@ -1,0 +1,29 @@
+[package]
+name = "ym2149-gist-replayer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "GI Sound Tool (GIST) file parser and multi-PSG player for YM2149"
+readme = "README.md"
+documentation = "https://docs.rs/ym2149-gist-replayer"
+keywords = ["ym2149", "arkos", "tracker", "chiptune", "atari", "gist"]
+categories = ["multimedia::audio", "parsing"]
+
+[dependencies]
+# Core YM2149 emulation
+ym2149 = { path = "../ym2149-core", version = "0.6", default-features = false }
+
+[dev-dependencies]
+# For the player example
+ym2149 = { path = "../ym2149-core", version = "0.6", features = ["streaming"] }
+parking_lot = { workspace = true }
+
+[features]
+default = []
+
+[[example]]
+name = "player"
+path = "examples/player.rs"
