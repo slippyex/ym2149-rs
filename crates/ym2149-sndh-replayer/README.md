@@ -16,7 +16,8 @@ This crate provides playback support for SNDH files, a popular format for Atari 
 - **SNDH Header Parsing**: Extract metadata (title, author, year, subsong info)
 - **68000 CPU Emulation**: Via the `m68000` crate
 - **MFP 68901 Timer Emulation**: For SID voice and timer-based effects
-- **YM2149 Sound Chip**: Using `ym2149` crate for cycle-accurate emulation
+- **STE DAC Emulation**: DMA audio support for STe-specific SNDH files (50kHz mode with averaging)
+- **YM2149 Sound Chip**: Using `ym2149` crate for cycle-accurate emulation (ported from Leonard/Oxygene's AtariAudio)
 - **ChiptunePlayer Trait**: Unified interface compatible with other replayers
 
 ## Install
@@ -112,6 +113,7 @@ The Atari ST machine emulation provides:
 - **4MB RAM** at 0x000000 - 0x3FFFFF
 - **YM2149 PSG** at 0xFF8800 - 0xFF88FF
 - **MFP 68901** at 0xFFFA00 - 0xFFFA25
+- **STE DAC** at 0xFF8900 - 0xFF893F (DMA audio with microwire volume control)
 - **Basic GEMDOS/XBIOS traps** for malloc and timer setup
 
 Timer interrupts (used by SID voice effects) are handled by executing the interrupt handler code at audio sample rate.

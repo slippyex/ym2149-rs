@@ -19,7 +19,7 @@ bevy = { version = "0.17", features = ["bevy_audio", "bevy_sprite", "bevy_ui", "
 bevy_sprite = "0.17"
 bevy_mesh = "0.17"
 bevy_embedded_assets = "0.14"
-ym2149 = { path = "../ym2149-core", version = "0.7", features = ["emulator", "streaming"] }
+ym2149 = { path = "../ym2149-core", version = "0.7" }
 ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer" }
 
 [[example]]

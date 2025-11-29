@@ -10,6 +10,18 @@
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// Error type for ring buffer operations
+#[derive(Debug, Clone)]
+pub struct RingBufferError(pub String);
+
+impl std::fmt::Display for RingBufferError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for RingBufferError {}
+
 /// Ring buffer for streaming audio samples
 ///
 /// # Thread Safety
@@ -40,10 +52,12 @@ impl RingBuffer {
     /// Returns an error if:
     /// - Requested capacity is 0
     /// - Requested capacity would exceed maximum safe allocation (512 MB)
-    pub fn new(requested_capacity: usize) -> crate::Result<Self> {
+    pub fn new(requested_capacity: usize) -> Result<Self, RingBufferError> {
         // Validate capacity
         if requested_capacity == 0 {
-            return Err("Ring buffer capacity must be greater than 0".into());
+            return Err(RingBufferError(
+                "Ring buffer capacity must be greater than 0".into(),
+            ));
         }
 
         let capacity = requested_capacity.next_power_of_two();
@@ -52,11 +66,10 @@ impl RingBuffer {
         // 512 MB worth of f32 samples
         const MAX_CAPACITY: usize = 512 * 1024 * 1024 / std::mem::size_of::<f32>();
         if capacity > MAX_CAPACITY {
-            return Err(format!(
+            return Err(RingBufferError(format!(
                 "Ring buffer capacity {} exceeds maximum safe size {}",
                 capacity, MAX_CAPACITY
-            )
-            .into());
+            )));
         }
 
         let mask = capacity - 1;

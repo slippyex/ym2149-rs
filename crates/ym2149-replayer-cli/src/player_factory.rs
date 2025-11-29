@@ -6,17 +6,18 @@
 //! - Setting up demo mode when no file is provided
 //! - Configuring chip-specific settings
 
+use crate::audio::DEFAULT_SAMPLE_RATE;
 use std::env;
 use std::fs;
 use std::path::Path;
-use ym2149::streaming::DEFAULT_SAMPLE_RATE;
+use ym2149::Ym2149Backend;
 use ym2149_arkos_replayer::{ArkosPlayer, load_aks};
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
 use ym2149_sndh_replayer::is_sndh_data;
 use ym2149_ym_replayer::{Player, load_song};
 
 use crate::args::ChipChoice;
-use crate::{ArkosPlayerWrapper, AtariAudioWrapper, AyPlayerWrapper, RealtimeChip};
+use crate::{ArkosPlayerWrapper, AyPlayerWrapper, RealtimeChip, SndhPlayerWrapper};
 
 /// Information about a loaded player.
 pub struct PlayerInfo {
@@ -89,33 +90,35 @@ fn load_arkos_file(
     })
 }
 
-/// Load an SNDH (Atari ST) file using atari-audio for accurate playback.
+/// Load an SNDH (Atari ST) file using ym2149-sndh-replayer for accurate playback.
 fn load_sndh_file(
     file_data: &[u8],
     file_path: &str,
     color_filter_override: Option<bool>,
 ) -> ym2149_ym_replayer::Result<PlayerInfo> {
-    // Decompress if ICE! packed
-    let raw_data = if is_ice_packed(file_data) {
-        ice_depack(file_data).map_err(|e| format!("ICE decompression failed: {e}"))?
-    } else {
-        file_data.to_vec()
-    };
+    // Create player using ym2149-sndh-replayer (handles ICE! decompression internally)
+    let player = SndhPlayerWrapper::new(file_data, DEFAULT_SAMPLE_RATE)
+        .map_err(|e| format!("SNDH player init failed: {e}"))?;
 
-    // Parse metadata from SNDH header
-    let (title, author, player_rate) = parse_sndh_metadata(&raw_data);
+    // Get metadata from the player (which already parsed the SNDH file)
+    use ym2149_common::PlaybackMetadata;
+    let metadata = player.metadata();
+    let title = if metadata.title().is_empty() {
+        "(unknown)".to_string()
+    } else {
+        metadata.title().to_string()
+    };
+    let author = if metadata.author().is_empty() {
+        "(unknown)".to_string()
+    } else {
+        metadata.author().to_string()
+    };
+    let player_rate = metadata.frame_rate();
 
     let info_str = format!(
-        "File: {}\nFormat: SNDH (Atari ST) via atari-audio\nTitle: {}\nAuthor: {}\nPlayer rate: {} Hz",
-        file_path,
-        title.as_deref().unwrap_or("(unknown)"),
-        author.as_deref().unwrap_or("(unknown)"),
-        player_rate,
+        "File: {}\nFormat: SNDH (Atari ST)\nTitle: {}\nAuthor: {}\nPlayer rate: {} Hz",
+        file_path, title, author, player_rate,
     );
-
-    // Create player using atari-audio
-    let player = AtariAudioWrapper::new(&raw_data, DEFAULT_SAMPLE_RATE, player_rate)
-        .map_err(|e| format!("atari-audio init failed: {e}"))?;
 
     // Estimate duration (3 minutes if unknown)
     let total_samples = DEFAULT_SAMPLE_RATE as usize * 180;
@@ -127,300 +130,6 @@ fn load_sndh_file(
         song_info: info_str,
         color_filter,
     })
-}
-
-// --- ICE! decompression ---
-
-const ICE_MAGIC: u32 = 0x49434521; // "ICE!"
-
-fn is_ice_packed(data: &[u8]) -> bool {
-    if data.len() < 12 {
-        return false;
-    }
-    get_u32_be(data, 0) == ICE_MAGIC
-}
-
-fn get_u32_be(data: &[u8], offset: usize) -> u32 {
-    ((data[offset] as u32) << 24)
-        | ((data[offset + 1] as u32) << 16)
-        | ((data[offset + 2] as u32) << 8)
-        | (data[offset + 3] as u32)
-}
-
-fn ice_depack(src: &[u8]) -> Result<Vec<u8>, String> {
-    if !is_ice_packed(src) {
-        return Err("No ICE! header found".to_string());
-    }
-
-    let packed_size = get_u32_be(src, 4) as usize;
-    let orig_size = get_u32_be(src, 8) as usize;
-
-    if src.len() < packed_size {
-        return Err(format!(
-            "Data too short: expected {} bytes, got {}",
-            packed_size,
-            src.len()
-        ));
-    }
-
-    if orig_size == 0 || orig_size > 16 * 1024 * 1024 {
-        return Err(format!("Invalid original size: {}", orig_size));
-    }
-
-    let mut dst = vec![0u8; orig_size];
-    let mut state = IceState::new(src, packed_size, &mut dst);
-    state.depack()?;
-
-    Ok(dst)
-}
-
-struct IceState<'a> {
-    src: &'a [u8],
-    src_pos: usize,
-    dst: &'a mut [u8],
-    dst_pos: usize,
-    cmd: u8,
-    mask: u8,
-}
-
-impl<'a> IceState<'a> {
-    fn new(src: &'a [u8], packed_size: usize, dst: &'a mut [u8]) -> Self {
-        let dst_len = dst.len();
-        Self {
-            src,
-            src_pos: packed_size,
-            dst,
-            dst_pos: dst_len,
-            cmd: 0,
-            mask: 0,
-        }
-    }
-
-    fn depack(&mut self) -> Result<(), String> {
-        self.get_bits(1)?;
-        self.mask = 0x80;
-        while (self.cmd & 1) == 0 {
-            self.cmd >>= 1;
-            self.mask >>= 1;
-        }
-        self.cmd >>= 1;
-
-        loop {
-            if self.get_bits(1)? != 0 {
-                let len = self.get_literal_length()?;
-                self.copy_literal(len)?;
-                if self.dst_pos == 0 {
-                    return Ok(());
-                }
-            }
-
-            let (len, pos) = self.get_sld_params()?;
-            self.copy_sld(len, pos)?;
-            if self.dst_pos == 0 {
-                return Ok(());
-            }
-        }
-    }
-
-    fn get_bits(&mut self, mut len: u32) -> Result<u32, String> {
-        let mut result = 0u32;
-        while len > 0 {
-            result <<= 1;
-            self.mask >>= 1;
-            if self.mask == 0 {
-                if self.src_pos == 0 {
-                    return Err("Unexpected end of compressed data".to_string());
-                }
-                self.src_pos -= 1;
-                self.cmd = self.src[self.src_pos];
-                self.mask = 0x80;
-            }
-            if (self.cmd & self.mask) != 0 {
-                result |= 1;
-            }
-            len -= 1;
-        }
-        Ok(result)
-    }
-
-    fn get_literal_length(&mut self) -> Result<usize, String> {
-        const LEN_BITS: [u32; 6] = [1, 2, 2, 3, 8, 15];
-        const MAX_LEN: [u32; 6] = [1, 3, 3, 7, 255, 32768];
-        const OFFSET: [usize; 6] = [1, 2, 5, 8, 15, 270];
-
-        let mut table_pos = 0;
-        let len = loop {
-            let l = self.get_bits(LEN_BITS[table_pos])?;
-            if l != MAX_LEN[table_pos] {
-                break l;
-            }
-            table_pos += 1;
-            if table_pos >= 6 {
-                break l;
-            }
-        };
-
-        let len = len as usize + OFFSET[table_pos];
-        Ok(len.min(self.dst_pos))
-    }
-
-    fn copy_literal(&mut self, len: usize) -> Result<(), String> {
-        for _ in 0..len {
-            if self.src_pos == 0 || self.dst_pos == 0 {
-                break;
-            }
-            self.src_pos -= 1;
-            self.dst_pos -= 1;
-            self.dst[self.dst_pos] = self.src[self.src_pos];
-        }
-        Ok(())
-    }
-
-    fn get_sld_params(&mut self) -> Result<(usize, usize), String> {
-        const EXTRA_BITS: [u32; 5] = [0, 0, 1, 2, 10];
-        const OFFSET: [usize; 5] = [0, 1, 2, 4, 8];
-
-        let mut table_pos = 0;
-        while self.get_bits(1)? != 0 {
-            table_pos += 1;
-            if table_pos == 4 {
-                break;
-            }
-        }
-        let mut len = OFFSET[table_pos] + self.get_bits(EXTRA_BITS[table_pos])? as usize;
-
-        let pos = if len != 0 {
-            const POS_EXTRA_BITS: [u32; 3] = [8, 5, 12];
-            const POS_OFFSET: [usize; 3] = [32, 0, 288];
-
-            let mut table_pos = 0;
-            while self.get_bits(1)? != 0 {
-                table_pos += 1;
-                if table_pos == 2 {
-                    break;
-                }
-            }
-            let mut pos =
-                POS_OFFSET[table_pos] + self.get_bits(POS_EXTRA_BITS[table_pos])? as usize;
-            if pos != 0 {
-                pos += len;
-            }
-            pos
-        } else if self.get_bits(1)? != 0 {
-            64 + self.get_bits(9)? as usize
-        } else {
-            self.get_bits(6)? as usize
-        };
-
-        len += 2;
-        let len = len.min(self.dst_pos);
-
-        Ok((len, pos))
-    }
-
-    fn copy_sld(&mut self, len: usize, pos: usize) -> Result<(), String> {
-        let mut q = self.dst_pos + pos + 1;
-
-        for _ in 0..len {
-            if self.dst_pos == 0 {
-                break;
-            }
-            q -= 1;
-            self.dst_pos -= 1;
-            if q < self.dst.len() {
-                self.dst[self.dst_pos] = self.dst[q];
-            }
-        }
-        Ok(())
-    }
-}
-
-// --- SNDH metadata parsing ---
-
-fn parse_sndh_metadata(data: &[u8]) -> (Option<String>, Option<String>, u32) {
-    let mut title = None;
-    let mut author = None;
-    let mut player_rate = 50u32;
-
-    if data.len() < 16 || &data[12..16] != b"SNDH" {
-        return (title, author, player_rate);
-    }
-
-    // Calculate header size from BRA instruction
-    let header_size = if data[1] != 0 {
-        (data[1] as usize) + 2
-    } else {
-        let offset = ((data[2] as usize) << 8) | (data[3] as usize);
-        offset + 2
-    };
-    let header_end = header_size.min(data.len());
-
-    let mut pos = 16;
-
-    while pos + 4 <= header_end {
-        let tag = &data[pos..(pos + 4).min(data.len())];
-        if tag.len() < 4 {
-            break;
-        }
-
-        if &tag[0..4] == b"HDNS" {
-            break;
-        }
-
-        if &tag[0..4] == b"TITL" {
-            pos += 4;
-            let (s, new_pos) = read_nt_string(data, pos);
-            title = Some(s);
-            pos = new_pos;
-            continue;
-        }
-
-        if &tag[0..4] == b"COMM" {
-            pos += 4;
-            let (s, new_pos) = read_nt_string(data, pos);
-            author = Some(s);
-            pos = new_pos;
-            continue;
-        }
-
-        // Timer tags
-        if &tag[0..2] == b"TA"
-            || &tag[0..2] == b"TB"
-            || &tag[0..2] == b"TC"
-            || &tag[0..2] == b"TD"
-        {
-            pos += 2;
-            let (s, new_pos) = read_nt_string(data, pos);
-            if let Ok(rate) = s.parse::<u32>() {
-                player_rate = rate;
-            }
-            pos = new_pos;
-            continue;
-        }
-
-        if &tag[0..2] == b"!V" {
-            pos += 2;
-            let (s, new_pos) = read_nt_string(data, pos);
-            if let Ok(rate) = s.parse::<u32>() {
-                player_rate = rate;
-            }
-            pos = new_pos;
-            continue;
-        }
-
-        pos += 1;
-    }
-
-    (title, author, player_rate)
-}
-
-fn read_nt_string(data: &[u8], start: usize) -> (String, usize) {
-    let mut end = start;
-    while end < data.len() && data[end] != 0 {
-        end += 1;
-    }
-    let s = String::from_utf8_lossy(&data[start..end]).to_string();
-    (s, end + 1)
 }
 
 /// Load an AY (ZXAY/EMUL) file.

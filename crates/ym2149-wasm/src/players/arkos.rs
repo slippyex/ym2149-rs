@@ -4,6 +4,7 @@
 
 use crate::YM_SAMPLE_RATE_F32;
 use crate::metadata::YmMetadata;
+use ym2149::Ym2149Backend;
 use ym2149_arkos_replayer::ArkosPlayer;
 use ym2149_ym_replayer::PlaybackState;
 

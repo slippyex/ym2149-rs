@@ -1,9 +1,9 @@
 //! YM2149 lookup tables
 //!
-//! Original C++ by Arnaud Carré aka Leonard/Oxygene
+//! Original C++ by Arnaud Carré aka Leonard/Oxygene (@leonard_coder)
 
 /// Envelope data: 10 shapes × 32 steps × 4 phases = 1280 bytes
-/// Accessed as: s_envData[shape * 32 * 4 + pos + 64]
+/// Accessed as: ENV_DATA[shape * 32 * 4 + pos + 64]
 #[rustfmt::skip]
 pub static ENV_DATA: [u8; 10 * 32 * 4] = [
     // Env00xx (shape 0: \_____)
@@ -62,7 +62,9 @@ pub static ENV_DATA: [u8; 10 * 32 * 4] = [
 pub static SHAPE_TO_ENV: [u8; 16] = [0, 0, 0, 0, 1, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 /// Tone/noise mask lookup table
-pub static MASKS: [u32; 8] = [0x0000, 0x001f, 0x03e0, 0x03ff, 0x7c00, 0x7c1f, 0x7fe0, 0x7fff];
+pub static MASKS: [u32; 8] = [
+    0x0000, 0x001f, 0x03e0, 0x03ff, 0x7c00, 0x7c1f, 0x7fe0, 0x7fff,
+];
 
 /// Register masks
 pub static REG_MASK: [u8; 14] = [

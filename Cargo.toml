@@ -13,7 +13,6 @@ members = [
     "crates/ym2149-wasm",
     "crates/ym2149-ay-replayer",
     "crates/ym2149-sndh-replayer",
-    "crates/atari-audio",
 ]
 resolver = "2"
 

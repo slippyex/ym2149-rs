@@ -10,6 +10,7 @@ use bevy_ym2149::OscilloscopeBuffer;
 use bevy_ym2149::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
 use std::array::from_fn;
 use std::f32::consts::PI;
+use ym2149::Ym2149Backend;
 
 // Oscilloscope rendering constants
 const OSC_MARGIN: f32 = 6.0;

@@ -6,6 +6,7 @@ use std::mem;
 use crate::error::{AyError, Result};
 use crate::format::{AyFile, AyPoints, AySong};
 use crate::machine::AyMachine;
+use ym2149::Ym2149Backend;
 use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState};
 
 const SAMPLE_RATE: u32 = 44_100;

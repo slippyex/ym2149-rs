@@ -22,6 +22,7 @@ graph TB
         REPLAYER["ym2149-ym-replayer<br/>YM Parser & Player"]
         ARKOS["ym2149-arkos-replayer<br/>AKS Parser & Player"]
         AY["ym2149-ay-replayer<br/>ZXAY/EMUL Parser & Player"]
+        SNDH["ym2149-sndh-replayer<br/>SNDH + 68000 Emulation"]
     end
 
     subgraph "Layer 2: Chip Backends"
@@ -39,12 +40,16 @@ graph TB
     BEVY --> REPLAYER
     BEVY --> ARKOS
     BEVY --> AY
+    BEVY --> SNDH
     WASM --> REPLAYER
     WASM --> ARKOS
     WASM --> AY
+    WASM --> SNDH
     CLI --> REPLAYER
     CLI --> ARKOS
     CLI --> AY
+    CLI --> SNDH
+    SNDH --> YM2149
     REPLAYER --> YM2149
     REPLAYER -.optional.-> SOFTSYNTH
     ARKOS --> YM2149
@@ -62,11 +67,12 @@ graph TB
 | **ym2149-ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()` | Powers CLI/Bevy/WASM YM playback |
 | **ym2149-arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Supports multi-chip Arkos rips |
 | **ym2149-ay-replayer** | 3 | Project AY ZXAY/EMUL parsing + Z80 replayer | `AyPlayer`, `load_ay()` | ZX-only; CPC AY files rejected (firmware unsupported) |
-| **bevy_ym2149** | 4 | Bevy audio plugin with YM/AKS/AY players | `Ym2149Plugin`, `YmSongPlayer` | Handles streaming & hot-reload |
+| **ym2149-sndh-replayer** | 3 | SNDH (Atari ST) parser + 68000/MFP/STE-DAC emulation | `SndhPlayer`, `load_sndh()` | Native 68000 code execution via m68000 crate |
+| **bevy_ym2149** | 4 | Bevy audio plugin with YM/AKS/AY/SNDH players | `Ym2149Plugin`, `YmSongPlayer` | Handles streaming & hot-reload |
 | **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization ECS systems | Consumed by example scenes |
 | **bevy_ym2149_examples** | 4 | Runnable Bevy demos | Example scenes | Demonstrates plugin usage |
-| **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | Auto-detects YM/AKS/AY (CPC AY disabled) |
-| **ym2149-replayer-cli** | 4 | Terminal streaming/export CLI | `main.rs` | Streams YM/AKS/ZX-AY (CPC AY rejected with warning) |
+| **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | Auto-detects YM/AKS/AY/SNDH (CPC AY disabled) |
+| **ym2149-replayer-cli** | 4 | Terminal streaming/export CLI | `main.rs` | Streams YM/AKS/ZX-AY/SNDH (CPC AY rejected with warning) |
 
 ---
 
@@ -133,6 +139,47 @@ sequenceDiagram
 > logic inside their bundled code. Calls into the Spectrum/CPC ROM jump
 > tables are treated as unsupported and playback stops (no ROMs are
 > bundled or emulated).
+
+### SNDH (Atari ST) Flow
+
+```mermaid
+sequenceDiagram
+    participant File as SNDH File
+    participant Parser as SNDH Parser
+    participant Machine as AtariMachine
+    participant CPU as M68000 (m68000)
+    participant MFP as MFP68901
+    participant DAC as STE DAC
+    participant PSG as YM2149
+    participant Audio as Audio Device
+
+    File->>Parser: parse header/metadata
+    Parser->>Parser: ICE! decompress if packed
+    Parser-->>Machine: upload binary to RAM
+
+    Machine->>CPU: JSR init (D0 = subsong)
+    CPU->>PSG: init registers
+    CPU->>MFP: setup timers
+
+    loop Every player tick (~50Hz)
+        Machine->>CPU: JSR play routine
+        CPU->>PSG: write YM registers
+        CPU->>MFP: timer handling
+        CPU->>DAC: DMA audio (STe only)
+    end
+
+    loop Per audio sample
+        Machine->>MFP: tick timers (IRQ dispatch)
+        Machine->>PSG: compute_next_sample()
+        Machine->>DAC: mix DMA sample (if active)
+        Machine-->>Audio: i16/f32 sample
+    end
+```
+
+> **Architecture:** SNDH files contain native 68000 machine code that must be
+> executed on an emulated Atari ST. The `ym2149-sndh-replayer` provides complete
+> machine emulation including MFP 68901 timers (for SID voice effects) and
+> STE DAC (for DMA audio). The YM2149 emulation is shared with other replayers.
 
 ---
 
@@ -534,21 +581,22 @@ Ym2149VizPlugin
 
 ### CLI / Streaming
 
-`ym2149-replayer-cli` wraps `ym2149-ym-replayer` + `ym2149-arkos-replayer` under a single
-`RealtimeChip` trait. It wires streaming audio (`ym2149::streaming`),
-terminal visualization, and hotkeys for muting, color filter toggles,
-and tracker metadata.
+`ym2149-replayer-cli` wraps `ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`,
+and `ym2149-sndh-replayer` under a single `RealtimeChip` trait. It wires streaming audio
+(`ym2149::streaming`), terminal visualization, and hotkeys for muting, color filter toggles,
+and tracker metadata. File format is auto-detected based on extension and header magic.
 
 ### WebAssembly Player
 
 `ym2149-wasm` exposes `Ym2149Player` to JavaScript via wasm-bindgen. A
 `BrowserSongPlayer` enum automatically decides whether the loaded bytes
-should be handled by `ym2149-ym-replayer` (YM dumps) or `ym2149-arkos-replayer`
-(`.aks`), ensuring the same API works for both ecosystems. The `pkg/`
+should be handled by `ym2149-ym-replayer` (YM dumps), `ym2149-arkos-replayer`
+(`.aks`), `ym2149-ay-replayer` (`.ay`), or `ym2149-sndh-replayer` (`.sndh`),
+ensuring the same API works for all format ecosystems. The `pkg/`
 artifacts live next to `crates/ym2149-wasm/examples`, and
 `scripts/build-wasm-examples.sh` rebuilds/copies them so `simple-player.html`
-always serves the latest bundle. Sample AKS/YM files used in wasm demos
-and tests live in [`examples/arkos`](examples/arkos).
+always serves the latest bundle. Sample AKS/YM/SNDH files used in wasm demos
+and tests live in [`examples/`](examples/).
 
 ---
 
@@ -645,12 +693,13 @@ bevy_ym2149_examples
         │
         └──────────────────────────────────────────────┐
                                                        ↓
-ym2149-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
+ym2149-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer }
 
-ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
+ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer }
 
 ym2149-arkos-replayer ──→ ym2149-core
 ym2149-ay-replayer ─────→ ym2149-core + iz80
+ym2149-sndh-replayer ───→ ym2149-core + m68000
 ym2149-ym-replayer ────→ ym2149-core
 ym2149-softsynth (opt) ─→ ym2149-core (implements Ym2149Backend)
 ```

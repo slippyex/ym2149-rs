@@ -56,6 +56,7 @@ use bevy::prelude::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use ym2149::Ym2149Backend;
 use ym2149::util::PSG_MASTER_CLOCK_HZ;
 
 // Import from sibling modules

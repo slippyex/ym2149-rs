@@ -6,14 +6,14 @@
 //! - Keyboard input handling
 //! - Progress display
 
+use crate::audio::VISUALIZATION_UPDATE_MS;
+use crate::viz_helpers::{create_channel_status, create_volume_bar};
 use parking_lot::Mutex;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-use ym2149::streaming::VISUALIZATION_UPDATE_MS;
 use ym2149::util::{channel_period, period_to_frequency};
-use ym2149::visualization::{create_channel_status, create_volume_bar};
 use ym2149_ym_replayer::PlaybackState;
 
 use crate::streaming::StreamingContext;
@@ -244,7 +244,7 @@ fn handle_key_press(
 fn display_frame(
     snapshot: &VisualSnapshot,
     player: &Arc<Mutex<Box<dyn RealtimeChip>>>,
-    stats: &ym2149::streaming::PlaybackStats,
+    stats: &crate::audio::PlaybackStats,
     elapsed: f32,
     fill_pct: f32,
 ) {

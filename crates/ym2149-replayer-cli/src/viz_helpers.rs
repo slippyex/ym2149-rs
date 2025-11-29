@@ -22,16 +22,6 @@ use std::fmt::Write;
 ///
 /// # Returns
 /// A formatted status string showing tone/noise state, amplitude, active effects and special effects
-///
-/// # Examples
-/// ```
-/// use ym2149::visualization::create_channel_status;
-///
-/// let status = create_channel_status(true, true, 15, true, "SAWDN", false, false, false);
-/// assert!(status.contains("T"));
-/// assert!(status.contains("N"));
-/// assert!(status.contains("SAWDN"));
-/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn create_channel_status(
     tone_enabled: bool,
@@ -103,23 +93,6 @@ pub fn create_channel_status(
 ///
 /// # Returns
 /// String of █ characters representing the amplitude
-///
-/// # Examples
-/// ```
-/// use ym2149::visualization::create_volume_bar;
-///
-/// // Full volume
-/// let bar = create_volume_bar(1.0, 10);
-/// assert_eq!(bar.chars().count(), 10);
-///
-/// // Half volume
-/// let bar = create_volume_bar(0.5, 10);
-/// assert_eq!(bar.chars().count(), 5);
-///
-/// // Zero volume
-/// let bar = create_volume_bar(0.0, 10);
-/// assert!(bar.is_empty());
-/// ```
 pub fn create_volume_bar(amplitude: f32, max_length: usize) -> String {
     let normalized = amplitude.clamp(0.0, 1.0);
     let block_count = (normalized * max_length as f32) as usize;

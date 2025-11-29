@@ -9,7 +9,8 @@ All notable changes to the ym2149-rs project.
   - **ICE! 2.4 Decompression** - Decompress ICE-packed SNDH files
   - **SNDH Parser** - Parse SNDH headers and metadata (TITL, COMM, YEAR, TIME, timer tags, etc.)
   - **MFP 68901 Timer Emulation** - Accurate timer support for SID voice and other timer-based effects
-  - **Atari ST Machine** - Memory-mapped I/O emulation with 4MB RAM, YM2149, and MFP timers
+  - **STE DAC Emulation** - DMA audio support for STe-specific SNDH files (50kHz mode with averaging)
+  - **Atari ST Machine** - Memory-mapped I/O emulation with 4MB RAM, YM2149, MFP timers, and STE DAC
   - **68000 CPU Emulation** - Via the `m68000` crate for executing native SNDH replay code
   - **ChiptunePlayer Implementation** - Unified interface compatible with other replayers
   - Supports multiple subsongs, player rate detection (TA/TB/TC/TD/VBL tags), and duration parsing
@@ -18,15 +19,22 @@ All notable changes to the ym2149-rs project.
 - **SNDH support in ym2149-wasm** - WASM player supports SNDH files in the browser
 - **`ym2149-common` crate** - New shared crate providing unified traits and types across all replayers:
   - `ChiptunePlayer` trait - Common playback interface for all player types (play, pause, stop, state, generate_samples)
-  - `PlaybackMetadata` trait - Unified metadata access across YM, AKS, and AY formats
+  - `PlaybackMetadata` trait - Unified metadata access across YM, AKS, AY, and SNDH formats
   - `PlaybackState` enum - Standard playback states (Stopped, Playing, Paused)
   - `BasicMetadata` struct - Simple metadata container for generic use cases
-- `ChiptunePlayer` implementations for all three player types:
+- `ChiptunePlayer` implementations for all four player types:
   - `Ym6PlayerGeneric<B>` in `ym2149-ym-replayer`
   - `ArkosPlayer` in `ym2149-arkos-replayer`
   - `AyPlayer` in `ym2149-ay-replayer`
+  - `SndhPlayer` in `ym2149-sndh-replayer`
 
 ### Changed
+- **YM2149 Core Emulation Rewrite** - Ported Leonard/Oxygene's cycle-accurate AtariAudio implementation:
+  - New `ym2149/chip.rs` with hardware-accurate 250kHz (2MHz/8) emulation
+  - New `ym2149/tables.rs` with accurate envelope shapes and logarithmic DAC levels
+  - DC-adjust sliding window for clean audio output
+  - Timer IRQ support for square-sync buzzer effects
+  - Proper noise LFSR implementation
 - **Module restructuring** - Split large modules into organized submodules:
   - `ym2149-ym-replayer`: `parser.rs` → `parser/` module, `player.rs` → `player/` module
   - `ym2149-arkos-replayer`: `parser.rs` → `parser/` module, `player.rs` → `player/` module, `channel_player.rs` → `channel_player/` module
@@ -35,10 +43,17 @@ All notable changes to the ym2149-rs project.
 - Added `PartialEq`, `Eq` derives to format structs (`AyFile`, `AyHeader`, `AySong`, etc.)
 - Added `PartialEq` to metadata types (`Ym6Metadata`, `ArkosMetadata`, `AyMetadata`, `BasicMetadata`)
 - **`AyPlaybackState` deprecated** - Use `PlaybackState` from `ym2149-common` instead (backwards-compatible alias provided)
+- **CLI uses native SNDH replayer** - Removed dependency on external `atari-audio` crate; all SNDH playback now uses `ym2149-sndh-replayer`
+
+### Removed
+- **`atari-audio` crate** - Removed from workspace; functionality fully integrated into `ym2149-sndh-replayer` and `ym2149-core`
+- **`empiric_dac.rs`** - Removed legacy DAC implementation from `ym2149-core`; replaced by accurate logarithmic tables
 
 ### Fixed
 - Removed redundant `AyPlaybackState` enum - now uses unified `PlaybackState` from `ym2149-common`
 - Metadata moved from `ym2149-core` to `ym2149-common` (core crate now only handles YM2149 chip emulation)
+- SNDH metadata now correctly extracted from ICE-packed files (decompression handled internally)
+- Fixed Clippy warnings across the entire workspace
 
 ### Migration Guide
 ```rust

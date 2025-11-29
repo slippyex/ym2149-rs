@@ -6,11 +6,10 @@
 //! - Real-time buffer management
 //! - Playback state synchronization
 
+use crate::audio::{AudioDevice, BUFFER_BACKOFF_MICROS, RealtimePlayer, StreamConfig};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use ym2149::streaming::{BUFFER_BACKOFF_MICROS, StreamConfig};
-use ym2149::{AudioDevice, RealtimePlayer};
 use ym2149_ym_replayer::PlaybackState;
 
 use crate::RealtimeChip;
@@ -72,9 +71,13 @@ impl StreamingContext {
         config: StreamConfig,
         color_filter_enabled: bool,
     ) -> ym2149_ym_replayer::Result<Self> {
-        let streamer = Arc::new(RealtimePlayer::new(config)?);
+        let streamer = Arc::new(
+            RealtimePlayer::new(config)
+                .map_err(|e| format!("Failed to create realtime player: {e}"))?,
+        );
         let audio_device =
-            AudioDevice::new(config.sample_rate, config.channels, streamer.get_buffer())?;
+            AudioDevice::new(config.sample_rate, config.channels, streamer.get_buffer())
+                .map_err(|e| format!("Failed to create audio device: {e}"))?;
 
         println!("Audio device initialized - playing to speakers\n");
 

@@ -1,9 +1,10 @@
 //! Real-time audio playback with streaming
 //!
 //! Provides a simple streaming interface for real-time sample playback.
-//! In a full implementation, this would use CPAL for audio device output.
 
-use super::{BUFFER_BACKOFF_MICROS, RingBuffer, StreamConfig};
+use super::StreamConfig;
+use super::ring_buffer::RingBufferError;
+use super::{BUFFER_BACKOFF_MICROS, RingBuffer};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -43,7 +44,7 @@ pub struct PlaybackStats {
 
 impl RealtimePlayer {
     /// Create a new real-time player with streaming
-    pub fn new(config: StreamConfig) -> crate::Result<Self> {
+    pub fn new(config: StreamConfig) -> Result<Self, RingBufferError> {
         let buffer = Arc::new(RingBuffer::new(config.ring_buffer_size)?);
 
         let stats = Arc::new(Mutex::new(PlaybackStats {

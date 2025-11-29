@@ -7,18 +7,19 @@
 //! - YM2149 hardware emulation
 
 mod args;
+mod audio;
 mod player_factory;
 mod streaming;
 mod visualization;
+mod viz_helpers;
 
+use audio::{DEFAULT_SAMPLE_RATE, StreamConfig};
 use std::time::Instant;
 use ym2149::Ym2149Backend;
-use ym2149::streaming::{DEFAULT_SAMPLE_RATE, StreamConfig};
 use ym2149_arkos_replayer::ArkosPlayer;
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyPlaybackState};
 use ym2149_common::PlaybackState as SndhPlaybackState;
 use ym2149_sndh_replayer::SndhPlayer;
-use atari_audio::AtariMachine;
 use ym2149_ym_replayer::PlaybackController;
 use ym2149_ym_replayer::player::ym_player::Ym6PlayerGeneric;
 
@@ -278,8 +279,28 @@ pub struct SndhPlayerWrapper {
 }
 
 impl SndhPlayerWrapper {
-    pub fn new(player: SndhPlayer) -> Self {
+    /// Create wrapper from an existing SndhPlayer
+    pub fn from_player(player: SndhPlayer) -> Self {
         Self { player }
+    }
+
+    /// Create a new SNDH player from raw file data
+    pub fn new(sndh_data: &[u8], sample_rate: u32) -> Result<Self, String> {
+        let mut player = SndhPlayer::new(sndh_data, sample_rate)
+            .map_err(|e| format!("SNDH player init failed: {e}"))?;
+
+        // Initialize first subsong
+        player
+            .init_subsong(1)
+            .map_err(|e| format!("Subsong init failed: {e}"))?;
+
+        Ok(Self { player })
+    }
+
+    /// Get player metadata
+    pub fn metadata(&self) -> &ym2149_common::BasicMetadata {
+        use ym2149_common::ChiptunePlayer;
+        self.player.metadata()
     }
 }
 
@@ -351,129 +372,6 @@ impl RealtimeChip for SndhPlayerWrapper {
 
     fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for SNDH (uses actual 68000 code)
-    }
-}
-
-/// Atari Audio player wrapper - accurate 1:1 ST emulation
-pub struct AtariAudioWrapper {
-    machine: AtariMachine,
-    playing: bool,
-    sample_rate: u32,
-    samples_per_tick: u32,
-    inner_sample_pos: u32,
-    upload_addr: u32,
-}
-
-impl AtariAudioWrapper {
-    pub fn new(sndh_data: &[u8], sample_rate: u32, player_rate: u32) -> Result<Self, String> {
-        let mut machine = AtariMachine::new();
-        machine.startup(sample_rate);
-
-        let upload_addr = AtariMachine::sndh_upload_addr();
-        if !machine.upload(sndh_data, upload_addr) {
-            return Err("Failed to upload SNDH data".to_string());
-        }
-
-        // Call init routine with subsong 1
-        if !machine.jsr(upload_addr, 1) {
-            return Err("Init routine failed".to_string());
-        }
-
-        // Call play routine once to initialize registers
-        machine.jsr(upload_addr + 8, 0);
-
-        let samples_per_tick = sample_rate / player_rate;
-
-        Ok(Self {
-            machine,
-            playing: false,
-            sample_rate,
-            samples_per_tick,
-            inner_sample_pos: samples_per_tick,
-            upload_addr,
-        })
-    }
-}
-
-impl PlaybackController for AtariAudioWrapper {
-    fn play(&mut self) -> ym2149_ym_replayer::Result<()> {
-        self.playing = true;
-        Ok(())
-    }
-
-    fn pause(&mut self) -> ym2149_ym_replayer::Result<()> {
-        self.playing = false;
-        Ok(())
-    }
-
-    fn stop(&mut self) -> ym2149_ym_replayer::Result<()> {
-        self.playing = false;
-        Ok(())
-    }
-
-    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        if self.playing {
-            ym2149_ym_replayer::PlaybackState::Playing
-        } else {
-            ym2149_ym_replayer::PlaybackState::Paused
-        }
-    }
-}
-
-impl RealtimeChip for AtariAudioWrapper {
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        let mut buffer = vec![0.0; count];
-        self.generate_samples_into(&mut buffer);
-        buffer
-    }
-
-    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        if !self.playing {
-            buffer.fill(0.0);
-            return;
-        }
-
-        for sample in buffer.iter_mut() {
-            self.inner_sample_pos -= 1;
-            if self.inner_sample_pos == 0 {
-                // Call play routine
-                self.machine.jsr(self.upload_addr + 8, 0);
-                self.inner_sample_pos = self.samples_per_tick;
-            }
-
-            let i16_sample = self.machine.compute_next_sample();
-            *sample = i16_sample as f32 / 32768.0;
-        }
-    }
-
-    fn visual_snapshot(&self) -> VisualSnapshot {
-        // Get YM registers from the Ym2149c chip
-        let mut regs = [0u8; 16];
-        for i in 0..14 {
-            regs[i] = self.machine.bus.ym2149.read_register(i as u8);
-        }
-        VisualSnapshot {
-            registers: regs,
-            sync_buzzer: false,
-            sid_active: [false; 3],
-            drum_active: [false; 3],
-        }
-    }
-
-    fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {
-        // TODO: Implement
-    }
-
-    fn is_channel_muted(&self, _channel: usize) -> bool {
-        false
-    }
-
-    fn get_playback_position(&self) -> f32 {
-        0.0
-    }
-
-    fn set_color_filter(&mut self, _enabled: bool) {
-        // Not applicable
     }
 }
 

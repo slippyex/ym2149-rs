@@ -3,15 +3,27 @@
 //! Provides playback of samples to the system audio device with proper
 //! synchronization with the sample ring buffer.
 
-use crate::Result;
+use super::RingBuffer;
 use rodio::{OutputStream, Sink, Source};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+/// Error type for audio device operations
+#[derive(Debug, Clone)]
+pub struct AudioDeviceError(pub String);
+
+impl std::fmt::Display for AudioDeviceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for AudioDeviceError {}
+
 /// Audio source that reads from the ring buffer
 struct RingBufferSource {
-    ring_buffer: Arc<super::RingBuffer>,
+    ring_buffer: Arc<RingBuffer>,
     current_pos: usize,
     sample_rate: u32,
     channels: u16,
@@ -24,7 +36,7 @@ struct RingBufferSource {
 
 impl RingBufferSource {
     fn new(
-        ring_buffer: Arc<super::RingBuffer>,
+        ring_buffer: Arc<RingBuffer>,
         sample_rate: u32,
         channels: u16,
         finished: Arc<AtomicBool>,
@@ -122,15 +134,15 @@ impl AudioDevice {
     pub fn new(
         sample_rate: u32,
         channels: u16,
-        ring_buffer: Arc<super::RingBuffer>,
-    ) -> Result<Self> {
+        ring_buffer: Arc<RingBuffer>,
+    ) -> Result<Self, AudioDeviceError> {
         // Create output stream
         let (stream, stream_handle) = OutputStream::try_default()
-            .map_err(|e| format!("Failed to create audio stream: {}", e))?;
+            .map_err(|e| AudioDeviceError(format!("Failed to create audio stream: {}", e)))?;
 
         // Create sink for playback
         let sink = Sink::try_new(&stream_handle)
-            .map_err(|e| format!("Failed to create audio sink: {}", e))?;
+            .map_err(|e| AudioDeviceError(format!("Failed to create audio sink: {}", e)))?;
 
         // Create finished signal for shutdown coordination
         let finished = Arc::new(AtomicBool::new(false));
@@ -190,7 +202,6 @@ impl Drop for AudioDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::RingBuffer;
 
     fn try_audio_device(
         buffer_len: usize,
@@ -204,7 +215,7 @@ mod tests {
             Ok(device) => Some((device, ring_buffer)),
             Err(err) => {
                 eprintln!(
-                    "Skipping streaming::audio_device test (audio backend unavailable): {}",
+                    "Skipping audio::audio_device test (audio backend unavailable): {}",
                     err
                 );
                 None

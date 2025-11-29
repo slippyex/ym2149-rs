@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Cycle-accurate YM2149 PSG emulator with real-time streaming audio output"
+description = "Cycle-accurate YM2149 PSG emulator"
 documentation = "https://docs.rs/ym2149"
 readme = "README.md"
 keywords = ["emulator", "ym2149", "psg", "atari", "sound"]
@@ -15,15 +15,6 @@ categories = ["emulators", "multimedia::audio"]
 [dependencies]
 # Error handling
 thiserror.workspace = true
-
-# Audio output (streaming feature)
-rodio = { workspace = true, optional = true }
-
-# Synchronization
-parking_lot.workspace = true
-
-# Utilities
-bitflags.workspace = true
 
 [dev-dependencies]
 # Testing utilities
@@ -41,17 +32,6 @@ default = ["emulator"]
 # Core YM2149 emulator
 emulator = []
 
-# Streaming audio output (enables rodio-based AudioDevice)
-streaming = ["dep:rodio"]
-
-# Terminal visualization helpers
-visualization = []
-
 [[bench]]
 name = "chip"
 harness = false
-
-[[example]]
-name = "chip_demo"
-path = "examples/chip_demo.rs"
-required-features = ["streaming"]

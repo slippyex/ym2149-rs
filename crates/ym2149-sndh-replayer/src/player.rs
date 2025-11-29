@@ -154,24 +154,12 @@ impl SndhPlayer {
         // Set inner_sample_pos to full tick so we don't call play again immediately
         self.inner_sample_pos = self.samples_per_tick as i32;
 
+        // Let hardware timers run for one player tick (20 ms @50 Hz)
+        // so timer-driven effects are "primed".
         if self.warmup_enabled {
-            // Let hardware timers run for one player tick (20 ms @50 Hz)
-            // so timer-driven effects are "primed".
-            self.machine.warmup_samples(self.samples_per_tick);
-        }
-
-        // Optional debug: dump vectors after init
-        #[cfg(debug_assertions)]
-        {
-            self.machine.dump_vectors();
-            if std::env::var_os("YM2149_FORCE_TIMERB").is_some() {
-                // Typical SID timer rate: /4 prescaler with TBDR=0x4B (~8 kHz)
-                self.machine.force_timer_b(0x01, 0x4B);
+            for _ in 0..self.samples_per_tick {
+                let _ = self.machine.compute_sample();
             }
-            // Optional code slice dumps (helpers for disassembly)
-            self.machine.debug_dump_slice(0x0200, 0x20);
-            self.machine.debug_dump_slice(0x0240, 0x20);
-            self.machine.debug_dump_slice(0x0110, 0x20);
         }
 
         // Calculate frame count from duration

@@ -10,6 +10,7 @@ pub mod sndh;
 use arkos::ArkosWasmPlayer;
 use ay::AyWasmPlayer;
 use sndh::SndhWasmPlayer;
+use ym2149::Ym2149Backend;
 use ym2149_ym_replayer::{PlaybackController, PlaybackState};
 
 /// Unified player enum for all supported formats.
