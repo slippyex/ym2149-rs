@@ -493,9 +493,12 @@ fn test_audio_source_shares_player_instance() {
         .get(&handle)
         .expect("Ym2149AudioSource asset should exist");
 
+    // For non-SNDH formats, audio source and playback share the same player instance.
+    // For SNDH, they use separate players to avoid lock contention.
+    // This test uses YM format, so they should share.
     assert!(
-        !Arc::ptr_eq(&player_arc, &source.player()),
-        "Audio asset and playback should not share the same player instance (avoid double-stepping the decoder)"
+        Arc::ptr_eq(&player_arc, &source.player()),
+        "Audio asset and playback should share the same player instance for YM files"
     );
 }
 

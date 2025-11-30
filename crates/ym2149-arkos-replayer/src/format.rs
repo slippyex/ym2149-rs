@@ -135,7 +135,7 @@ pub enum ChannelLink {
 }
 
 /// Instrument cell (FM synthesis parameters)
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct InstrumentCell {
     /// Volume (0-15)
     pub volume: u8,

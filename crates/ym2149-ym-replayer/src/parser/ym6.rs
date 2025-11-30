@@ -10,12 +10,14 @@
 //! - Interleaved or non-interleaved format
 //! - Optional LZH compression
 
+use std::io::Cursor;
+use std::sync::Arc;
+
 use super::{ATTR_DRUM_4BIT, FormatParser, decode_4bit_digidrum};
 use crate::Result;
-use std::io::Cursor;
 
 /// Type alias for full YM6 parse result: frames, header, metadata, digidrums
-pub type Ym6ParseResult = (Vec<[u8; 16]>, Ym6Header, Ym6Metadata, Vec<Vec<u8>>);
+pub type Ym6ParseResult = (Vec<[u8; 16]>, Ym6Header, Ym6Metadata, Vec<Arc<[u8]>>);
 
 /// YM6 file header
 #[derive(Debug, Clone)]
@@ -196,8 +198,8 @@ impl Ym6Parser {
             return Err("Extra data extends beyond file".into());
         }
 
-        // Collect digidrum samples if present
-        let mut digidrums: Vec<Vec<u8>> = Vec::new();
+        // Collect digidrum samples if present (wrap in Arc for zero-copy sharing)
+        let mut digidrums: Vec<Arc<[u8]>> = Vec::new();
         for _ in 0..header.digidrum_count {
             if offset + 4 > data.len() {
                 return Err("Incomplete digidrum sample size field".into());
@@ -213,11 +215,12 @@ impl Ym6Parser {
             if offset.checked_add(sample_size).is_none() || offset + sample_size > data.len() {
                 return Err("Incomplete digidrum sample data".into());
             }
-            let mut sample = data[offset..offset + sample_size].to_vec();
-            if (header.attributes & ATTR_DRUM_4BIT) != 0 {
-                sample = decode_4bit_digidrum(&sample);
-            }
-            digidrums.push(sample);
+            let sample: Vec<u8> = if (header.attributes & ATTR_DRUM_4BIT) != 0 {
+                decode_4bit_digidrum(&data[offset..offset + sample_size])
+            } else {
+                data[offset..offset + sample_size].to_vec()
+            };
+            digidrums.push(Arc::from(sample));
             offset += sample_size;
         }
 

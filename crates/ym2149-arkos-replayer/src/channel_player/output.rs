@@ -32,8 +32,6 @@ pub struct SamplePlaybackParams {
     pub loop_end: usize,
     /// Whether the sample loops
     pub looping: bool,
-    /// Native sample frequency
-    pub sample_frequency_hz: u32,
     /// Target playback frequency
     pub pitch_hz: f32,
     /// Amplification ratio

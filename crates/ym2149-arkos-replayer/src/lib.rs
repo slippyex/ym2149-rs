@@ -38,27 +38,29 @@
 
 #![warn(missing_docs)]
 
-pub mod channel_player;
-pub mod effect_context;
-pub mod effects;
+// Internal modules - not part of public API
+mod channel_player;
+mod effect_context;
+mod effects;
+mod expression;
+mod fixed_point;
+mod psg;
+
+// Public modules
 pub mod error;
-pub mod expression;
-pub mod fixed_point;
 pub mod format;
 pub mod parser;
 pub mod player;
-pub mod psg;
-pub mod psg_registers;
-pub mod psg_registers_converter;
 
-// Re-export public API
+// Re-export public API (explicit, no star exports)
 pub use error::{ArkosError, Result};
-pub use format::*;
+pub use format::{
+    AksSong, Arpeggio, Cell, ChannelLink, Effect, Instrument, InstrumentCell, Pattern, PatternCell,
+    PitchTable, Position, PsgConfig, PsgType, SampleInstrument, SongMetadata, SpecialCell,
+    SpecialTrack, Subsong, Track,
+};
 pub use parser::load_aks;
 pub use player::{ArkosMetadata, ArkosPlayer};
-
-// Re-export parser types for advanced usage
-pub use parser::{FormatVersion, ParseState};
 
 // Re-export unified player trait from ym2149-common
 pub use ym2149_common::{ChiptunePlayer, PlaybackMetadata};

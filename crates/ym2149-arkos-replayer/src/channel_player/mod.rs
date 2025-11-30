@@ -669,7 +669,7 @@ impl ChannelPlayer {
             return;
         }
 
-        let cell = instrument.cells[self.instrument_current_line].clone();
+        let cell = instrument.cells[self.instrument_current_line];
         let instrument_speed = instrument.speed;
         let instrument_is_retrig = instrument.is_retrig;
         let instrument_is_looping = instrument.is_looping;
@@ -820,7 +820,6 @@ impl ChannelPlayer {
             loop_start: sample.loop_start_index,
             loop_end: sample.end_index,
             looping: sample.is_looping,
-            sample_frequency_hz: sample.frequency_hz,
             amplification: sample.amplification_ratio,
             pitch_hz,
             volume_4bits: self.volume_slide.get().min(15),

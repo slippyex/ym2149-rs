@@ -3,6 +3,8 @@
 //! This module handles loading of all YM file formats (YM2-YM6, YMT1/YMT2),
 //! format detection, decompression, and initialization of playback state.
 
+use std::sync::Arc;
+
 use super::format_profile::{FormatMode, create_profile};
 use super::madmax_digidrums::MADMAX_SAMPLES;
 use super::tracker_player::{
@@ -245,9 +247,9 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             frames.push(frame);
         }
 
-        let digidrums: Vec<Vec<u8>> = MADMAX_SAMPLES
+        let digidrums: Vec<Arc<[u8]>> = MADMAX_SAMPLES
             .iter()
-            .map(|sample| sample.to_vec())
+            .map(|sample| Arc::from(sample.to_vec()))
             .collect();
 
         let info = Ym6Info {

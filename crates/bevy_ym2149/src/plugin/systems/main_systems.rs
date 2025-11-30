@@ -521,9 +521,6 @@ pub(in crate::plugin) fn initialize_playback(
                 SourceLoadResult::Ready(bytes) => bytes,
             };
 
-            // Clone data for both player and audio source creation
-            let data_for_audio = loaded.data.clone();
-
             let mut load = match load_player_from_bytes(&loaded.data, loaded.metadata.as_ref()) {
                 Ok(load) => load,
                 Err(err) => {
@@ -542,22 +539,36 @@ pub(in crate::plugin) fn initialize_playback(
                 error!("Failed to start player: {}", e);
             }
 
+            // Check if this is an SNDH file (68000 CPU emulation)
+            let is_sndh = load.player.is_sndh();
+
             let player_arc = Arc::new(RwLock::new(load.player));
-            // Diagnostics/crossfade use this player; audio playback uses the audio source below
-            playback.player = Some(player_arc);
+            playback.player = Some(Arc::clone(&player_arc));
             playback.needs_reload = false;
 
-            // Create a Ym2149AudioSource asset from the loaded data
-            let audio_source = match Ym2149AudioSource::new_with_shared(
-                data_for_audio,
-                playback.stereo_gain.clone(),
-                playback.tone_settings.clone(),
-            ) {
-                Ok(source) => source,
-                Err(err) => {
-                    error!("Failed to create audio source: {}", err);
-                    continue;
+            // For SNDH: create a separate player for audio to avoid lock contention
+            // between the audio thread and the diagnostics system.
+            // For other formats: share the player instance.
+            let audio_source = if is_sndh {
+                match Ym2149AudioSource::new_with_shared(
+                    loaded.data.clone(),
+                    playback.stereo_gain.clone(),
+                    playback.tone_settings.clone(),
+                ) {
+                    Ok(source) => source,
+                    Err(err) => {
+                        error!("Failed to create SNDH audio source: {}", err);
+                        continue;
+                    }
                 }
+            } else {
+                Ym2149AudioSource::from_shared_player(
+                    player_arc,
+                    load.metadata.clone(),
+                    load.metrics.total_samples(),
+                    playback.stereo_gain.clone(),
+                    playback.tone_settings.clone(),
+                )
             };
 
             // Add the asset and get a handle
@@ -714,6 +725,23 @@ pub(in crate::plugin) fn process_playback_frames(
             continue;
         };
 
+        // For SNDH: skip frame processing entirely to avoid lock contention with
+        // the audio thread. SNDH has its own separate player for audio output.
+        // We only handle volume changes via the AudioSink.
+        {
+            let player = player_arc.read();
+            if player.is_sndh() {
+                // Handle volume changes
+                if (runtime.last_volume - playback.volume).abs() > 0.001 {
+                    if let Ok(mut sink) = audio_sinks.get_mut(entity) {
+                        sink.set_volume(bevy::audio::Volume::Linear(playback.volume));
+                    }
+                    runtime.last_volume = playback.volume;
+                }
+                continue;
+            }
+        }
+
         let mut player = player_arc.write();
         let crossfade_arc = playback
             .crossfade
@@ -749,6 +777,7 @@ pub(in crate::plugin) fn process_playback_frames(
             let prev_frame = playback.frame_position;
             playback.frame_position = player.get_current_frame() as u32;
 
+            // Generate samples for visualization (YM/AKS/AY only - SNDH skipped above)
             let mut stereo_samples = Vec::with_capacity(samples_per_frame * 2);
             let mut channel_samples = Vec::with_capacity(samples_per_frame);
             let mut channel_energy = [0.0f32; 3];
@@ -818,8 +847,8 @@ pub(in crate::plugin) fn process_playback_frames(
                 frame_index: runtime.frames_rendered,
                 elapsed_seconds,
                 looped,
-                stereo: Arc::<[f32]>::from(stereo_samples.into_boxed_slice()),
-                channel_samples: Arc::<[[f32; 3]]>::from(channel_samples.into_boxed_slice()),
+                stereo: Arc::from(stereo_samples.into_boxed_slice()),
+                channel_samples: Arc::from(channel_samples.into_boxed_slice()),
                 channel_energy,
                 frequencies,
                 samples_per_frame,

@@ -40,7 +40,6 @@ mod tests;
 
 use std::sync::Arc;
 
-#[cfg(all(test, feature = "extended-tests"))]
 use crate::channel_player::ChannelFrame;
 use crate::channel_player::ChannelPlayer;
 use crate::effect_context::EffectContext;
@@ -93,6 +92,8 @@ pub struct ArkosPlayer {
     output_sample_rate: f32,
     /// Cached metadata for ChiptunePlayer trait
     cached_metadata: ArkosMetadata,
+    /// Reusable frame buffer to avoid per-tick allocations
+    frame_buffer: Vec<ChannelFrame>,
 }
 
 impl ArkosPlayer {
@@ -175,6 +176,8 @@ impl ArkosPlayer {
             replay_frequency: subsong.replay_frequency_hz,
         };
 
+        let frame_buffer = vec![ChannelFrame::default(); channel_count];
+
         let mut player = Self {
             song,
             effect_context,
@@ -192,6 +195,7 @@ impl ArkosPlayer {
             hardware_envelope_state,
             output_sample_rate,
             cached_metadata,
+            frame_buffer,
         };
 
         player.current_speed = determine_speed_for_location(&player.song, subsong_index, 0, 0);
@@ -430,6 +434,7 @@ impl ArkosPlayer {
             sample_voices: &mut self.sample_voices,
             hardware_envelope_state: &mut self.hardware_envelope_state,
             output_sample_rate: self.output_sample_rate,
+            frame_buffer: &mut self.frame_buffer,
         };
         ctx.process_tick();
     }
@@ -451,6 +456,7 @@ impl ArkosPlayer {
             sample_voices: &mut self.sample_voices,
             hardware_envelope_state: &mut self.hardware_envelope_state,
             output_sample_rate: self.output_sample_rate,
+            frame_buffer: &mut self.frame_buffer,
         };
         ctx.run_tick(|frames| {
             captured = frames.to_vec();

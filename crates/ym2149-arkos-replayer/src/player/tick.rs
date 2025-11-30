@@ -29,6 +29,8 @@ pub(crate) struct TickContext<'a> {
     pub sample_voices: &'a mut [SampleVoiceMixer],
     pub hardware_envelope_state: &'a mut [HardwareEnvelopeState],
     pub output_sample_rate: f32,
+    /// Reusable frame buffer (avoids per-tick allocation)
+    pub frame_buffer: &'a mut [ChannelFrame],
 }
 
 impl TickContext<'_> {
@@ -56,10 +58,10 @@ impl TickContext<'_> {
             *self.current_line = 0;
         }
 
-        let frames = self.build_frames(position_count, is_first_tick);
+        self.build_frames(position_count, is_first_tick);
 
-        self.apply_frame_samples(&frames);
-        observer(&frames);
+        self.apply_frame_samples();
+        observer(self.frame_buffer);
 
         if is_first_tick
             && let Some(event_value) = self.read_special_track_value(false)
@@ -68,64 +70,56 @@ impl TickContext<'_> {
             self.trigger_event_sample(event_value as usize);
         }
 
-        write_frames_to_psg(self.psg_bank, &frames, self.hardware_envelope_state);
+        write_frames_to_psg(
+            self.psg_bank,
+            self.frame_buffer,
+            self.hardware_envelope_state,
+        );
 
         self.advance_song(loop_start, past_end_position);
     }
 
-    fn build_frames(&mut self, position_count: usize, is_first_tick: bool) -> Vec<ChannelFrame> {
+    fn build_frames(&mut self, position_count: usize, is_first_tick: bool) {
         let still_within_line = true;
-        let mut frames = Vec::with_capacity(self.channel_players.len());
 
         if is_first_tick {
             for (channel_idx, channel_player) in self.channel_players.iter_mut().enumerate() {
-                if *self.current_position >= position_count {
-                    frames.push(channel_player.play_frame(
-                        None,
-                        0,
-                        is_first_tick,
-                        still_within_line,
-                    ));
-                    continue;
-                }
+                let frame = if *self.current_position >= position_count {
+                    channel_player.play_frame(None, 0, is_first_tick, still_within_line)
+                } else {
+                    let (cell, transposition) = {
+                        let subsong = &self.song.subsongs[self.subsong_index];
+                        resolve_cell(
+                            subsong,
+                            *self.current_position,
+                            *self.current_line,
+                            channel_idx,
+                        )
+                    };
 
-                let (cell, transposition) = {
-                    let subsong = &self.song.subsongs[self.subsong_index];
-                    resolve_cell(
-                        subsong,
+                    if let Some(context) = self.effect_context.line_context(
                         *self.current_position,
-                        *self.current_line,
                         channel_idx,
-                    )
+                        *self.current_line,
+                    ) {
+                        channel_player.apply_line_context(context);
+                    }
+
+                    channel_player.play_frame(cell, transposition, is_first_tick, still_within_line)
                 };
 
-                if let Some(context) = self
-                    .effect_context
-                    .line_context(*self.current_position, channel_idx, *self.current_line)
-                    .cloned()
-                {
-                    channel_player.apply_line_context(&context);
-                }
-
-                let frame = channel_player.play_frame(
-                    cell,
-                    transposition,
-                    is_first_tick,
-                    still_within_line,
-                );
-                frames.push(frame);
+                self.frame_buffer[channel_idx] = frame;
             }
         } else {
-            for channel_player in self.channel_players.iter_mut() {
-                frames.push(channel_player.play_frame(None, 0, is_first_tick, still_within_line));
+            for (channel_idx, channel_player) in self.channel_players.iter_mut().enumerate() {
+                self.frame_buffer[channel_idx] =
+                    channel_player.play_frame(None, 0, is_first_tick, still_within_line);
             }
         }
-
-        frames
     }
 
-    fn apply_frame_samples(&mut self, frames: &[ChannelFrame]) {
-        for (channel_idx, frame) in frames.iter().enumerate() {
+    fn apply_frame_samples(&mut self) {
+        for (channel_idx, frame) in self.frame_buffer.iter().enumerate() {
             if let Some(voice) = self.sample_voices.get_mut(channel_idx) {
                 voice.apply_command(&frame.sample, self.output_sample_rate);
             }
@@ -233,7 +227,6 @@ impl TickContext<'_> {
             loop_start: sample.loop_start_index,
             loop_end: sample.end_index,
             looping: sample.is_looping,
-            sample_frequency_hz: sample.frequency_hz,
             pitch_hz,
             amplification: sample.amplification_ratio,
             volume: 15,
@@ -297,13 +290,9 @@ pub(crate) fn determine_speed_for_location(
             height - 1
         };
 
-        if let Some(value) = read_special_track_value_internal(
-            &Arc::new(song.clone()),
-            subsong_index,
-            pos_idx,
-            target_line,
-            true,
-        ) && value > 0
+        if let Some(value) =
+            read_special_track_value_internal(song, subsong_index, pos_idx, target_line, true)
+            && value > 0
         {
             speed = value.clamp(1, u8::MAX as i32) as u8;
         }
@@ -313,7 +302,7 @@ pub(crate) fn determine_speed_for_location(
 }
 
 fn read_special_track_value_internal(
-    song: &Arc<AksSong>,
+    song: &AksSong,
     subsong_index: usize,
     position_index: usize,
     line: usize,

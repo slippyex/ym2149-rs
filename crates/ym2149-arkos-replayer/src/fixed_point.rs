@@ -20,7 +20,6 @@ pub struct FixedPoint {
 impl FixedPoint {
     /// Number of fractional bits
     const FRAC_BITS: u32 = 8;
-    const FRAC_MASK: i32 = (1 << Self::FRAC_BITS) - 1;
 
     /// Create from integer value
     #[inline]
@@ -28,12 +27,6 @@ impl FixedPoint {
         Self {
             raw: value << Self::FRAC_BITS,
         }
-    }
-
-    /// Create from raw value (for internal use)
-    #[inline]
-    pub const fn from_raw(raw: i32) -> Self {
-        Self { raw }
     }
 
     /// Create from two hex digits (Arkos format)
@@ -55,12 +48,6 @@ impl FixedPoint {
         self.raw >> Self::FRAC_BITS
     }
 
-    /// Get fractional part (0-255)
-    #[inline]
-    pub fn frac_part(self) -> u8 {
-        (self.raw & Self::FRAC_MASK) as u8
-    }
-
     /// Reset to zero
     #[inline]
     pub fn reset(&mut self) {
@@ -73,22 +60,10 @@ impl FixedPoint {
         self.raw = value << Self::FRAC_BITS;
     }
 
-    /// Set from raw value
-    #[inline]
-    pub fn set_raw(&mut self, raw: i32) {
-        self.raw = raw;
-    }
-
     /// Negate the value
     #[inline]
     pub fn negate(&mut self) {
         self.raw = -self.raw;
-    }
-
-    /// Get as u16 (for periods, clamped to 0..65535)
-    #[inline]
-    pub fn as_u16(self) -> u16 {
-        self.integer_part().clamp(0, 65535) as u16
     }
 
     /// Clamp value between 0 and max (inclusive)
@@ -102,17 +77,11 @@ impl FixedPoint {
         }
     }
 
-    /// Get raw value (for serialization/debugging)
+    /// Multiply by integer and return new fixed-point value
     #[inline]
-    pub fn raw(self) -> i32 {
-        self.raw
-    }
-
-    /// Multiply by an integer value
-    #[inline]
-    pub fn mul_int(self, value: i32) -> Self {
+    pub fn mul_int(&self, value: i32) -> Self {
         Self {
-            raw: self.raw.saturating_mul(value),
+            raw: self.raw * value,
         }
     }
 }
@@ -175,7 +144,6 @@ mod tests {
     fn test_from_int() {
         let fp = FixedPoint::from_int(5);
         assert_eq!(fp.integer_part(), 5);
-        assert_eq!(fp.frac_part(), 0);
     }
 
     #[test]
@@ -183,12 +151,10 @@ mod tests {
         // 0x0100 = 1.0
         let fp = FixedPoint::from_digits(0x0100);
         assert_eq!(fp.integer_part(), 1);
-        assert_eq!(fp.frac_part(), 0);
 
         // 0x0208 = 2 + 8/256
         let fp2 = FixedPoint::from_digits(0x0208);
         assert_eq!(fp2.integer_part(), 2);
-        assert_eq!(fp2.frac_part(), 8);
     }
 
     #[test]

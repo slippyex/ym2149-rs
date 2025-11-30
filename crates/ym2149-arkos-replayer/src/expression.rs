@@ -86,19 +86,10 @@ impl InlineArpeggio {
         self.end
     }
 
-    /// Get length
-    pub fn len(&self) -> usize {
-        self.values.len()
-    }
-
-    /// Check if empty (only default value)
-    pub fn is_empty(&self) -> bool {
-        self.values.len() <= 1
-    }
-
     /// Clear to empty state
     pub fn clear(&mut self) {
-        self.values = vec![0];
+        self.values.clear();
+        self.values.push(0);
         self.speed = 0;
         self.loop_start = 0;
         self.end = 0;
@@ -107,6 +98,12 @@ impl InlineArpeggio {
     /// Set speed
     pub fn set_speed(&mut self, speed: u8) {
         self.speed = speed;
+    }
+
+    /// Get length (used in tests)
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.values.len()
     }
 }
 

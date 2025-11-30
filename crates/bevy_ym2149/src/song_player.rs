@@ -245,6 +245,12 @@ impl YmSongPlayer {
             Self::Synth(p) => p.metrics().frame_count,
         }
     }
+
+    /// Returns true if this is an SNDH player (68000 emulation).
+    /// SNDH players are resource-intensive and should skip diagnostics frame processing.
+    pub fn is_sndh(&self) -> bool {
+        matches!(self, Self::Sndh(_))
+    }
 }
 
 /// Load a song (YM, AKS, AY, or SNDH) from raw bytes.
