@@ -6059,13 +6059,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ym2149-bevy"
-version = "0.7.0"
-dependencies = [
- "bevy_ym2149",
-]
-
-[[package]]
 name = "ym2149-common"
 version = "0.7.0"
 

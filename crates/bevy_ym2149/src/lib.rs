@@ -91,44 +91,88 @@
 //! - [`audio_source`] - YM file loading and Bevy audio integration via Decodable
 //! - [`bevy_ym2149_viz`](https://crates.io/crates/bevy_ym2149_viz) - Optional UI components and display helpers
 
-pub mod audio_bridge;
-pub mod audio_reactive;
-pub mod audio_source;
-pub mod diagnostics;
+// Public modules - user-facing API
 pub mod error;
 pub mod events;
 pub mod music_state;
-pub mod oscilloscope;
 pub mod patterns;
 pub mod playback;
 pub mod playlist;
 pub mod plugin;
 pub mod presets;
-pub mod song_player;
-pub mod streaming;
 pub mod synth;
 
+// Internal modules - implementation details (hidden from docs but accessible for tests)
+#[doc(hidden)]
+pub mod audio_bridge;
+#[doc(hidden)]
+pub mod audio_reactive;
+#[doc(hidden)]
+pub mod audio_source;
+#[doc(hidden)]
+pub mod diagnostics;
+#[doc(hidden)]
+pub mod oscilloscope;
+#[doc(hidden)]
+pub mod song_player;
+#[doc(hidden)]
+pub mod streaming;
+
+// Re-export ym2149 core types
 pub use ::ym2149::*;
-pub use audio_bridge::{
-    AudioBridgeBuffers, AudioBridgeMix, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice,
-    BridgeAudioSinks,
-};
-pub use audio_reactive::{AudioReactiveState, ReactiveMetrics};
-pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
-pub use diagnostics::{BUFFER_FILL_PATH, FRAME_POSITION_PATH, update_diagnostics};
-pub use error::{BevyYm2149Error, Result};
-pub use events::{
-    AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PatternTriggered, PlaybackFrameMarker,
-    PlaylistAdvanceRequest, TrackFinished, TrackStarted, YmSfxRequest,
-};
-pub use music_state::{MusicStateDefinition, MusicStateGraph, process_music_state_requests};
-pub use oscilloscope::OscilloscopeBuffer;
-pub use patterns::{PatternTrigger, PatternTriggerSet};
+
+// === Primary Public API ===
+
+// Plugin and configuration
+pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
+
+// Playback control (main user-facing types)
 pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+
+// Error handling
+pub use error::{BevyYm2149Error, Result};
+
+// Events for user systems to react to
+pub use events::{PatternTriggered, PlaybackFrameMarker, TrackFinished, TrackStarted};
+
+// Music state machine
+pub use music_state::{MusicStateDefinition, MusicStateGraph};
+
+// Patterns for game integration
+pub use patterns::{PatternTrigger, PatternTriggerSet};
+
+// Playlist support
 pub use playlist::{
-    CrossfadeConfig, CrossfadeTrigger, CrossfadeWindow, PlaylistMode, PlaylistSource,
-    Ym2149Playlist, Ym2149PlaylistLoader, Ym2149PlaylistPlayer, advance_playlist_players,
+    CrossfadeConfig, PlaylistMode, PlaylistSource, Ym2149Playlist, Ym2149PlaylistPlayer,
+};
+
+// Synth controller
+pub use synth::YmSynthController;
+
+// === Advanced/Internal API (hidden from docs but accessible) ===
+
+#[doc(hidden)]
+pub use audio_bridge::AudioBridgeBuffers;
+#[doc(hidden)]
+pub use audio_bridge::{
+    AudioBridgeMix, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice, BridgeAudioSinks,
+};
+#[doc(hidden)]
+pub use audio_reactive::{AudioReactiveState, ReactiveMetrics};
+#[doc(hidden)]
+pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
+#[doc(hidden)]
+pub use diagnostics::{BUFFER_FILL_PATH, FRAME_POSITION_PATH, update_diagnostics};
+#[doc(hidden)]
+pub use events::AudioBridgeRequest;
+#[doc(hidden)]
+pub use events::{ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, YmSfxRequest};
+#[doc(hidden)]
+pub use music_state::process_music_state_requests;
+#[doc(hidden)]
+pub use oscilloscope::OscilloscopeBuffer;
+#[doc(hidden)]
+pub use playlist::{
+    CrossfadeTrigger, CrossfadeWindow, Ym2149PlaylistLoader, advance_playlist_players,
     drive_crossfade_playlists, handle_playlist_requests, register_playlist_assets,
 };
-pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
-pub use synth::YmSynthController;

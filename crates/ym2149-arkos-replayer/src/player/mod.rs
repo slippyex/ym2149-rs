@@ -108,6 +108,23 @@ impl ArkosPlayer {
     ///
     /// Returns an error if the subsong index is out of range or PSG configuration is invalid.
     pub fn new(song: AksSong, subsong_index: usize) -> Result<Self> {
+        Self::new_from_arc(Arc::new(song), subsong_index)
+    }
+
+    /// Create a new Arkos player from a shared song reference.
+    ///
+    /// Use this when you need to retain access to the song data (e.g., for subsong switching)
+    /// without cloning the entire song structure.
+    ///
+    /// # Arguments
+    ///
+    /// * `song` - Shared reference to the parsed AKS song
+    /// * `subsong_index` - Which subsong to play (0-based)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the subsong index is out of range or PSG configuration is invalid.
+    pub fn new_from_arc(song: Arc<AksSong>, subsong_index: usize) -> Result<Self> {
         if subsong_index >= song.subsongs.len() {
             return Err(ArkosError::InvalidSubsong {
                 index: subsong_index,
@@ -115,7 +132,6 @@ impl ArkosPlayer {
             });
         }
 
-        let song = Arc::new(song);
         let effect_context = EffectContext::build(&song, subsong_index)?;
         let subsong = &song.subsongs[subsong_index];
 
@@ -246,6 +262,13 @@ impl ArkosPlayer {
     /// Samples produced per tick (line advancement).
     pub fn samples_per_tick(&self) -> f32 {
         self.samples_per_tick
+    }
+
+    /// Get a shared reference to the song data.
+    ///
+    /// Useful for creating new players for subsong switching without cloning.
+    pub fn song(&self) -> Arc<AksSong> {
+        Arc::clone(&self.song)
     }
 
     /// Number of PSG chips in this song.

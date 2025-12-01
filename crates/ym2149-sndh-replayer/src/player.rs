@@ -208,6 +208,11 @@ impl SndhPlayer {
         self.machine.ym2149()
     }
 
+    /// Get mutable reference to the YM2149 chip (for channel muting).
+    pub fn ym2149_mut(&mut self) -> &mut ym2149::Ym2149 {
+        self.machine.ym2149_mut()
+    }
+
     /// Render audio into a buffer of i16 samples.
     ///
     /// This is a convenience method for direct audio output.

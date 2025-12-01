@@ -529,6 +529,11 @@ impl AtariMachine {
         &self.memory.ym2149
     }
 
+    /// Get mutable reference to YM2149 (for channel muting).
+    pub fn ym2149_mut(&mut self) -> &mut Ym2149 {
+        &mut self.memory.ym2149
+    }
+
     fn configure_return_by_rts(&mut self) {
         self.memory
             .write_long(RAM_SIZE as u32 - 4, RESET_INSTRUCTION_ADDR);

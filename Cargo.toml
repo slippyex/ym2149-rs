@@ -8,7 +8,6 @@ members = [
     "crates/ym2149-arkos-replayer",
     "crates/bevy_ym2149",
     "crates/bevy_ym2149_examples",
-    "crates/ym2149-bevy",
     "crates/bevy_ym2149_viz",
     "crates/ym2149-wasm",
     "crates/ym2149-ay-replayer",

@@ -14,6 +14,7 @@ mod visualization;
 mod viz_helpers;
 
 use audio::{DEFAULT_SAMPLE_RATE, StreamConfig};
+use std::sync::Arc;
 use std::time::Instant;
 use ym2149::Ym2149Backend;
 use ym2149_arkos_replayer::ArkosPlayer;
@@ -136,12 +137,13 @@ impl<B: Ym2149Backend + 'static> RealtimeChip for Ym6PlayerGeneric<B> {
 // ArkosPlayer wrapper for CLI integration
 pub struct ArkosPlayerWrapper {
     player: ArkosPlayer,
-    song: ym2149_arkos_replayer::AksSong,
+    song: Arc<ym2149_arkos_replayer::AksSong>,
     current_subsong: usize,
 }
 
 impl ArkosPlayerWrapper {
-    pub fn new(player: ArkosPlayer, song: ym2149_arkos_replayer::AksSong) -> Self {
+    pub fn new(player: ArkosPlayer) -> Self {
+        let song = player.song();
         Self {
             player,
             song,
@@ -188,27 +190,37 @@ impl RealtimeChip for ArkosPlayerWrapper {
     }
 
     fn visual_snapshot(&self) -> VisualSnapshot {
-        // For Arkos, create a basic snapshot with zeros
-        // TODO: Extract actual PSG state from PsgBank
+        // Use first PSG chip for visualization (multi-PSG songs use chip 0 for main melody)
+        let registers = self
+            .player
+            .chip(0)
+            .map(|chip| chip.dump_registers())
+            .unwrap_or([0u8; 16]);
         VisualSnapshot {
-            registers: [0u8; 16],
+            registers,
             sync_buzzer: false,
             sid_active: [false; 3],
             drum_active: [false; 3],
         }
     }
 
-    fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {
-        // TODO: Implement channel muting in PsgBank
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.player.set_channel_mute(channel, mute);
     }
 
-    fn is_channel_muted(&self, _channel: usize) -> bool {
-        false
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.player.is_channel_muted(channel)
     }
 
     fn get_playback_position(&self) -> f32 {
-        // TODO: Calculate based on current_position / end_position
-        0.0
+        // Calculate position as ratio of current_tick to estimated_total_ticks
+        let current = self.player.current_tick_index();
+        let total = self.player.estimated_total_ticks();
+        if total > 0 {
+            current as f32 / total as f32
+        } else {
+            0.0
+        }
     }
 
     fn set_color_filter(&mut self, _enabled: bool) {
@@ -228,7 +240,7 @@ impl RealtimeChip for ArkosPlayerWrapper {
         // Convert 1-based input to 0-based
         let zero_based = index.saturating_sub(1);
         if zero_based < self.song.subsongs.len()
-            && let Ok(new_player) = ArkosPlayer::new(self.song.clone(), zero_based)
+            && let Ok(new_player) = ArkosPlayer::new_from_arc(Arc::clone(&self.song), zero_based)
         {
             self.player = new_player;
             self.current_subsong = zero_based;
@@ -409,12 +421,12 @@ impl RealtimeChip for SndhPlayerWrapper {
         }
     }
 
-    fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {
-        // TODO: Implement channel muting in SNDH player
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.player.ym2149_mut().set_channel_mute(channel, mute);
     }
 
-    fn is_channel_muted(&self, _channel: usize) -> bool {
-        false
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.player.ym2149().is_channel_muted(channel)
     }
 
     fn get_playback_position(&self) -> f32 {
