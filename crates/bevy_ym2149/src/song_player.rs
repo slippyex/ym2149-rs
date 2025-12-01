@@ -54,10 +54,10 @@ impl YmSongPlayer {
             frame_count: 0,
             duration_seconds: 0.0,
         };
-        let player = ArkosPlayer::new(song, 0)
+        let player = ArkosPlayer::new(song.clone(), 0)
             .map_err(|e| BevyYm2149Error::Other(format!("AKS player init failed: {e}")))?;
         Ok(Self::Arkos(Box::new(ArkosBevyPlayer::new(
-            player, metadata,
+            player, song, metadata,
         ))))
     }
 
@@ -245,6 +245,47 @@ impl YmSongPlayer {
             Self::Synth(p) => p.metrics().frame_count,
         }
     }
+
+    /// Get the number of subsongs/tracks available.
+    /// Returns 1 for formats that don't support multiple subsongs.
+    pub fn subsong_count(&self) -> usize {
+        match self {
+            Self::Ym { .. } => 1,
+            Self::Arkos(p) => p.subsong_count(),
+            Self::Ay(p) => p.subsong_count(),
+            Self::Sndh(p) => p.subsong_count(),
+            Self::Synth(_) => 1,
+        }
+    }
+
+    /// Get the current subsong index (1-based).
+    /// Returns 1 for formats that don't support multiple subsongs.
+    pub fn current_subsong(&self) -> usize {
+        match self {
+            Self::Ym { .. } => 1,
+            Self::Arkos(p) => p.current_subsong(),
+            Self::Ay(p) => p.current_subsong(),
+            Self::Sndh(p) => p.current_subsong(),
+            Self::Synth(_) => 1,
+        }
+    }
+
+    /// Switch to a different subsong. Returns true if successful.
+    /// The index is 1-based.
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        match self {
+            Self::Ym { .. } => false,
+            Self::Arkos(p) => p.set_subsong(index),
+            Self::Ay(p) => p.set_subsong(index),
+            Self::Sndh(p) => p.set_subsong(index),
+            Self::Synth(_) => false,
+        }
+    }
+
+    /// Check if this player supports multiple subsongs.
+    pub fn has_subsongs(&self) -> bool {
+        self.subsong_count() > 1
+    }
 }
 
 /// Load a song (YM, AKS, AY, or SNDH) from raw bytes.
@@ -345,16 +386,22 @@ fn metadata_from_ay(meta: &AyFileMetadata) -> Ym2149Metadata {
 /// Adapter that exposes [`ArkosPlayer`] through the same interface used by YM playback.
 pub struct ArkosBevyPlayer {
     player: ArkosPlayer,
+    song: ym2149_arkos_replayer::AksSong,
     metadata: Ym2149Metadata,
     samples_per_frame: u32,
     estimated_frames: usize,
     cache: Vec<f32>,
     cache_pos: usize,
     cache_len: usize,
+    current_subsong: usize,
 }
 
 impl ArkosBevyPlayer {
-    fn new(player: ArkosPlayer, mut metadata: Ym2149Metadata) -> Self {
+    fn new(
+        player: ArkosPlayer,
+        song: ym2149_arkos_replayer::AksSong,
+        mut metadata: Ym2149Metadata,
+    ) -> Self {
         let samples_per_frame = (YM2149_SAMPLE_RATE_F32 / player.replay_frequency_hz())
             .round()
             .max(1.0) as u32;
@@ -365,12 +412,14 @@ impl ArkosBevyPlayer {
 
         Self {
             player,
+            song,
             metadata,
             samples_per_frame,
             estimated_frames,
             cache: vec![0.0; 1024],
             cache_pos: 0,
             cache_len: 0,
+            current_subsong: 0,
         }
     }
 
@@ -450,6 +499,32 @@ impl ArkosBevyPlayer {
         self.player.generate_samples_into(&mut self.cache);
         self.cache_len = self.cache.len();
         self.cache_pos = 0;
+    }
+
+    pub fn subsong_count(&self) -> usize {
+        self.song.subsongs.len()
+    }
+
+    pub fn current_subsong(&self) -> usize {
+        // Return 1-based index for consistency
+        self.current_subsong + 1
+    }
+
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        // Convert 1-based input to 0-based
+        let zero_based = index.saturating_sub(1);
+        if zero_based < self.song.subsongs.len()
+            && let Ok(new_player) = ArkosPlayer::new(self.song.clone(), zero_based)
+        {
+            self.player = new_player;
+            self.current_subsong = zero_based;
+            let _ = self.player.play();
+            // Reset cache
+            self.cache_pos = 0;
+            self.cache_len = 0;
+            return true;
+        }
+        false
     }
 }
 
@@ -590,6 +665,22 @@ impl AyBevyPlayer {
             false
         }
     }
+
+    pub fn subsong_count(&self) -> usize {
+        // AY files support multiple songs via metadata, but we don't currently
+        // support switching songs without reloading
+        self.player.metadata().song_count
+    }
+
+    pub fn current_subsong(&self) -> usize {
+        // 1-based
+        self.player.metadata().song_index + 1
+    }
+
+    pub fn set_subsong(&mut self, _index: usize) -> bool {
+        // TODO: Support subsong switching for AY files (requires storing raw data)
+        false
+    }
 }
 
 const SNDH_CACHE_SAMPLES: usize = 512;
@@ -697,5 +788,28 @@ impl SndhBevyPlayer {
 
     fn frame_count(&self) -> usize {
         0 // SNDH files don't have a known frame count
+    }
+
+    pub fn subsong_count(&self) -> usize {
+        self.player.subsong_count()
+    }
+
+    pub fn current_subsong(&self) -> usize {
+        self.player.current_subsong()
+    }
+
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        use ym2149_common::ChiptunePlayer;
+        if index >= 1
+            && index <= self.player.subsong_count()
+            && self.player.init_subsong(index).is_ok()
+        {
+            self.player.play();
+            // Reset cache
+            self.cache_pos = 0;
+            self.cache_len = 0;
+            return true;
+        }
+        false
     }
 }

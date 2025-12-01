@@ -98,14 +98,49 @@ impl Ym2149AudioSource {
         stereo_gain: Arc<parking_lot::RwLock<(f32, f32)>>,
         tone_settings: Arc<parking_lot::RwLock<ToneSettings>>,
     ) -> Result<Self> {
-        let source = Self::new(data)?;
+        Self::new_with_subsong(data, stereo_gain, tone_settings, None)
+    }
 
-        // Apply initial settings to the stream
+    /// Create a new audio source from raw YM file data with optional subsong selection.
+    ///
+    /// The stereo_gain and tone_settings parameters are applied to the stream.
+    /// If subsong is Some, the player will be initialized to that subsong (1-based index).
+    pub fn new_with_subsong(
+        data: Vec<u8>,
+        stereo_gain: Arc<parking_lot::RwLock<(f32, f32)>>,
+        tone_settings: Arc<parking_lot::RwLock<ToneSettings>>,
+        subsong: Option<usize>,
+    ) -> Result<Self> {
+        // Load the song to create a player
+        let (mut player, metrics, metadata) =
+            load_song_from_bytes(&data).map_err(BevyYm2149Error::MetadataExtraction)?;
+
+        // Apply subsong selection BEFORE starting the stream
+        if let Some(index) = subsong {
+            player.set_subsong(index);
+        }
+
+        let sample_rate = crate::playback::YM2149_SAMPLE_RATE;
+        let total_samples = metrics.total_samples();
+
+        let player = Arc::new(parking_lot::RwLock::new(player));
+
+        // Start the audio stream (spawns producer thread) - now with correct subsong
+        let stream = Arc::new(AudioStream::start(Arc::clone(&player)));
+
+        // Apply settings to the stream
         let (left, right) = *stereo_gain.read();
-        source.stream.state.set_stereo_gain(left, right);
-        source.stream.state.set_tone_settings(*tone_settings.read());
+        stream.state.set_stereo_gain(left, right);
+        stream.state.set_tone_settings(*tone_settings.read());
 
-        Ok(source)
+        Ok(Self {
+            data,
+            metadata,
+            player,
+            stream,
+            sample_rate,
+            total_samples,
+        })
     }
 
     /// Create audio source from a shared player (used by playback system).

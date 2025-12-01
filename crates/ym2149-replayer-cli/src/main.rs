@@ -67,9 +67,32 @@ pub trait RealtimeChip: PlaybackController + Send {
     /// Enable/disable ST color filter when supported.
     fn set_color_filter(&mut self, enabled: bool);
 
-    /// Optional reason why playback can’t continue (e.g., unsupported format).
+    /// Optional reason why playback can't continue (e.g., unsupported format).
     fn unsupported_reason(&self) -> Option<&'static str> {
         None
+    }
+
+    /// Get the number of subsongs/tracks in this file.
+    /// Returns 1 for formats that don't support multiple subsongs.
+    fn subsong_count(&self) -> usize {
+        1
+    }
+
+    /// Get the current subsong index (1-based for SNDH, 0-based for AKS).
+    /// Returns 1 for formats that don't support multiple subsongs.
+    fn current_subsong(&self) -> usize {
+        1
+    }
+
+    /// Switch to a different subsong. Returns true if successful.
+    /// The index is 1-based for SNDH, 0-based for AKS.
+    fn set_subsong(&mut self, _index: usize) -> bool {
+        false
+    }
+
+    /// Check if this player supports multiple subsongs.
+    fn has_subsongs(&self) -> bool {
+        self.subsong_count() > 1
     }
 }
 
@@ -113,11 +136,17 @@ impl<B: Ym2149Backend + 'static> RealtimeChip for Ym6PlayerGeneric<B> {
 // ArkosPlayer wrapper for CLI integration
 pub struct ArkosPlayerWrapper {
     player: ArkosPlayer,
+    song: ym2149_arkos_replayer::AksSong,
+    current_subsong: usize,
 }
 
 impl ArkosPlayerWrapper {
-    pub fn new(player: ArkosPlayer) -> Self {
-        Self { player }
+    pub fn new(player: ArkosPlayer, song: ym2149_arkos_replayer::AksSong) -> Self {
+        Self {
+            player,
+            song,
+            current_subsong: 0,
+        }
     }
 }
 
@@ -184,6 +213,29 @@ impl RealtimeChip for ArkosPlayerWrapper {
 
     fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for Arkos
+    }
+
+    fn subsong_count(&self) -> usize {
+        self.song.subsongs.len()
+    }
+
+    fn current_subsong(&self) -> usize {
+        // AKS uses 0-based indexing, return as 1-based for consistency
+        self.current_subsong + 1
+    }
+
+    fn set_subsong(&mut self, index: usize) -> bool {
+        // Convert 1-based input to 0-based
+        let zero_based = index.saturating_sub(1);
+        if zero_based < self.song.subsongs.len()
+            && let Ok(new_player) = ArkosPlayer::new(self.song.clone(), zero_based)
+        {
+            self.player = new_player;
+            self.current_subsong = zero_based;
+            let _ = self.player.play();
+            return true;
+        }
+        false
     }
 }
 
@@ -372,6 +424,26 @@ impl RealtimeChip for SndhPlayerWrapper {
 
     fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for SNDH (uses actual 68000 code)
+    }
+
+    fn subsong_count(&self) -> usize {
+        self.player.subsong_count()
+    }
+
+    fn current_subsong(&self) -> usize {
+        self.player.current_subsong()
+    }
+
+    fn set_subsong(&mut self, index: usize) -> bool {
+        use ym2149_common::ChiptunePlayer;
+        if index >= 1
+            && index <= self.player.subsong_count()
+            && self.player.init_subsong(index).is_ok()
+        {
+            self.player.play();
+            return true;
+        }
+        false
     }
 }
 

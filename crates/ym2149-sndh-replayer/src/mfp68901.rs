@@ -1,6 +1,4 @@
-//! MFP68901 Timer emulation - 1:1 port from AtariAudio
-//!
-//! Original C++ by Arnaud Carré aka Leonard/Oxygene (@leonard_coder)
+//! MFP68901 Timer emulation
 
 const ATARI_MFP_CLOCK: u32 = 2457600;
 

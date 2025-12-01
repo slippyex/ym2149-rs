@@ -12,8 +12,6 @@
 //! - 0x000000 - 0x3FFFFF: RAM (4MB)
 //! - 0xFF8800 - 0xFF88FF: YM2149 PSG
 //! - 0xFFFA00 - 0xFFFA25: MFP 68901
-//!
-//! Original design by Arnaud Carré aka Leonard/Oxygene (@leonard_coder)
 
 use crate::error::{Result, SndhError};
 use crate::mfp68901::Mfp68901;

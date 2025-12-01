@@ -1,9 +1,7 @@
-//! YM2149 PSG emulation - 1:1 port from AtariAudio
+//! YM2149 PSG emulation
 //!
-//! Tiny & cycle accurate ym2149 emulation.
+//! Tiny & cycle accurate YM2149 emulation.
 //! Operates at original YM freq divided by 8 (so 250Khz, as nothing runs faster in the chip)
-//!
-//! Original C++ by Arnaud Carré aka Leonard/Oxygene (@leonard_coder)
 
 use super::tables::{ENV_DATA, MASKS, REG_MASK, SHAPE_TO_ENV, YM2149_LOG_LEVELS};
 use crate::backend::Ym2149Backend;
@@ -20,7 +18,7 @@ fn std_lib_rand(seed: &mut u32) -> u16 {
     ((*seed >> 16) & 0x7fff) as u16
 }
 
-/// YM2149 PSG emulator - 1:1 port from AtariAudio's ym2149c
+/// YM2149 PSG emulator
 #[derive(Clone)]
 pub struct Ym2149 {
     selected_reg: usize,
@@ -53,6 +51,9 @@ pub struct Ym2149 {
     last_sample: f32,
     last_channels: [f32; 3],
     user_mute: [bool; 3],
+
+    // DigiDrum support - per-channel sample override
+    drum_override: [Option<f32>; 3],
 }
 
 impl Ym2149 {
@@ -91,6 +92,7 @@ impl Ym2149 {
             last_sample: 0.0,
             last_channels: [0.0; 3],
             user_mute: [false; 3],
+            drum_override: [None; 3],
         };
         chip.reset();
         chip
@@ -131,6 +133,7 @@ impl Ym2149 {
 
         self.last_sample = 0.0;
         self.last_channels = [0.0; 3];
+        self.drum_override = [None; 3];
     }
 
     /// Write to YM2149 port (mimics hardware port access)
@@ -180,7 +183,11 @@ impl Ym2149 {
     /// Read from YM2149 port (mimics hardware port access)
     pub fn read_port(&self, port: u8) -> u8 {
         if (port & 2) == 0 {
-            self.regs[self.selected_reg]
+            if self.selected_reg < 14 {
+                self.regs[self.selected_reg]
+            } else {
+                0xff
+            }
         } else {
             0xff
         }
@@ -288,19 +295,27 @@ impl Ym2149 {
         let index_b = (levels >> 5) & 31;
         let index_c = (levels >> 10) & 31;
 
-        // Apply user mute
+        // Apply user mute and drum overrides
+        // DigiDrum overrides the normal channel output completely
         let level_a = if self.user_mute[0] {
             0
+        } else if let Some(drum_sample) = self.drum_override[0] {
+            // Drum sample is 0-255, scale to match YM volume range
+            ((drum_sample * 255.0 / 6.0) as u32).min(10922)
         } else {
             YM2149_LOG_LEVELS[index_a as usize] >> half_shift_a
         };
         let level_b = if self.user_mute[1] {
             0
+        } else if let Some(drum_sample) = self.drum_override[1] {
+            ((drum_sample * 255.0 / 6.0) as u32).min(10922)
         } else {
             YM2149_LOG_LEVELS[index_b as usize] >> half_shift_b
         };
         let level_c = if self.user_mute[2] {
             0
+        } else if let Some(drum_sample) = self.drum_override[2] {
+            ((drum_sample * 255.0 / 6.0) as u32).min(10922)
         } else {
             YM2149_LOG_LEVELS[index_c as usize] >> half_shift_c
         };
@@ -436,8 +451,10 @@ impl Ym2149Backend for Ym2149 {
         self.env_counter = 0;
     }
 
-    fn set_drum_sample_override(&mut self, _channel: usize, _sample: Option<f32>) {
-        // Not implemented in this backend - drums are handled at a higher level
+    fn set_drum_sample_override(&mut self, channel: usize, sample: Option<f32>) {
+        if channel < 3 {
+            self.drum_override[channel] = sample;
+        }
     }
 
     fn set_mixer_overrides(&mut self, _force_tone: [bool; 3], _force_noise_mute: [bool; 3]) {

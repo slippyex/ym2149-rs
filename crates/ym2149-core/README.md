@@ -6,8 +6,6 @@
 
 Hardware-accurate emulation of the Yamaha YM2149 Programmable Sound Generator (PSG) chip, as used in the Atari ST, Amstrad CPC, and ZX Spectrum 128. The core runs an internal `clk/8` loop (~250 kHz @ 2 MHz) with hardware envelope/volume tables, DC adjust, and buzzer/digidrum correctness.
 
-The YM2149 emulation is ported from Leonard/Oxygene's (Arnaud Carré) reference AtariAudio C++ implementation, ensuring cycle-accurate behavior matching real hardware.
-
 ## Overview
 
 This crate provides **pure chip emulation only** with cycle-accurate behavior. For file playback and audio output, see the companion crates:

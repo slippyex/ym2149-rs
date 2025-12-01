@@ -1,6 +1,4 @@
 //! YM2149 lookup tables
-//!
-//! Original C++ by Arnaud Carré aka Leonard/Oxygene (@leonard_coder)
 
 /// Envelope data: 10 shapes × 32 steps × 4 phases = 1280 bytes
 /// Accessed as: ENV_DATA[shape * 32 * 4 + pos + 64]

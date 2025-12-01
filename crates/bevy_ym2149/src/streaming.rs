@@ -11,8 +11,8 @@
 //! computationally intensive SNDH files.
 
 use parking_lot::{Mutex, RwLock};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
 
 use crate::playback::ToneSettings;
@@ -420,7 +420,11 @@ impl Iterator for StreamingDecoder {
             self.refill_local_buffer();
         }
 
-        let sample = self.local_buffer.get(self.local_pos).copied().unwrap_or(0.0);
+        let sample = self
+            .local_buffer
+            .get(self.local_pos)
+            .copied()
+            .unwrap_or(0.0);
         self.local_pos += 1;
         self.current_sample += 1;
 

@@ -62,6 +62,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
              - A: Toggle Accent Boost\n\
              - B: Toggle Stereo Widen\n\
              - C: Toggle Color Filter\n\
+             - LEFT/RIGHT: Previous/Next Subsong (AKS/SNDH)\n\
              - UP/DOWN: Volume Control\n\
              - Pattern hits are logged to the console",
         ),
@@ -212,6 +213,29 @@ fn playback_controls(
             let new_volume = (playback.volume - 0.1).max(0.0);
             playback.set_volume(new_volume);
             info!("Volume: {:.0}%", new_volume * 100.0);
+        }
+
+        // Subsong navigation with left/right arrow keys (AKS/SNDH files)
+        if keyboard.just_pressed(KeyCode::ArrowRight) {
+            let count = playback.subsong_count();
+            if count > 1 {
+                if let Some(new_subsong) = playback.next_subsong() {
+                    info!("Switched to subsong {}/{}", new_subsong, count);
+                }
+            } else {
+                info!("No subsongs available (count={})", count);
+            }
+        }
+
+        if keyboard.just_pressed(KeyCode::ArrowLeft) {
+            let count = playback.subsong_count();
+            if count > 1 {
+                if let Some(new_subsong) = playback.prev_subsong() {
+                    info!("Switched to subsong {}/{}", new_subsong, count);
+                }
+            } else {
+                info!("No subsongs available (count={})", count);
+            }
         }
     }
 }

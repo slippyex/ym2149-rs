@@ -52,6 +52,7 @@ fn load_arkos_file(
     // Create player for first subsong
     let player = ArkosPlayer::new(song.clone(), 0)
         .map_err(|e| format!("Failed to create Arkos player: {}", e))?;
+    let song_for_wrapper = song.clone();
 
     // Calculate estimated duration (very rough estimate)
     // AKS replay frequency is typically 50 Hz, end_position is pattern count
@@ -83,7 +84,8 @@ fn load_arkos_file(
     let color_filter = color_filter_override.unwrap_or(true);
 
     Ok(PlayerInfo {
-        player: Box::new(ArkosPlayerWrapper::new(player)) as Box<dyn RealtimeChip>,
+        player: Box::new(ArkosPlayerWrapper::new(player, song_for_wrapper))
+            as Box<dyn RealtimeChip>,
         total_samples,
         song_info: info_str,
         color_filter,

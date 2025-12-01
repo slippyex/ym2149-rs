@@ -125,7 +125,19 @@ fn restore_terminal_mode() {}
 /// - Handles playback control keys
 /// - Restores terminal on exit
 pub fn run_visualization_loop(context: &StreamingContext) {
-    println!("Playback running — keys: [1/2/3]=mute A/B/C, [space]=pause/resume, [q]=quit\n");
+    // Check if player has subsongs
+    let has_subsongs = {
+        let guard = context.player.lock();
+        guard.has_subsongs()
+    };
+
+    if has_subsongs {
+        println!(
+            "Playback running — keys: [1/2/3]=mute A/B/C, [↑/↓]=subsong, [space]=pause/resume, [q]=quit\n"
+        );
+    } else {
+        println!("Playback running — keys: [1/2/3]=mute A/B/C, [space]=pause/resume, [q]=quit\n");
+    }
     let playback_start = Instant::now();
 
     // Hide cursor and add blank lines for visualization
@@ -143,21 +155,31 @@ pub fn run_visualization_loop(context: &StreamingContext) {
         run_input_thread(tx, input_running_clone);
     });
 
+    // Escape sequence state for arrow key handling
+    let mut escape_state = EscapeState::new();
+
     // Main visualization loop
     loop {
         std::thread::sleep(std::time::Duration::from_millis(VISUALIZATION_UPDATE_MS));
 
         // Process keyboard input
-        while let Ok(key) = rx.try_recv() {
-            handle_key_press(key, &context.player, &context.running);
+        while let Ok(byte) = rx.try_recv() {
+            if let Some(event) = escape_state.process(byte) {
+                handle_key_press(event, &context.player, &context.running);
+            }
         }
 
         // Get current state
         let stats = context.streamer.get_stats();
         let elapsed = playback_start.elapsed().as_secs_f32();
-        let snapshot = {
+        let (snapshot, subsong_info) = {
             let guard = context.player.lock();
-            guard.visual_snapshot()
+            let ss_info = if guard.has_subsongs() {
+                Some((guard.current_subsong(), guard.subsong_count()))
+            } else {
+                None
+            };
+            (guard.visual_snapshot(), ss_info)
         };
 
         // Display visualization
@@ -167,6 +189,7 @@ pub fn run_visualization_loop(context: &StreamingContext) {
             &stats,
             elapsed,
             context.streamer.fill_percentage(),
+            subsong_info,
         );
 
         if !context.running.load(Ordering::Relaxed) {
@@ -209,34 +232,115 @@ fn run_input_thread(tx: std::sync::mpsc::Sender<u8>, running: Arc<AtomicBool>) {
         .status();
 }
 
+/// Pending escape sequence state for arrow key handling.
+struct EscapeState {
+    /// Buffer for escape sequence bytes
+    buffer: Vec<u8>,
+    /// Whether we're in an escape sequence
+    in_escape: bool,
+}
+
+impl EscapeState {
+    fn new() -> Self {
+        Self {
+            buffer: Vec::with_capacity(4),
+            in_escape: false,
+        }
+    }
+
+    /// Process a byte and return a completed key event if any.
+    /// Returns Some(key) for regular keys, Some(special) for arrow keys.
+    fn process(&mut self, byte: u8) -> Option<KeyEvent> {
+        if self.in_escape {
+            self.buffer.push(byte);
+            // Check for complete arrow key sequence: ESC [ A/B/C/D
+            if self.buffer.len() >= 2 {
+                let result = match (self.buffer.first(), self.buffer.get(1)) {
+                    (Some(b'['), Some(b'A')) => Some(KeyEvent::ArrowUp),
+                    (Some(b'['), Some(b'B')) => Some(KeyEvent::ArrowDown),
+                    (Some(b'['), Some(b'C')) => Some(KeyEvent::ArrowRight),
+                    (Some(b'['), Some(b'D')) => Some(KeyEvent::ArrowLeft),
+                    _ => None,
+                };
+                self.buffer.clear();
+                self.in_escape = false;
+                return result;
+            }
+            None
+        } else if byte == 0x1B {
+            // ESC character - start escape sequence
+            self.in_escape = true;
+            self.buffer.clear();
+            None
+        } else {
+            Some(KeyEvent::Regular(byte))
+        }
+    }
+}
+
+/// Key events including special keys.
+#[derive(Debug, Clone, Copy)]
+enum KeyEvent {
+    Regular(u8),
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+}
+
 /// Handle keyboard input.
 fn handle_key_press(
-    key: u8,
+    event: KeyEvent,
     player: &Arc<Mutex<Box<dyn RealtimeChip>>>,
     running: &Arc<AtomicBool>,
 ) {
-    match key {
-        b'1' | b'2' | b'3' => {
-            let ch = (key - b'1') as usize;
-            let mut guard = player.lock();
-            let muted = guard.is_channel_muted(ch);
-            guard.set_channel_mute(ch, !muted);
-        }
-        b' ' => {
-            let mut guard = player.lock();
-            match guard.state() {
-                PlaybackState::Playing => {
-                    let _ = guard.pause();
-                }
-                PlaybackState::Paused | PlaybackState::Stopped => {
-                    let _ = guard.play();
+    match event {
+        KeyEvent::Regular(key) => match key {
+            b'1' | b'2' | b'3' => {
+                let ch = (key - b'1') as usize;
+                let mut guard = player.lock();
+                let muted = guard.is_channel_muted(ch);
+                guard.set_channel_mute(ch, !muted);
+            }
+            b' ' => {
+                let mut guard = player.lock();
+                match guard.state() {
+                    PlaybackState::Playing => {
+                        let _ = guard.pause();
+                    }
+                    PlaybackState::Paused | PlaybackState::Stopped => {
+                        let _ = guard.play();
+                    }
                 }
             }
+            b'q' | b'Q' => {
+                running.store(false, Ordering::Relaxed);
+            }
+            _ => {}
+        },
+        KeyEvent::ArrowUp => {
+            let mut guard = player.lock();
+            if guard.has_subsongs() {
+                let current = guard.current_subsong();
+                let count = guard.subsong_count();
+                // Next subsong (wrap around)
+                let next = if current >= count { 1 } else { current + 1 };
+                guard.set_subsong(next);
+            }
         }
-        b'q' | b'Q' => {
-            running.store(false, Ordering::Relaxed);
+        KeyEvent::ArrowDown => {
+            let mut guard = player.lock();
+            if guard.has_subsongs() {
+                let current = guard.current_subsong();
+                let count = guard.subsong_count();
+                // Previous subsong (wrap around)
+                let prev = if current <= 1 { count } else { current - 1 };
+                guard.set_subsong(prev);
+            }
         }
-        _ => {}
+        KeyEvent::ArrowLeft | KeyEvent::ArrowRight => {
+            // Reserved for seek functionality
+        }
     }
 }
 
@@ -247,6 +351,7 @@ fn display_frame(
     stats: &crate::audio::PlaybackStats,
     elapsed: f32,
     fill_pct: f32,
+    subsong_info: Option<(usize, usize)>,
 ) {
     let regs = snapshot.registers;
     let mixer_r7 = regs[7];
@@ -334,12 +439,20 @@ fn display_frame(
 
     // Move cursor up and redraw
     print!("\x1B[4A");
+
+    // Format subsong info if available
+    let subsong_str = match subsong_info {
+        Some((current, total)) => format!(" | Subsong: {}/{}", current, total),
+        None => String::new(),
+    };
+
     print!(
-        "\x1B[2K\r[{:.1}s] Progress: {:>5.1}% | Buffer: {:.1}%b | Overruns: {}\n",
+        "\x1B[2K\r[{:.1}s] Progress: {:>5.1}% | Buffer: {:.1}%b | Overruns: {}{}\n",
         elapsed,
         pos_pct,
         fill_pct * 100.0,
         stats.overrun_count,
+        subsong_str,
     );
     print!(
         "\x1B[2K\rA{} {:<18} | B{} {:<18} | C{} {:<18}\n",

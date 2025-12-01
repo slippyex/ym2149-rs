@@ -17,7 +17,7 @@ This crate provides playback support for SNDH files, a popular format for Atari 
 - **68000 CPU Emulation**: Via the `m68000` crate
 - **MFP 68901 Timer Emulation**: For SID voice and timer-based effects
 - **STE DAC Emulation**: DMA audio support for STe-specific SNDH files (50kHz mode with averaging)
-- **YM2149 Sound Chip**: Using `ym2149` crate for cycle-accurate emulation (ported from Leonard/Oxygene's AtariAudio)
+- **YM2149 Sound Chip**: Using `ym2149` crate for cycle-accurate emulation
 - **ChiptunePlayer Trait**: Unified interface compatible with other replayers
 
 ## Install

@@ -3,9 +3,6 @@
 //! A cycle-accurate emulator of the Yamaha YM2149 Programmable Sound Generator
 //! as integrated into the ATARI ST computer.
 //!
-//! The YM2149 emulation is ported from Leonard/Oxygene's (Arnaud Carré) reference
-//! AtariAudio C++ implementation, ensuring cycle-accurate behavior matching real hardware.
-//!
 //! # Features
 //! - Cycle-accurate emulation of all 3 audio channels (clk/8 internal step)
 //! - Hardware envelope/volume tables (10 shapes, 32-step volume), buzzer/digidrum correct

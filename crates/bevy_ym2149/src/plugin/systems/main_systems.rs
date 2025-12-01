@@ -389,6 +389,7 @@ pub(in crate::plugin) fn initialize_playback(
     )>,
     mut audio_assets: ResMut<Assets<Ym2149AudioSource>>,
     mut pending_reads: Local<HashMap<(Entity, PendingSlot), PendingFileRead>>,
+    audio_sinks: Query<&AudioSink>,
 ) {
     let mut alive = Vec::new();
 
@@ -428,11 +429,8 @@ pub(in crate::plugin) fn initialize_playback(
                 .as_ref()
                 .map(|m| m.total_samples())
                 .unwrap_or(usize::MAX);
-            let audio_source = Ym2149AudioSource::from_shared_player(
-                player_arc,
-                metadata,
-                total_samples,
-            );
+            let audio_source =
+                Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
             let audio_handle = audio_assets.add(audio_source);
             let settings = if playback.state == PlaybackState::Playing {
                 PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(playback.volume))
@@ -448,10 +446,12 @@ pub(in crate::plugin) fn initialize_playback(
         }
 
         // If a new player is already prepared (e.g., crossfade finalized), refresh only the audio source.
+        // But if there's a pending_subsong, we need to do a full reload to apply it.
         if playback.needs_reload
             && playback.player.is_some()
             && playback.metrics.is_some()
             && !playback.inline_player
+            && playback.pending_subsong.is_none()
         {
             let player_arc = playback.player.clone().unwrap();
             let metrics = playback.metrics.unwrap();
@@ -464,11 +464,8 @@ pub(in crate::plugin) fn initialize_playback(
             };
             let total_samples = metrics.total_samples();
 
-            let audio_source = Ym2149AudioSource::from_shared_player(
-                player_arc,
-                metadata,
-                total_samples,
-            );
+            let audio_source =
+                Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
             let audio_handle = audio_assets.add(audio_source);
 
             // Remove old AudioPlayer and AudioSink components if they exist
@@ -517,9 +514,6 @@ pub(in crate::plugin) fn initialize_playback(
                 SourceLoadResult::Ready(bytes) => bytes,
             };
 
-            // Clone data for both player and audio source creation
-            let data_for_audio = loaded.data.clone();
-
             let mut load = match load_player_from_bytes(&loaded.data, loaded.metadata.as_ref()) {
                 Ok(load) => load,
                 Err(err) => {
@@ -538,16 +532,34 @@ pub(in crate::plugin) fn initialize_playback(
                 error!("Failed to start player: {}", e);
             }
 
+            // Take pending subsong if any (for subsong switching)
+            let pending_subsong = playback.pending_subsong.take();
+
+            // Apply pending subsong to the loaded player before wrapping
+            if let Some(subsong_index) = pending_subsong {
+                load.player.set_subsong(subsong_index);
+            }
+
             let player_arc = Arc::new(RwLock::new(load.player));
-            // Diagnostics/crossfade use this player; audio playback uses the audio source below
+            // Diagnostics/crossfade use this player; audio playback uses its own player below
             playback.player = Some(player_arc);
             playback.needs_reload = false;
 
-            // Create a Ym2149AudioSource asset from the loaded data
-            let audio_source = match Ym2149AudioSource::new_with_shared(
-                data_for_audio,
+            // Update the subsong cache after loading
+            playback.update_subsong_cache();
+
+            // Stop the old audio sink immediately to prevent old samples from playing
+            if let Ok(old_sink) = audio_sinks.get(entity) {
+                old_sink.stop();
+            }
+
+            // Create a Ym2149AudioSource with its own player (separate from diagnostics)
+            // but with the same subsong selection applied
+            let audio_source = match Ym2149AudioSource::new_with_subsong(
+                loaded.data.clone(),
                 playback.stereo_gain.clone(),
                 playback.tone_settings.clone(),
+                pending_subsong,
             ) {
                 Ok(source) => source,
                 Err(err) => {

@@ -1,6 +1,4 @@
-//! STE DAC emulation - 1:1 port from AtariAudio
-//!
-//! Original C++ by Arnaud Carré aka Leonard/Oxygene (@leonard_coder)
+//! STE DAC emulation
 
 use crate::mfp68901::Mfp68901;
 

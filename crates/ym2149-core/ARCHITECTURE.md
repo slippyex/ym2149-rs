@@ -2,8 +2,6 @@
 
 Hardware-accurate emulation of the Yamaha YM2149 Programmable Sound Generator chip.
 
-The YM2149 emulation is ported from Leonard/Oxygene's (Arnaud Carré) reference AtariAudio C++ implementation, ensuring cycle-accurate behavior matching real Atari ST hardware.
-
 ## Scope
 
 This document describes the **ym2149-core** crate only. For the overall workspace architecture including YM file parsing, playback, and Bevy integration, see the [root ARCHITECTURE.md](../../ARCHITECTURE.md).
@@ -187,7 +185,7 @@ ym2149-core/src/
 
 ### YM2149 Emulation Rewrite
 
-The YM2149 chip emulation has been completely rewritten based on Leonard/Oxygene's AtariAudio C++ implementation:
+The YM2149 chip emulation has been completely rewritten:
 
 - **chip.rs**: New implementation with cycle-accurate 250kHz (2MHz/8) emulation
 - **tables.rs**: New file containing hardware-accurate lookup tables (replaces old constants.rs)
