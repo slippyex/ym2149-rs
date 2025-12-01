@@ -105,6 +105,7 @@ pub mod playlist;
 pub mod plugin;
 pub mod presets;
 pub mod song_player;
+pub mod streaming;
 pub mod synth;
 
 pub use ::ym2149::*;
