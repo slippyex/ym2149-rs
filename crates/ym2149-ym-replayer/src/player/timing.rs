@@ -3,11 +3,11 @@
 //! This module handles timing calculations, duration queries,
 //! and Sync Buzzer effect control.
 
-use super::ym_player::Ym6PlayerGeneric;
+use super::ym_player::YmPlayerGeneric;
 use crate::Result;
 use ym2149::Ym2149Backend;
 
-impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> YmPlayerGeneric<B> {
     /// Set samples per frame (default 882 for 44.1kHz at 50Hz)
     ///
     /// # Arguments

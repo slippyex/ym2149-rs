@@ -100,19 +100,18 @@ fn load_sndh_file(
         .map_err(|e| format!("SNDH player init failed: {e}"))?;
 
     // Get metadata from the player (which already parsed the SNDH file)
-    use ym2149_common::PlaybackMetadata;
     let metadata = player.metadata();
-    let title = if metadata.title().is_empty() {
+    let title = if metadata.title.is_empty() {
         "(unknown)".to_string()
     } else {
-        metadata.title().to_string()
+        metadata.title.to_string()
     };
-    let author = if metadata.author().is_empty() {
+    let author = if metadata.author.is_empty() {
         "(unknown)".to_string()
     } else {
-        metadata.author().to_string()
+        metadata.author.to_string()
     };
-    let player_rate = metadata.frame_rate();
+    let player_rate = metadata.frame_rate;
 
     let info_str = format!(
         "File: {}\nFormat: SNDH (Atari ST)\nTitle: {}\nAuthor: {}\nPlayer rate: {} Hz",

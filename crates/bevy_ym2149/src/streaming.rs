@@ -312,10 +312,7 @@ fn run_producer_loop(player: SharedSongPlayer, state: Arc<AudioStreamState>) {
     // Start playback
     {
         let mut player_guard = player.write();
-        if let Err(e) = player_guard.play() {
-            bevy::prelude::error!("Failed to start playback in producer: {}", e);
-            return;
-        }
+        player_guard.play();
     }
 
     while state.running.load(Ordering::Acquire) {

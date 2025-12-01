@@ -13,7 +13,12 @@ use thiserror::Error;
 pub enum BevyYm2149Error {
     /// Error reading a file from disk
     #[error("Failed to read file '{path}': {reason}")]
-    FileRead { path: String, reason: String },
+    FileRead {
+        /// Path to the file that failed to read.
+        path: String,
+        /// Reason for the failure.
+        reason: String,
+    },
 
     /// File not found
     #[error("File not found: {0}")]

@@ -64,7 +64,7 @@ graph TB
 |-------|-------|---------|------------|-------|
 | **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation (clk/8, 32-step vols/env) | `Ym2149`, `Ym2149Backend`, streaming helpers | Used by every higher layer |
 | **ym2149-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` | Optional backend prototype |
-| **ym2149-ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()` | Powers CLI/Bevy/WASM YM playback |
+| **ym2149-ym-replayer** | 3 | YM file parsing and playback | `YmPlayer`, `load_song()` | Powers CLI/Bevy/WASM YM playback |
 | **ym2149-arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Supports multi-chip Arkos rips |
 | **ym2149-ay-replayer** | 3 | Project AY ZXAY/EMUL parsing + Z80 replayer | `AyPlayer`, `load_ay()` | ZX-only; CPC AY files rejected (firmware unsupported) |
 | **ym2149-sndh-replayer** | 3 | SNDH (Atari ST) parser + 68000/MFP/STE-DAC emulation | `SndhPlayer`, `load_sndh()` | Native 68000 code execution via m68000 crate |
@@ -83,7 +83,7 @@ sequenceDiagram
     participant File as YM/AKS File
     participant Loader as loader (YM/AKS)
     participant Parser as parser (YM/AKS)
-    participant Player as Ym6/Arkos Player
+    participant Player as YM/Arkos Player
     participant Chip as Backend (Ym2149/SoftSynth)
     participant Audio as Audio Device
 
@@ -259,7 +259,7 @@ pub trait Ym2149Backend: Send {
 - Low-resource environments
 - Simple PSG experimentation
 
-**Note:** `SoftPlayer` has been disabled due to circular dependencies. Use `Ym6Player` with `SoftSynth` backend once generic backend support is implemented in ym2149-ym-replayer.
+**Note:** `SoftPlayer` has been disabled due to circular dependencies. Use `YmPlayer` with `SoftSynth` backend once generic backend support is implemented in ym2149-ym-replayer.
 
 ---
 
@@ -378,7 +378,7 @@ ym2149-ym-replayer/src/
 ├── loader/
 │   └── mod.rs             # High-level file loading API
 ├── player/
-│   ├── ym_player.rs       # Ym6PlayerGeneric<B> implementation
+│   ├── ym_player.rs       # YmPlayerGeneric<B> implementation
 │   ├── effects_manager.rs # Effect state management
 │   ├── effects_pipeline.rs# High-level effect wrapper (SID/DigiDrum state)
 │   ├── format_profile.rs  # FormatMode trait & adapters (YM2/YM5/YM6)
@@ -428,12 +428,15 @@ generate_samples(count):
 
 ### Generic Backend with Hardware-Specific Effects (ym2149-ym-replayer)
 
-**Implementation:** `Ym6Player` is implemented as a generic struct `Ym6PlayerGeneric<B: Ym2149Backend>`, allowing it to work with any backend that implements the `Ym2149Backend` trait.
+**Implementation:** `YmPlayer` is implemented as a generic struct `YmPlayerGeneric<B: Ym2149Backend>`, allowing it to work with any backend that implements the `Ym2149Backend` trait.
 
-**Type Alias:** The commonly-used `Ym6Player` is a type alias for the concrete hardware-accurate implementation:
+**Type Aliases:** The commonly-used `YmPlayer` is the concrete hardware-accurate implementation. `Ym6Player` remains as a legacy alias for downstream crates:
 ```rust
-pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
+pub type YmPlayer = YmPlayerGeneric<Ym2149>;
+pub type Ym6Player = YmPlayer;
 ```
+
+**Timing configuration:** `YmPlayer` defaults to 44.1 kHz @ 2 MHz master clock, but you can override the host rate via `YmPlayer::with_sample_rate` or `set_sample_rate`. YM5/YM6 headers update the master clock automatically via `apply_master_clock`, so non-2MHz rips (or downsampled hosts) stay accurate.
 
 **Hardware Effects Support:** YM6 format includes special Atari ST hardware effects that require methods beyond the standard `Ym2149Backend` trait:
 - `set_mixer_overrides()` - Used by SID voice and Sync Buzzer effects
@@ -530,7 +533,7 @@ AudioSink requests samples
     ↓
 Ym2149Decoder::next() (Iterator trait)
     ↓
-Ym6Player::generate_samples(882) [batch for efficiency]
+YmPlayer::generate_samples(882) [batch for efficiency]
     ↓
 Ym2149::clock() × 882 [one VBL frame @ 50Hz]
     ↓
@@ -615,7 +618,7 @@ Read file bytes
     ↓
 Ym2149AudioSource::new(data)
     ├─ ym2149_ym_replayer::load_song(&data)
-    ├─ Create Ym6Player with Ym2149 chip
+    ├─ Create YmPlayer with Ym2149 chip
     ├─ Call player.play() to start
     └─ Return Asset
     ↓
@@ -647,7 +650,7 @@ Calls Ym2149Decoder::next() (Iterator trait)
     ↓
 Decoder checks if buffer needs refill
     ↓
-Ym6Player::generate_samples(882) [one VBL frame]
+YmPlayer::generate_samples(882) [one VBL frame]
     ├─ For current frame:
     │   ├─ Load frame registers
     │   ├─ Decode effects
@@ -665,7 +668,7 @@ Repeat until track ends or stopped
 ### Pattern 4: Effect Application (Replayer → Core)
 
 ```
-Ym6Player decodes effect commands
+YmPlayer decodes effect commands
     ↓
 EffectsManager::update()
     ↓
@@ -721,7 +724,7 @@ When `streaming` feature is enabled in CLI tools:
 ```mermaid
 graph LR
     subgraph "Producer Thread"
-        GEN["Sample Generator<br/>Ym6Player"]
+        GEN["Sample Generator<br/>YmPlayer"]
     end
 
     subgraph "Lock-Free Channel"
@@ -760,7 +763,7 @@ graph LR
     end
 
     subgraph "Shared State"
-        PLAYER["Shared Player<br/>Ym6Player / ArkosPlayer"]
+        PLAYER["Shared Player<br/>YmPlayer / ArkosPlayer"]
         CF["Crossfade Player<br/>optional"]
     end
 
@@ -775,13 +778,13 @@ graph LR
 - **Pull-based:** Audio thread requests samples on-demand (no ring buffer needed)
 - **Bevy-managed:** Audio device lifecycle handled by Bevy
 - **Asset integration:** YM/AKS files loaded via Bevy's asset system (auto-detected)
-- **Shared player:** `Arc<RwLock<Ym6Player>>` or `ArkosBevyPlayer` (using `parking_lot::RwLock`) allows concurrent read access for audio thread and visualization systems with reduced lock contention
+- **Shared player:** `Arc<RwLock<YmPlayer>>` or `ArkosBevyPlayer` (using `parking_lot::RwLock`) allows concurrent read access for audio thread and visualization systems with reduced lock contention
 - **Lower latency:** No intermediate buffer, direct sample generation
 - **Crossfade deck:** Secondary decoder/player spun up during crossfades and mixed with the primary deck
 
 ### Why RwLock Instead of Mutex?
 
-**Decision:** Use `parking_lot::RwLock<Ym6Player>` instead of `Mutex<Ym6Player>`
+**Decision:** Use `parking_lot::RwLock<YmPlayer>` instead of `Mutex<YmPlayer>`
 
 **Rationale:**
 - **Multiple readers:** RwLock allows many concurrent readers (diagnostics, visualization, UI systems)
@@ -827,7 +830,7 @@ let samples = player.generate_samples(882);
 | Component | Memory Usage |
 |-----------|--------------|
 | Ym2149 chip instance | ~1 KB |
-| Ym6Player (3-minute song) | ~1-2 MB (frames) |
+| YmPlayer (3-minute song) | ~1-2 MB (frames) |
 | RingBuffer (16KB) | 16 KB |
 | Bevy playback component | ~2 KB + player |
 
@@ -852,8 +855,8 @@ Code using deprecated modules must update imports:
 use ym2149::replayer::Ym6Player;
 use ym2149::ym_loader;
 
-// v0.6 (recommended)
-use ym2149_ym_replayer::Ym6Player;
+// v0.7 (recommended)
+use ym2149_ym_replayer::YmPlayer;
 use ym2149_ym_replayer::loader;
 ```
 

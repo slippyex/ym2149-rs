@@ -131,11 +131,7 @@ fn run_producer_loop(
     // Start playback
     {
         let mut player = player.lock();
-        if let Err(e) = player.play() {
-            eprintln!("Failed to start playback: {}", e);
-            running.store(false, Ordering::Relaxed);
-            return;
-        }
+        player.play();
     }
 
     while running.load(Ordering::Relaxed) {
@@ -152,12 +148,8 @@ fn run_producer_loop(
                     running.store(false, Ordering::Relaxed);
                     break;
                 }
-                let _ = player.stop();
-                if let Err(e) = player.play() {
-                    eprintln!("Failed to restart playback: {}", e);
-                    running.store(false, Ordering::Relaxed);
-                    break;
-                }
+                player.stop();
+                player.play();
             }
 
             // Use zero-allocation API - no Vec allocation, no copy

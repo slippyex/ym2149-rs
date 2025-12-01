@@ -1,3 +1,5 @@
+//! Bevy systems for updating YM2149 visualization UI elements.
+
 use crate::components::*;
 use crate::helpers::{
     format_freq_label, format_note_label, frequency_to_note, get_channel_period,
@@ -23,6 +25,7 @@ const COLOR_FADE_LOW: f32 = 0.2;
 const COLOR_FADE_MID: f32 = 0.45;
 const COLOR_FADE_HIGH: f32 = 0.55;
 
+/// Update song title and artist text from the current playback.
 pub fn update_song_info(
     playbacks: Query<&Ym2149Playback>,
     mut song_display: Query<&mut Text, With<SongInfoDisplay>>,
@@ -47,6 +50,7 @@ pub fn update_song_info(
     }
 }
 
+/// Update playback status text (state, frame, volume, buffer fill).
 pub fn update_status_display(
     playbacks: Query<&Ym2149Playback>,
     mut status_display: Query<&mut Text, With<PlaybackStatusDisplay>>,
@@ -80,6 +84,7 @@ pub fn update_status_display(
     }
 }
 
+/// Update per-channel note and frequency labels from current PSG state.
 #[allow(clippy::type_complexity)]
 pub fn update_detailed_channel_display(
     playbacks: Query<&Ym2149Playback>,
@@ -151,6 +156,7 @@ pub fn update_detailed_channel_display(
     }
 }
 
+/// Update song progress bar and loop status labels.
 #[allow(clippy::type_complexity)]
 pub fn update_song_progress(
     playbacks: Query<&Ym2149Playback>,
@@ -191,6 +197,7 @@ pub fn update_song_progress(
     }
 }
 
+/// Update oscilloscope waveform points, heads, spectrum bars, and channel badges.
 #[allow(clippy::type_complexity)]
 pub fn update_oscilloscope(
     oscilloscope_buffer: Res<OscilloscopeBuffer>,

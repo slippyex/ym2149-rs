@@ -55,11 +55,7 @@ pub(super) fn process_pending_crossfade(
         }
     };
 
-    if let Err(err) = load.player.play() {
-        error!("Failed to start crossfade playback: {}", err);
-        playback.clear_crossfade_request();
-        return;
-    }
+    load.player.play();
 
     let duration = request.duration.max(0.001);
     let player_arc = Arc::new(RwLock::new(load.player));
@@ -130,10 +126,8 @@ pub(super) fn finalize_crossfade(
         commands.entity(cf_entity).despawn();
     }
 
-    if let Some(old_player) = playback.player.take()
-        && let Err(err) = old_player.write().stop()
-    {
-        error!("Failed to stop outgoing deck: {}", err);
+    if let Some(old_player) = playback.player.take() {
+        old_player.write().stop();
     }
 
     let new_player = crossfade.player.clone();

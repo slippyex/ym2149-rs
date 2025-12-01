@@ -4,10 +4,10 @@
 //! providing a common interface for YM file playback alongside other chiptune formats.
 
 use super::PlaybackState;
-use super::ym_player::Ym6PlayerGeneric;
+use super::ym_player::YmPlayerGeneric;
 use super::ym6::Ym6Info;
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, PlaybackMetadata};
+use ym2149_common::{ChiptunePlayer, MetadataFields};
 
 /// Metadata wrapper for YM6 files.
 ///
@@ -55,7 +55,7 @@ impl Ym6Metadata {
     }
 }
 
-impl PlaybackMetadata for Ym6Metadata {
+impl MetadataFields for Ym6Metadata {
     fn title(&self) -> &str {
         &self.title
     }
@@ -85,7 +85,7 @@ impl PlaybackMetadata for Ym6Metadata {
     }
 }
 
-impl<B: Ym2149Backend> ChiptunePlayer for Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> ChiptunePlayer for YmPlayerGeneric<B> {
     type Metadata = Ym6Metadata;
 
     fn play(&mut self) {
@@ -111,6 +111,10 @@ impl<B: Ym2149Backend> ChiptunePlayer for Ym6PlayerGeneric<B> {
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         // Use the existing implementation
-        Ym6PlayerGeneric::generate_samples_into(self, buffer);
+        YmPlayerGeneric::generate_samples_into(self, buffer);
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
     }
 }

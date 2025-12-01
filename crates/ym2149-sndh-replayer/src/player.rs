@@ -6,6 +6,7 @@
 use crate::error::{Result, SndhError};
 use crate::machine::AtariMachine;
 use crate::parser::{SndhFile, SubsongInfo};
+use ym2149::Ym2149Backend;
 use ym2149_common::{BasicMetadata, ChiptunePlayer, PlaybackState};
 
 /// SNDH file player.
@@ -217,8 +218,17 @@ impl SndhPlayer {
     ///
     /// This is a convenience method for direct audio output.
     pub fn render_i16(&mut self, buffer: &mut [i16]) -> u32 {
+        self.render_into(buffer, 0i16, |sample| sample)
+    }
+
+    fn render_into<T: Copy>(
+        &mut self,
+        buffer: &mut [T],
+        silence: T,
+        mut convert: impl FnMut(i16) -> T,
+    ) -> u32 {
         if self.state != PlaybackState::Playing || self.current_subsong == 0 {
-            buffer.fill(0);
+            buffer.fill(silence);
             return self.loop_count;
         }
 
@@ -248,7 +258,8 @@ impl SndhPlayer {
             }
 
             // Generate audio sample
-            *sample = self.machine.compute_sample();
+            let raw_sample = self.machine.compute_sample();
+            *sample = convert(raw_sample);
         }
 
         self.loop_count
@@ -286,51 +297,47 @@ impl ChiptunePlayer for SndhPlayer {
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        if self.state != PlaybackState::Playing || self.current_subsong == 0 {
-            buffer.fill(0.0);
-            return;
-        }
-
-        let upload_addr = self.machine.sndh_upload_addr();
-
-        for sample in buffer.iter_mut() {
-            self.inner_sample_pos -= 1;
-
-            // Call player tick routine when needed
-            if self.inner_sample_pos <= 0 {
-                // Call play routine (entry point + 8) with limited cycles
-                // Most SNDH play routines complete in < 10000 cycles
-                if self.play_cycle_budget == 0 {
-                    let _ = self.machine.jsr(upload_addr + 8, 0);
-                } else {
-                    let _ = self
-                        .machine
-                        .jsr_limited(upload_addr + 8, 0, self.play_cycle_budget);
-                }
-                self.inner_sample_pos = self.samples_per_tick as i32;
-                self.frame += 1;
-
-                // Check for loop
-                if self.frame_count > 0 && self.frame >= self.frame_count {
-                    self.loop_count += 1;
-                }
-            }
-
-            // Generate audio sample and convert to f32
-            let i16_sample = self.machine.compute_sample();
-            *sample = i16_sample as f32 / 32768.0;
-        }
+        let _ = self.render_into(buffer, 0.0f32, |sample| sample as f32 / 32768.0);
     }
 
     fn sample_rate(&self) -> u32 {
         self.sample_rate
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.machine.ym2149_mut().set_channel_mute(channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.machine.ym2149().is_channel_muted(channel)
+    }
+
+    fn playback_position(&self) -> f32 {
+        // SNDH doesn't have reliable frame count tracking
+        0.0
+    }
+
+    fn subsong_count(&self) -> usize {
+        SndhPlayer::subsong_count(self)
+    }
+
+    fn current_subsong(&self) -> usize {
+        SndhPlayer::current_subsong(self)
+    }
+
+    fn set_subsong(&mut self, index: usize) -> bool {
+        if index >= 1 && index <= self.subsong_count() && self.init_subsong(index).is_ok() {
+            self.state = PlaybackState::Playing;
+            true
+        } else {
+            false
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ym2149_common::PlaybackMetadata;
 
     fn make_minimal_sndh() -> Vec<u8> {
         // Create a minimal valid SNDH that does nothing
@@ -354,7 +361,7 @@ mod tests {
     fn test_metadata_access() {
         let data = make_minimal_sndh();
         let player = SndhPlayer::new(&data, 44100).unwrap();
-        assert_eq!(player.metadata().format(), "SNDH");
+        assert_eq!(player.metadata().format, "SNDH");
         assert_eq!(player.subsong_count(), 1);
     }
 }

@@ -23,7 +23,7 @@ All notable changes to the ym2149-rs project.
   - `PlaybackState` enum - Standard playback states (Stopped, Playing, Paused)
   - `BasicMetadata` struct - Simple metadata container for generic use cases
 - `ChiptunePlayer` implementations for all four player types:
-  - `Ym6PlayerGeneric<B>` in `ym2149-ym-replayer`
+  - `YmPlayerGeneric<B>` in `ym2149-ym-replayer`
   - `ArkosPlayer` in `ym2149-arkos-replayer`
   - `AyPlayer` in `ym2149-ay-replayer`
   - `SndhPlayer` in `ym2149-sndh-replayer`

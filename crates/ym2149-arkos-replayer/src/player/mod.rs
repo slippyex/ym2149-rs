@@ -9,10 +9,12 @@
 //!
 //! # Module Organization
 //!
-//! - [`sample_voice`] - Sample/digi-drum mixing
-//! - [`psg_output`] - PSG register writing
-//! - [`tick`] - Tick processing and song advancement
-//! - [`chiptune_player`] - ChiptunePlayer trait implementation
+//! Internal modules handle specific concerns:
+//!
+//! - Sample/digi-drum mixing
+//! - PSG register writing
+//! - Tick processing and song advancement
+//! - ChiptunePlayer trait implementation
 //!
 //! # Example
 //!
@@ -224,6 +226,18 @@ impl ArkosPlayer {
         player.current_speed = determine_speed_for_location(&player.song, subsong_index, 0, 0);
 
         Ok(player)
+    }
+
+    /// Switch to a different subsong (1-based) by rebuilding the player state.
+    pub fn switch_subsong(&mut self, subsong_index: usize) -> Result<()> {
+        let was_playing = self.is_playing;
+        let song = self.song();
+        let mut rebuilt = ArkosPlayer::new_from_arc(song, subsong_index)?;
+        if was_playing {
+            rebuilt.play()?;
+        }
+        *self = rebuilt;
+        Ok(())
     }
 
     /// Start playback.

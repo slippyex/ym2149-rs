@@ -526,10 +526,8 @@ pub(in crate::plugin) fn initialize_playback(
             playback.song_author = load.metadata.author.clone();
             playback.metrics = Some(load.metrics);
 
-            if playback.state == PlaybackState::Playing
-                && let Err(e) = load.player.play()
-            {
-                error!("Failed to start player: {}", e);
+            if playback.state == PlaybackState::Playing {
+                load.player.play();
             }
 
             // Take pending subsong if any (for subsong switching)
@@ -634,13 +632,9 @@ pub(in crate::plugin) fn drive_playback_state(
             PlaybackState::Playing => {
                 runtime.time_since_last_frame = 0.0;
                 runtime.emitted_finished = false;
-                if let Err(err) = player.play() {
-                    error!("Failed to resume YM playback: {}", err);
-                }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.play()
-                {
-                    error!("Failed to resume crossfade deck: {}", err);
+                player.play();
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.play();
                 }
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.play();
@@ -655,26 +649,18 @@ pub(in crate::plugin) fn drive_playback_state(
                 }
             }
             PlaybackState::Paused => {
-                if let Err(err) = player.pause() {
-                    error!("Failed to pause YM playback: {}", err);
-                }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.pause()
-                {
-                    error!("Failed to pause crossfade deck: {}", err);
+                player.pause();
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.pause();
                 }
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.pause();
                 }
             }
             PlaybackState::Idle => {
-                if let Err(err) = player.pause() {
-                    error!("Failed to stop YM playback: {}", err);
-                }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.pause()
-                {
-                    error!("Failed to stop crossfade deck: {}", err);
+                player.pause();
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.pause();
                 }
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.pause();
@@ -686,10 +672,8 @@ pub(in crate::plugin) fn drive_playback_state(
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.pause();
                 }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.pause()
-                {
-                    error!("Failed to pause crossfade deck: {}", err);
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.pause();
                 }
                 if config.channel_events && !runtime.emitted_finished {
                     finished_events.write(TrackFinished { entity });
@@ -891,24 +875,16 @@ pub(in crate::plugin) fn process_playback_frames(
             runtime.time_since_last_frame = 0.0;
 
             if settings.loop_enabled {
-                match player.stop().and_then(|_| player.play()) {
-                    Ok(()) => {
-                        runtime.frames_rendered = 0;
-                        playback.seek(0);
-                        runtime.emitted_finished = false;
-                        if config.channel_events {
-                            started_events.write(TrackStarted { entity });
-                        }
-                    }
-                    Err(err) => {
-                        error!("Failed to loop YM playback: {}", err);
-                        playback.state = PlaybackState::Finished;
-                    }
+                player.stop();
+                player.play();
+                runtime.frames_rendered = 0;
+                playback.seek(0);
+                runtime.emitted_finished = false;
+                if config.channel_events {
+                    started_events.write(TrackStarted { entity });
                 }
             } else {
-                if let Err(err) = player.stop() {
-                    error!("Failed to stop YM playback: {}", err);
-                }
+                player.stop();
                 playback.seek(0);
                 playback.state = PlaybackState::Finished;
                 if config.channel_events && !runtime.emitted_finished {
@@ -918,6 +894,29 @@ pub(in crate::plugin) fn process_playback_frames(
             }
         }
     }
+}
+
+pub(super) struct LoadResult {
+    pub(super) player: YmSongPlayer,
+    pub(super) metrics: PlaybackMetrics,
+    pub(super) metadata: Ym2149Metadata,
+}
+
+pub(super) fn load_player_from_bytes(
+    data: &[u8],
+    override_metadata: Option<&Ym2149Metadata>,
+) -> Result<LoadResult, String> {
+    let (player, metrics, mut metadata) = load_song_from_bytes(data)?;
+    if let Some(meta) = override_metadata {
+        metadata.title = meta.title.clone();
+        metadata.author = meta.author.clone();
+        metadata.comment = meta.comment.clone();
+    }
+    Ok(LoadResult {
+        player,
+        metrics,
+        metadata,
+    })
 }
 
 #[cfg(test)]
@@ -990,27 +989,4 @@ mod tests {
         app.update();
         assert_eq!(drain_hits(&mut app).len(), 1);
     }
-}
-
-pub(super) struct LoadResult {
-    pub(super) player: YmSongPlayer,
-    pub(super) metrics: PlaybackMetrics,
-    pub(super) metadata: Ym2149Metadata,
-}
-
-pub(super) fn load_player_from_bytes(
-    data: &[u8],
-    override_metadata: Option<&Ym2149Metadata>,
-) -> Result<LoadResult, String> {
-    let (player, metrics, mut metadata) = load_song_from_bytes(data)?;
-    if let Some(meta) = override_metadata {
-        metadata.title = meta.title.clone();
-        metadata.author = meta.author.clone();
-        metadata.comment = meta.comment.clone();
-    }
-    Ok(LoadResult {
-        player,
-        metrics,
-        metadata,
-    })
 }

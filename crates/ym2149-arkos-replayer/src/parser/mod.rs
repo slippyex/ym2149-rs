@@ -14,11 +14,11 @@
 //!
 //! # Architecture
 //!
-//! The parser is organized into submodules:
+//! The parser is organized into internal submodules:
 //!
-//! - [`state`] - Parse state machine and builder types
-//! - [`helpers`] - XML parsing utilities (position blocks, skip helpers)
-//! - [`xml_parser`] - Core XML parsing logic
+//! - Parse state machine and builder types
+//! - XML parsing utilities (position blocks, skip helpers)
+//! - Core XML parsing logic
 //!
 //! # Example
 //!

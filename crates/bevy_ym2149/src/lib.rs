@@ -1,3 +1,7 @@
+// Enable missing_docs warning but allow it on specific modules that need work
+#![warn(missing_docs)]
+#![allow(clippy::doc_markdown)]
+
 //! Bevy audio plugin for YM2149 PSG emulator
 //!
 //! This crate provides a Bevy plugin for playing YM2149 audio files with real-time visualization

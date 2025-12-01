@@ -7,7 +7,7 @@ use crate::error::{AyError, Result};
 use crate::format::{AyFile, AyPoints, AySong};
 use crate::machine::AyMachine;
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState};
+use ym2149_common::{ChiptunePlayer, MetadataFields, PlaybackState};
 
 const SAMPLE_RATE: u32 = 44_100;
 const FRAME_RATE_HZ: f32 = 50.0;
@@ -49,7 +49,7 @@ pub struct AyMetadata {
     pub player_version: u8,
 }
 
-impl PlaybackMetadata for AyMetadata {
+impl MetadataFields for AyMetadata {
     fn title(&self) -> &str {
         &self.song_name
     }
@@ -556,5 +556,31 @@ impl ChiptunePlayer for AyPlayer {
 
     fn sample_rate(&self) -> u32 {
         SAMPLE_RATE
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        AyPlayer::set_channel_mute(self, channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        AyPlayer::is_channel_muted(self, channel)
+    }
+
+    fn playback_position(&self) -> f32 {
+        AyPlayer::playback_position(self)
+    }
+
+    fn subsong_count(&self) -> usize {
+        self.metadata.song_count
+    }
+
+    fn current_subsong(&self) -> usize {
+        // Return 1-based index
+        self.metadata.song_index + 1
+    }
+
+    fn set_subsong(&mut self, _index: usize) -> bool {
+        // AY requires reloading from raw data to switch songs
+        false
     }
 }

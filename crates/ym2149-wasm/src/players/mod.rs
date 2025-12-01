@@ -11,12 +11,12 @@ use arkos::ArkosWasmPlayer;
 use ay::AyWasmPlayer;
 use sndh::SndhWasmPlayer;
 use ym2149::Ym2149Backend;
-use ym2149_ym_replayer::{PlaybackController, PlaybackState};
+use ym2149_common::{ChiptunePlayer, PlaybackState};
 
 /// Unified player enum for all supported formats.
 pub enum BrowserSongPlayer {
     /// YM format player (YM2-YM6).
-    Ym(Box<ym2149_ym_replayer::Ym6Player>),
+    Ym(Box<ym2149_ym_replayer::YmPlayer>),
     /// Arkos Tracker format player (.aks).
     Arkos(Box<ArkosWasmPlayer>),
     /// AY format player (.ay).
@@ -42,19 +42,21 @@ impl BrowserSongPlayer {
     }
 
     /// Start playback.
-    pub fn play(&mut self) -> Result<(), String> {
+    pub fn play(&mut self) {
         match self {
-            BrowserSongPlayer::Ym(player) => player.play().map_err(|e| e.to_string()),
+            BrowserSongPlayer::Ym(player) => player.play(),
             BrowserSongPlayer::Arkos(player) => player.play(),
-            BrowserSongPlayer::Ay(player) => player.play(),
+            BrowserSongPlayer::Ay(player) => {
+                let _ = player.play();
+            }
             BrowserSongPlayer::Sndh(player) => player.play(),
         }
     }
 
     /// Pause playback.
-    pub fn pause(&mut self) -> Result<(), String> {
+    pub fn pause(&mut self) {
         match self {
-            BrowserSongPlayer::Ym(player) => player.pause().map_err(|e| e.to_string()),
+            BrowserSongPlayer::Ym(player) => player.pause(),
             BrowserSongPlayer::Arkos(player) => player.pause(),
             BrowserSongPlayer::Ay(player) => player.pause(),
             BrowserSongPlayer::Sndh(player) => player.pause(),
@@ -62,9 +64,9 @@ impl BrowserSongPlayer {
     }
 
     /// Stop playback and reset.
-    pub fn stop(&mut self) -> Result<(), String> {
+    pub fn stop(&mut self) {
         match self {
-            BrowserSongPlayer::Ym(player) => player.stop().map_err(|e| e.to_string()),
+            BrowserSongPlayer::Ym(player) => player.stop(),
             BrowserSongPlayer::Arkos(player) => player.stop(),
             BrowserSongPlayer::Ay(player) => player.stop(),
             BrowserSongPlayer::Sndh(player) => player.stop(),

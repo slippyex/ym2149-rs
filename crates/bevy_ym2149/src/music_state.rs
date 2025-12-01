@@ -1,3 +1,8 @@
+//! Music state machine for adaptive audio.
+//!
+//! This module provides a graph-based state machine for switching between
+//! different music tracks or playlists based on game events.
+
 use crate::events::MusicStateRequest;
 use crate::playback::Ym2149Playback;
 use crate::playlist::{Ym2149Playlist, Ym2149PlaylistPlayer, apply_playlist_entry};

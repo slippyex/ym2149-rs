@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use ym2149_common::PlaybackMetadata;
+use ym2149_common::MetadataFields;
 
 /// AKS song metadata
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub struct SongMetadata {
     pub modification_date: String,
 }
 
-impl PlaybackMetadata for SongMetadata {
+impl MetadataFields for SongMetadata {
     fn title(&self) -> &str {
         &self.title
     }

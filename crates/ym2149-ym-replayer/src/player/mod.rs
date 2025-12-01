@@ -28,7 +28,7 @@ pub use effects_pipeline::EffectsPipeline;
 pub use format_profile::{FormatMode, FormatProfile, create_profile};
 pub use frame_sequencer::{AdvanceResult, FrameSequencer};
 pub use vbl_sync::VblSync;
-pub use ym_player::{Player, Ym6Player, load_song};
+pub use ym_player::{Player, Ym6Player, YmPlayer, YmPlayerGeneric, load_song, load_song_with_rate};
 pub use ym6::{LoadSummary, Ym6Info, YmFileFormat};
 
 use crate::Result;

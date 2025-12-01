@@ -3,9 +3,8 @@
 //! Wraps `SndhPlayer` to provide a consistent interface for the browser player.
 
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState as SndhState};
+use ym2149_common::{ChiptunePlayer, MetadataFields, PlaybackState};
 use ym2149_sndh_replayer::{SndhPlayer, load_sndh};
-use ym2149_ym_replayer::PlaybackState;
 
 use crate::YM_SAMPLE_RATE_F32;
 use crate::metadata::YmMetadata;
@@ -33,30 +32,23 @@ impl SndhWasmPlayer {
     }
 
     /// Start playback.
-    pub fn play(&mut self) -> Result<(), String> {
-        self.player.play();
-        Ok(())
+    pub fn play(&mut self) {
+        ChiptunePlayer::play(&mut self.player);
     }
 
     /// Pause playback.
-    pub fn pause(&mut self) -> Result<(), String> {
-        self.player.pause();
-        Ok(())
+    pub fn pause(&mut self) {
+        ChiptunePlayer::pause(&mut self.player);
     }
 
     /// Stop playback and reset.
-    pub fn stop(&mut self) -> Result<(), String> {
-        self.player.stop();
-        Ok(())
+    pub fn stop(&mut self) {
+        ChiptunePlayer::stop(&mut self.player);
     }
 
     /// Get current playback state.
     pub fn state(&self) -> PlaybackState {
-        match self.player.state() {
-            SndhState::Playing => PlaybackState::Playing,
-            SndhState::Paused => PlaybackState::Paused,
-            SndhState::Stopped => PlaybackState::Stopped,
-        }
+        ChiptunePlayer::state(&self.player)
     }
 
     /// Get current frame position.
@@ -71,29 +63,27 @@ impl SndhWasmPlayer {
 
     /// Get playback position as percentage (0.0 to 1.0).
     pub fn playback_position(&self) -> f32 {
-        0.0 // SNDH doesn't have precise position tracking
+        ChiptunePlayer::playback_position(&self.player)
     }
 
     /// Generate audio samples.
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        let mut buffer = vec![0.0; count];
-        self.player.generate_samples_into(&mut buffer);
-        buffer
+        ChiptunePlayer::generate_samples(&mut self.player, count)
     }
 
     /// Generate audio samples into a pre-allocated buffer.
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        self.player.generate_samples_into(buffer);
+        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
     }
 
     /// Mute or unmute a channel.
-    pub fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {
-        // TODO: Implement channel muting in SNDH player
+    pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        ChiptunePlayer::set_channel_mute(&mut self.player, channel, mute);
     }
 
     /// Check if a channel is muted.
-    pub fn is_channel_muted(&self, _channel: usize) -> bool {
-        false
+    pub fn is_channel_muted(&self, channel: usize) -> bool {
+        ChiptunePlayer::is_channel_muted(&self.player, channel)
     }
 
     /// Dump current PSG register values.

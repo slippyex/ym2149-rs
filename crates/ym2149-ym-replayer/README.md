@@ -8,7 +8,7 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
 
 - **YM Format Support**: YM2, YM3, YM5, YM6 file formats with LHA decompression
 - **Tracker Modes**: YMT1 and YMT2 tracker format support
-- **Format Profiles**: `FormatProfile` trait encapsulates format quirks (YM2 drum mixing, YM5 effect encoding, YM6 sentinel handling) so new formats plug in without bloating `Ym6PlayerGeneric`
+- **Format Profiles**: `FormatProfile` trait encapsulates format quirks (YM2 drum mixing, YM5 effect encoding, YM6 sentinel handling) so new formats plug in without bloating `YmPlayerGeneric`
 - **Frame Sequencer**: Dedicated `FrameSequencer` stores frames + timing and exposes seek/loop APIs
 - **Effects Pipeline**: `EffectsPipeline` wraps the low-level `EffectsManager`, tracking SID/digidrum state for visualization/metadata
 - **Hardware Effects**:
@@ -16,6 +16,7 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
   - YM6 SID voice effects
   - Sync buzzer effects
 - **Backend Agnostic**: Works with any `Ym2149Backend` implementation
+- **Timing control**: Defaults to 44.1 kHz / 2 MHz but supports custom host sample rates; YM5/6 master clocks are applied automatically
 - **Optional Features**: Streaming audio output
 
 ## Install
@@ -85,8 +86,8 @@ If you were using the deprecated modules from `ym2149-core`:
 use ym2149::replayer::Ym6Player;
 use ym2149::ym_loader;
 
-// New
-use ym2149_ym_replayer::Ym6Player;
+// New (recommended)
+use ym2149_ym_replayer::YmPlayer;
 use ym2149_ym_replayer::loader;
 ```
 

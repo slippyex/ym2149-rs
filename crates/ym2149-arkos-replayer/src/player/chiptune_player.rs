@@ -4,7 +4,7 @@
 //! providing a common interface for AKS file playback alongside other chiptune formats.
 
 use super::ArkosPlayer;
-use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState};
+use ym2149_common::{ChiptunePlayer, MetadataFields, PlaybackState};
 
 /// Metadata wrapper for Arkos songs.
 ///
@@ -47,7 +47,7 @@ impl ArkosMetadata {
     }
 }
 
-impl PlaybackMetadata for ArkosMetadata {
+impl MetadataFields for ArkosMetadata {
     fn title(&self) -> &str {
         &self.title
     }
@@ -106,5 +106,41 @@ impl ChiptunePlayer for ArkosPlayer {
 
     fn sample_rate(&self) -> u32 {
         self.output_sample_rate() as u32
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        ArkosPlayer::set_channel_mute(self, channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        ArkosPlayer::is_channel_muted(self, channel)
+    }
+
+    fn playback_position(&self) -> f32 {
+        let current = self.current_tick_index();
+        let total = self.estimated_total_ticks();
+        if total > 0 {
+            current as f32 / total as f32
+        } else {
+            0.0
+        }
+    }
+
+    fn subsong_count(&self) -> usize {
+        self.song.subsongs.len()
+    }
+
+    fn current_subsong(&self) -> usize {
+        // Return 1-based index for consistency
+        self.subsong_index + 1
+    }
+
+    fn set_subsong(&mut self, index: usize) -> bool {
+        let zero_based = index.saturating_sub(1);
+        if zero_based < self.song.subsongs.len() {
+            self.switch_subsong(zero_based).is_ok()
+        } else {
+            false
+        }
     }
 }

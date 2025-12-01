@@ -6,7 +6,7 @@ use crate::YM_SAMPLE_RATE_F32;
 use crate::metadata::YmMetadata;
 use ym2149::Ym2149Backend;
 use ym2149_arkos_replayer::ArkosPlayer;
-use ym2149_ym_replayer::PlaybackState;
+use ym2149_common::{ChiptunePlayer, PlaybackState};
 
 /// Arkos player wrapper for WebAssembly.
 pub struct ArkosWasmPlayer {
@@ -50,33 +50,23 @@ impl ArkosWasmPlayer {
     }
 
     /// Start playback.
-    pub fn play(&mut self) -> Result<(), String> {
-        self.player
-            .play()
-            .map_err(|e| format!("AKS play failed: {e}"))
+    pub fn play(&mut self) {
+        ChiptunePlayer::play(&mut self.player);
     }
 
     /// Pause playback.
-    pub fn pause(&mut self) -> Result<(), String> {
-        self.player
-            .pause()
-            .map_err(|e| format!("AKS pause failed: {e}"))
+    pub fn pause(&mut self) {
+        ChiptunePlayer::pause(&mut self.player);
     }
 
     /// Stop playback and reset.
-    pub fn stop(&mut self) -> Result<(), String> {
-        self.player
-            .stop()
-            .map_err(|e| format!("AKS stop failed: {e}"))
+    pub fn stop(&mut self) {
+        ChiptunePlayer::stop(&mut self.player);
     }
 
     /// Get current playback state.
     pub fn state(&self) -> PlaybackState {
-        if self.player.is_playing() {
-            PlaybackState::Playing
-        } else {
-            PlaybackState::Paused
-        }
+        ChiptunePlayer::state(&self.player)
     }
 
     /// Get current frame position.
@@ -91,31 +81,27 @@ impl ArkosWasmPlayer {
 
     /// Get playback position as percentage (0.0 to 1.0).
     pub fn playback_position(&self) -> f32 {
-        if self.estimated_frames == 0 {
-            0.0
-        } else {
-            self.player.current_tick_index() as f32 / self.estimated_frames as f32
-        }
+        ChiptunePlayer::playback_position(&self.player)
     }
 
     /// Generate audio samples.
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        self.player.generate_samples(count)
+        ChiptunePlayer::generate_samples(&mut self.player, count)
     }
 
     /// Generate audio samples into a pre-allocated buffer.
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        self.player.generate_samples_into(buffer);
+        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
     }
 
     /// Mute or unmute a channel.
     pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        self.player.set_channel_mute(channel, mute);
+        ChiptunePlayer::set_channel_mute(&mut self.player, channel, mute);
     }
 
     /// Check if a channel is muted.
     pub fn is_channel_muted(&self, channel: usize) -> bool {
-        self.player.is_channel_muted(channel)
+        ChiptunePlayer::is_channel_muted(&self.player, channel)
     }
 
     /// Dump current PSG register values.

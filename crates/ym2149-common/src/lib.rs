@@ -27,5 +27,5 @@
 mod metadata;
 mod player;
 
-pub use metadata::{BasicMetadata, PlaybackMetadata};
+pub use metadata::{BasicMetadata, MetadataFields, PlaybackMetadata};
 pub use player::{ChiptunePlayer, PlaybackState};

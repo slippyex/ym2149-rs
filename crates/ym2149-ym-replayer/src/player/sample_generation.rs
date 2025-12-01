@@ -8,11 +8,11 @@ use std::sync::Arc;
 use super::PlaybackState;
 use super::format_profile::FormatMode;
 use super::madmax_digidrums::MADMAX_SAMPLE_RATE_BASE;
-use super::ym_player::Ym6PlayerGeneric;
+use super::ym_player::YmPlayerGeneric;
 use crate::parser::effects::EffectCommand;
 use ym2149::Ym2149Backend;
 
-impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> YmPlayerGeneric<B> {
     /// Generate the next sample and advance playback
     pub fn generate_sample(&mut self) -> f32 {
         if self.state != PlaybackState::Playing {

@@ -91,4 +91,50 @@ pub trait ChiptunePlayer {
     fn sample_rate(&self) -> u32 {
         44100
     }
+
+    /// Mute or unmute a specific channel (0-2).
+    ///
+    /// Default implementation does nothing. Override if the player
+    /// supports channel muting.
+    fn set_channel_mute(&mut self, _channel: usize, _mute: bool) {}
+
+    /// Check if a channel is muted.
+    ///
+    /// Default returns false. Override if the player supports channel muting.
+    fn is_channel_muted(&self, _channel: usize) -> bool {
+        false
+    }
+
+    /// Get playback position as a percentage (0.0 to 1.0).
+    ///
+    /// Default returns 0.0. Override if position tracking is available.
+    fn playback_position(&self) -> f32 {
+        0.0
+    }
+
+    /// Get the number of subsongs in this file.
+    ///
+    /// Default returns 1. Override for formats with multiple subsongs.
+    fn subsong_count(&self) -> usize {
+        1
+    }
+
+    /// Get the current subsong index (1-based).
+    ///
+    /// Default returns 1. Override for formats with multiple subsongs.
+    fn current_subsong(&self) -> usize {
+        1
+    }
+
+    /// Switch to a different subsong by 1-based index.
+    ///
+    /// Returns `true` if successful. Default returns `false`.
+    fn set_subsong(&mut self, _index: usize) -> bool {
+        false
+    }
+
+    /// Check if this player supports multiple subsongs.
+    fn has_subsongs(&self) -> bool {
+        self.subsong_count() > 1
+    }
 }

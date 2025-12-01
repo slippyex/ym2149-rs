@@ -3,12 +3,10 @@ use std::sync::Arc;
 use bevy::prelude::error;
 use parking_lot::RwLock;
 use ym2149_arkos_replayer::{AksSong, parser::load_aks, player::ArkosPlayer};
-use ym2149_ay_replayer::{
-    AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyState,
-};
-use ym2149_common::{PlaybackMetadata, PlaybackState as SndhState};
+use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG};
+use ym2149_common::{ChiptunePlayer, MetadataFields};
 use ym2149_sndh_replayer::{SndhPlayer, is_sndh_data, load_sndh};
-use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
+use ym2149_ym_replayer::{self, LoadSummary, YmPlayer};
 
 use crate::audio_source::Ym2149Metadata;
 use crate::error::BevyYm2149Error;
@@ -21,7 +19,7 @@ pub type SharedSongPlayer = Arc<RwLock<YmSongPlayer>>;
 /// Unified song player that can handle YM or Arkos Tracker sources.
 pub enum YmSongPlayer {
     Ym {
-        player: Box<Ym6Player>,
+        player: Box<YmPlayer>,
         metrics: PlaybackMetrics,
         metadata: Ym2149Metadata,
     },
@@ -33,7 +31,7 @@ pub enum YmSongPlayer {
 
 impl YmSongPlayer {
     pub(crate) fn new_ym(
-        player: Ym6Player,
+        player: YmPlayer,
         summary: &LoadSummary,
         metadata: Ym2149Metadata,
     ) -> Self {
@@ -98,52 +96,37 @@ impl YmSongPlayer {
         Self::Synth(Box::new(YmSynthPlayer::new(controller)))
     }
 
-    pub(crate) fn play(&mut self) -> Result<(), BevyYm2149Error> {
+    pub(crate) fn play(&mut self) {
         match self {
-            Self::Ym { player, .. } => player
-                .play()
-                .map_err(|e| BevyYm2149Error::Other(format!("YM play failed: {e}"))),
+            Self::Ym { player, .. } => player.play(),
             Self::Arkos(p) => p.play(),
             Self::Ay(p) => p.play(),
             Self::Sndh(p) => p.play(),
-            Self::Synth(p) => {
-                p.play();
-                Ok(())
-            }
+            Self::Synth(p) => p.play(),
         }
     }
 
-    pub(crate) fn pause(&mut self) -> Result<(), BevyYm2149Error> {
+    pub(crate) fn pause(&mut self) {
         match self {
-            Self::Ym { player, .. } => player
-                .pause()
-                .map_err(|e| BevyYm2149Error::Other(format!("YM pause failed: {e}"))),
+            Self::Ym { player, .. } => player.pause(),
             Self::Arkos(p) => p.pause(),
             Self::Ay(p) => p.pause(),
             Self::Sndh(p) => p.pause(),
-            Self::Synth(p) => {
-                p.pause();
-                Ok(())
-            }
+            Self::Synth(p) => p.pause(),
         }
     }
 
-    pub(crate) fn stop(&mut self) -> Result<(), BevyYm2149Error> {
+    pub(crate) fn stop(&mut self) {
         match self {
-            Self::Ym { player, .. } => player
-                .stop()
-                .map_err(|e| BevyYm2149Error::Other(format!("YM stop failed: {e}"))),
+            Self::Ym { player, .. } => player.stop(),
             Self::Arkos(p) => p.stop(),
             Self::Ay(p) => p.stop(),
             Self::Sndh(p) => p.stop(),
-            Self::Synth(p) => {
-                p.stop();
-                Ok(())
-            }
+            Self::Synth(p) => p.stop(),
         }
     }
 
-    pub(crate) fn state(&self) -> ym2149_ym_replayer::PlaybackState {
+    pub(crate) fn state(&self) -> ym2149_common::PlaybackState {
         match self {
             Self::Ym { player, .. } => player.state(),
             Self::Arkos(p) => p.state(),
@@ -345,7 +328,7 @@ pub(crate) fn load_song_from_bytes(
     }
 }
 
-fn metadata_from_player(player: &Ym6Player, summary: &LoadSummary) -> Ym2149Metadata {
+fn metadata_from_player(player: &YmPlayer, summary: &LoadSummary) -> Ym2149Metadata {
     let frame_count = summary.frame_count;
     let (title, author, comment) = if let Some(info) = player.info() {
         (
@@ -420,30 +403,20 @@ impl ArkosBevyPlayer {
         }
     }
 
-    pub(crate) fn play(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player
-            .play()
-            .map_err(|e| BevyYm2149Error::Other(format!("AKS play failed: {e}")))
+    pub(crate) fn play(&mut self) {
+        ChiptunePlayer::play(&mut self.player);
     }
 
-    pub(crate) fn pause(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player
-            .pause()
-            .map_err(|e| BevyYm2149Error::Other(format!("AKS pause failed: {e}")))
+    pub(crate) fn pause(&mut self) {
+        ChiptunePlayer::pause(&mut self.player);
     }
 
-    pub(crate) fn stop(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player
-            .stop()
-            .map_err(|e| BevyYm2149Error::Other(format!("AKS stop failed: {e}")))
+    pub(crate) fn stop(&mut self) {
+        ChiptunePlayer::stop(&mut self.player);
     }
 
-    pub(crate) fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        if self.player.is_playing() {
-            ym2149_ym_replayer::PlaybackState::Playing
-        } else {
-            ym2149_ym_replayer::PlaybackState::Stopped
-        }
+    pub(crate) fn state(&self) -> ym2149_common::PlaybackState {
+        ChiptunePlayer::state(&self.player)
     }
 
     pub(crate) fn current_frame(&self) -> usize {
@@ -486,7 +459,7 @@ impl ArkosBevyPlayer {
     }
 
     pub(crate) fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        self.player.generate_samples_into(buffer);
+        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
     }
 
     fn refill_cache(&mut self) {
@@ -550,33 +523,24 @@ impl AyBevyPlayer {
         }
     }
 
-    fn play(&mut self) -> Result<(), BevyYm2149Error> {
+    fn play(&mut self) {
         if self.unsupported {
-            return Err(BevyYm2149Error::Other(CPC_UNSUPPORTED_MSG.to_string()));
+            return;
         }
-        self.player
-            .play()
-            .map_err(|e| BevyYm2149Error::Other(format!("AY play failed: {e}")))?;
-        self.ensure_supported()
+        ChiptunePlayer::play(&mut self.player);
+        self.check_and_mark_unsupported();
     }
 
-    fn pause(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player.pause();
-        Ok(())
+    fn pause(&mut self) {
+        ChiptunePlayer::pause(&mut self.player);
     }
 
-    fn stop(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player
-            .stop()
-            .map_err(|e| BevyYm2149Error::Other(format!("AY stop failed: {e}")))
+    fn stop(&mut self) {
+        ChiptunePlayer::stop(&mut self.player);
     }
 
-    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        match self.player.playback_state() {
-            AyState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
-            AyState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
-            AyState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,
-        }
+    fn state(&self) -> ym2149_common::PlaybackState {
+        ChiptunePlayer::state(&self.player)
     }
 
     fn current_frame(&self) -> usize {
@@ -607,15 +571,17 @@ impl AyBevyPlayer {
             buffer.fill(0.0);
             return;
         }
-        self.player.generate_samples_into(buffer);
+        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
         if self.check_and_mark_unsupported() {
             buffer.fill(0.0);
         }
     }
 
     fn fill_cache(&mut self) {
-        self.player
-            .generate_samples_into(&mut self.cache[..AY_CACHE_SAMPLES]);
+        ChiptunePlayer::generate_samples_into(
+            &mut self.player,
+            &mut self.cache[..AY_CACHE_SAMPLES],
+        );
         if self.check_and_mark_unsupported() {
             self.cache.fill(0.0);
         }
@@ -640,14 +606,6 @@ impl AyBevyPlayer {
 
     fn frame_count(&self) -> usize {
         self.metadata.frame_count
-    }
-
-    fn ensure_supported(&mut self) -> Result<(), BevyYm2149Error> {
-        if self.check_and_mark_unsupported() {
-            Err(BevyYm2149Error::Other(CPC_UNSUPPORTED_MSG.to_string()))
-        } else {
-            Ok(())
-        }
     }
 
     fn check_and_mark_unsupported(&mut self) -> bool {
@@ -708,31 +666,20 @@ impl SndhBevyPlayer {
         }
     }
 
-    fn play(&mut self) -> Result<(), BevyYm2149Error> {
-        use ym2149_common::ChiptunePlayer;
-        self.player.play();
-        Ok(())
+    fn play(&mut self) {
+        ChiptunePlayer::play(&mut self.player);
     }
 
-    fn pause(&mut self) -> Result<(), BevyYm2149Error> {
-        use ym2149_common::ChiptunePlayer;
-        self.player.pause();
-        Ok(())
+    fn pause(&mut self) {
+        ChiptunePlayer::pause(&mut self.player);
     }
 
-    fn stop(&mut self) -> Result<(), BevyYm2149Error> {
-        use ym2149_common::ChiptunePlayer;
-        self.player.stop();
-        Ok(())
+    fn stop(&mut self) {
+        ChiptunePlayer::stop(&mut self.player);
     }
 
-    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        use ym2149_common::ChiptunePlayer;
-        match self.player.state() {
-            SndhState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
-            SndhState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
-            SndhState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,
-        }
+    fn state(&self) -> ym2149_common::PlaybackState {
+        ChiptunePlayer::state(&self.player)
     }
 
     fn current_frame(&self) -> usize {
@@ -756,14 +703,14 @@ impl SndhBevyPlayer {
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        use ym2149_common::ChiptunePlayer;
-        self.player.generate_samples_into(buffer);
+        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
     }
 
     fn fill_cache(&mut self) {
-        use ym2149_common::ChiptunePlayer;
-        self.player
-            .generate_samples_into(&mut self.cache[..SNDH_CACHE_SAMPLES]);
+        ChiptunePlayer::generate_samples_into(
+            &mut self.player,
+            &mut self.cache[..SNDH_CACHE_SAMPLES],
+        );
         self.cache_pos = 0;
         self.cache_len = SNDH_CACHE_SAMPLES;
     }
@@ -788,25 +735,21 @@ impl SndhBevyPlayer {
     }
 
     pub fn subsong_count(&self) -> usize {
-        self.player.subsong_count()
+        ChiptunePlayer::subsong_count(&self.player)
     }
 
     pub fn current_subsong(&self) -> usize {
-        self.player.current_subsong()
+        ChiptunePlayer::current_subsong(&self.player)
     }
 
     pub fn set_subsong(&mut self, index: usize) -> bool {
-        use ym2149_common::ChiptunePlayer;
-        if index >= 1
-            && index <= self.player.subsong_count()
-            && self.player.init_subsong(index).is_ok()
-        {
-            self.player.play();
+        if ChiptunePlayer::set_subsong(&mut self.player, index) {
             // Reset cache
             self.cache_pos = 0;
             self.cache_len = 0;
-            return true;
+            true
+        } else {
+            false
         }
-        false
     }
 }

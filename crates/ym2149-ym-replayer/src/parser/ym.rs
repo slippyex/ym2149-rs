@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use super::{ATTR_DRUM_4BIT, FormatParser, decode_4bit_digidrum};
 use crate::Result;
-use ym2149_common::PlaybackMetadata;
+use ym2149_common::MetadataFields;
 
 /// Type alias for full YM parse result: frames, header, metadata, digidrums
 pub type YmParseResult = (Vec<[u8; 16]>, YmHeader, YmMetadata, Vec<Arc<[u8]>>);
@@ -37,7 +37,7 @@ pub struct YmMetadata {
     pub player_freq: Option<u16>,
 }
 
-impl PlaybackMetadata for YmMetadata {
+impl MetadataFields for YmMetadata {
     fn title(&self) -> &str {
         &self.song_name
     }

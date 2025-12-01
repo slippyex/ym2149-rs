@@ -1,3 +1,20 @@
+//! Playlist support for sequential track playback.
+//!
+//! This module provides playlist loading and automatic track advancement,
+//! including seamless crossfade transitions between tracks.
+//!
+//! # Quick Start
+//!
+//! ```no_run
+//! use bevy::prelude::*;
+//! use bevy_ym2149::{Ym2149Playback, Ym2149Playlist, Ym2149PlaylistPlayer};
+//!
+//! fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+//!     let playlist = asset_server.load("music/playlist.ymplaylist");
+//!     commands.spawn((Ym2149Playback::default(), Ym2149PlaylistPlayer::new(playlist)));
+//! }
+//! ```
+
 use crate::audio_source::Ym2149AudioSource;
 use crate::events::{PlaylistAdvanceRequest, TrackFinished};
 use crate::playback::{CrossfadeRequest, TrackSource, YM2149_SAMPLE_RATE_F32, Ym2149Playback};
@@ -13,8 +30,10 @@ const PLAYLIST_EXTENSIONS: &[&str] = &["ymplaylist", "ympl", "ymlist"];
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PlaylistMode {
+    /// Restart from the first track after the last one finishes.
     #[default]
     Loop,
+    /// Stop playback after the last track finishes.
     Once,
 }
 
@@ -23,17 +42,30 @@ pub enum PlaylistMode {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlaylistSource {
     /// Play a YM file from a filesystem path.
-    File { path: String },
+    File {
+        /// Path to the YM file.
+        path: String,
+    },
     /// Play a `Ym2149AudioSource` asset registered with Bevy's asset server.
-    Asset { path: String },
+    Asset {
+        /// Asset path (e.g., "music/song.ym").
+        path: String,
+    },
     /// Play YM data embedded directly in the playlist.
-    Bytes { data: Vec<u8> },
+    Bytes {
+        /// Raw YM file data.
+        data: Vec<u8>,
+    },
 }
 
 /// Configuration for seamless playlist crossfades.
+///
+/// Controls when a crossfade begins and how long both tracks overlap.
 #[derive(Debug, Clone)]
 pub struct CrossfadeConfig {
+    /// When to start the crossfade.
     pub trigger: CrossfadeTrigger,
+    /// How long both tracks play simultaneously.
     pub window: CrossfadeWindow,
 }
 
@@ -70,14 +102,18 @@ impl Default for CrossfadeConfig {
 /// Trigger used to decide when to begin the hand-off to the next deck.
 #[derive(Debug, Clone, Copy)]
 pub enum CrossfadeTrigger {
+    /// Begin crossfade when the given ratio (0.0-1.0) of the song has elapsed.
     SongRatio(f32),
+    /// Begin crossfade after this many seconds from track start.
     Seconds(f32),
 }
 
 /// Duration of the overlap between decks once a fade starts.
 #[derive(Debug, Clone, Copy)]
 pub enum CrossfadeWindow {
+    /// Crossfade lasts until the current track ends.
     UntilSongEnd,
+    /// Crossfade lasts exactly this many seconds.
     FixedSeconds(f32),
 }
 
@@ -100,14 +136,19 @@ impl CrossfadeStage {
 }
 
 /// Playlist asset describing a set of YM tracks.
+///
+/// Load from `.ymplaylist` files (RON format) or construct programmatically.
 #[derive(Asset, Clone, TypePath, Deserialize)]
 pub struct Ym2149Playlist {
+    /// Ordered list of tracks in the playlist.
     pub tracks: Vec<PlaylistSource>,
+    /// What happens when the last track finishes.
     #[serde(default)]
     pub mode: PlaylistMode,
 }
 
 impl Ym2149Playlist {
+    /// Returns true if the playlist has no tracks.
     pub fn is_empty(&self) -> bool {
         self.tracks.is_empty()
     }
@@ -139,10 +180,14 @@ impl AssetLoader for Ym2149PlaylistLoader {
     }
 }
 
-/// Component that drives a `Ym2149Playback` using a playlist asset.
+/// Component that drives a [`Ym2149Playback`] using a playlist asset.
+///
+/// Attach this alongside a `Ym2149Playback` to enable automatic track advancement.
 #[derive(Component)]
 pub struct Ym2149PlaylistPlayer {
+    /// Handle to the playlist asset.
     pub playlist: Handle<Ym2149Playlist>,
+    /// Index of the currently playing track.
     pub current_index: usize,
     /// Optional crossfade configuration enabling seamless transitions.
     pub crossfade: Option<CrossfadeConfig>,
@@ -150,6 +195,7 @@ pub struct Ym2149PlaylistPlayer {
 }
 
 impl Ym2149PlaylistPlayer {
+    /// Create a new playlist player without crossfade.
     pub fn new(playlist: Handle<Ym2149Playlist>) -> Self {
         Self {
             playlist,
@@ -159,6 +205,7 @@ impl Ym2149PlaylistPlayer {
         }
     }
 
+    /// Create a new playlist player with crossfade enabled.
     pub fn with_crossfade(playlist: Handle<Ym2149Playlist>, config: CrossfadeConfig) -> Self {
         Self {
             playlist,
@@ -169,6 +216,7 @@ impl Ym2149PlaylistPlayer {
     }
 }
 
+/// Register playlist asset types and loaders with the Bevy app.
 pub fn register_playlist_assets(app: &mut App) {
     app.init_asset_loader::<Ym2149PlaylistLoader>();
 }

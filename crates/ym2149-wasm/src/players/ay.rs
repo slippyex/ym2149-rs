@@ -4,10 +4,8 @@
 
 use crate::metadata::{YmMetadata, metadata_from_ay};
 use ym2149::Ym2149Backend;
-use ym2149_ay_replayer::{
-    AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyState,
-};
-use ym2149_ym_replayer::PlaybackState;
+use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG};
+use ym2149_common::{ChiptunePlayer, PlaybackState};
 
 /// AY player wrapper for WebAssembly.
 pub struct AyWasmPlayer {
@@ -36,28 +34,23 @@ impl AyWasmPlayer {
         if self.unsupported {
             return Err(CPC_UNSUPPORTED_MSG.to_string());
         }
-        self.player.play().map_err(|e| e.to_string())?;
+        ChiptunePlayer::play(&mut self.player);
         self.check_support()
     }
 
     /// Pause playback.
-    pub fn pause(&mut self) -> Result<(), String> {
-        self.player.pause();
-        Ok(())
+    pub fn pause(&mut self) {
+        ChiptunePlayer::pause(&mut self.player);
     }
 
     /// Stop playback and reset.
-    pub fn stop(&mut self) -> Result<(), String> {
-        self.player.stop().map_err(|e| e.to_string())
+    pub fn stop(&mut self) {
+        ChiptunePlayer::stop(&mut self.player);
     }
 
     /// Get current playback state.
     pub fn state(&self) -> PlaybackState {
-        match self.player.playback_state() {
-            AyState::Playing => PlaybackState::Playing,
-            AyState::Paused => PlaybackState::Paused,
-            AyState::Stopped => PlaybackState::Stopped,
-        }
+        ChiptunePlayer::state(&self.player)
     }
 
     /// Get current frame position.
@@ -72,7 +65,7 @@ impl AyWasmPlayer {
 
     /// Get playback position as percentage (0.0 to 1.0).
     pub fn playback_position(&self) -> f32 {
-        self.player.playback_position()
+        ChiptunePlayer::playback_position(&self.player)
     }
 
     /// Generate audio samples.
@@ -80,7 +73,7 @@ impl AyWasmPlayer {
         if self.unsupported {
             return vec![0.0; count];
         }
-        let mut samples = self.player.generate_samples(count);
+        let mut samples = ChiptunePlayer::generate_samples(&mut self.player, count);
         if self.check_support().is_err() {
             samples.fill(0.0);
         }
@@ -89,7 +82,7 @@ impl AyWasmPlayer {
 
     /// Generate audio samples into a pre-allocated buffer.
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        self.player.generate_samples_into(buffer);
+        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
         if self.check_support().is_err() {
             buffer.fill(0.0);
         }
@@ -97,12 +90,12 @@ impl AyWasmPlayer {
 
     /// Mute or unmute a channel.
     pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        self.player.set_channel_mute(channel, mute);
+        ChiptunePlayer::set_channel_mute(&mut self.player, channel, mute);
     }
 
     /// Check if a channel is muted.
     pub fn is_channel_muted(&self, channel: usize) -> bool {
-        self.player.is_channel_muted(channel)
+        ChiptunePlayer::is_channel_muted(&self.player, channel)
     }
 
     /// Dump current PSG register values.

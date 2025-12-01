@@ -46,16 +46,20 @@ pub const YM2149_SAMPLE_RATE_F32: f32 = YM2149_SAMPLE_RATE as f32;
 /// Summary of a loaded track used for progress/duration calculations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlaybackMetrics {
+    /// Total number of frames in the track.
     pub frame_count: usize,
+    /// Number of audio samples generated per frame (depends on frame rate).
     pub samples_per_frame: u32,
 }
 
 impl PlaybackMetrics {
+    /// Returns the total number of audio samples in the track.
     pub fn total_samples(&self) -> usize {
         self.frame_count
             .saturating_mul(self.samples_per_frame as usize)
     }
 
+    /// Returns the track duration in seconds.
     pub fn duration_seconds(&self) -> f32 {
         self.total_samples() as f32 / YM2149_SAMPLE_RATE_F32
     }

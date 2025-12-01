@@ -105,7 +105,7 @@ pub trait Ym2149Backend: Send {
 - `SoftSynth` (ym2149-softsynth crate): Experimental synthesizer (effects ignored via default trait methods)
 
 **Generic Player:**
-The `Ym6PlayerGeneric<B: Ym2149Backend>` in ym2149-ym-replayer uses this trait, allowing any backend. The type alias `Ym6Player = Ym6PlayerGeneric<Ym2149>` provides the common hardware-accurate default.
+The `YmPlayerGeneric<B: Ym2149Backend>` in ym2149-ym-replayer uses this trait, allowing any backend. The type alias `YmPlayer = YmPlayerGeneric<Ym2149>` provides the common hardware-accurate default (with `Ym6Player` kept as a legacy alias).
 
 ---
 
@@ -131,7 +131,7 @@ pub fn trigger_envelope(&mut self, shape: u8)
 ```
 Immediate envelope restart, used by Sync Buzzer effect.
 
-**Note**: These methods are hardware-specific and provided as trait default methods (no-ops) in the `Ym2149Backend` trait. The `Ym6PlayerGeneric<B: Ym2149Backend>` player is generic over backends, but YM6 hardware effects are only available when using the concrete `Ym2149` implementation (via the `Ym6Player` type alias or explicitly as `Ym6PlayerGeneric<Ym2149>`). Alternative backends like `SoftSynth` will compile but ignore these hardware-specific features.
+**Note**: These methods are hardware-specific and provided as trait default methods (no-ops) in the `Ym2149Backend` trait. The `YmPlayerGeneric<B: Ym2149Backend>` player is generic over backends, but YM6 hardware effects are only available when using the concrete `Ym2149` implementation (via the `Ym6Player` type alias or explicitly as `YmPlayerGeneric<Ym2149>`). Alternative backends like `SoftSynth` will compile but ignore these hardware-specific features.
 
 ---
 

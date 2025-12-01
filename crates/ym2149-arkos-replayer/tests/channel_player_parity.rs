@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use ym2149_arkos_replayer::channel_player::{ChannelPlayer, SampleCommand};
 use ym2149_arkos_replayer::format::{
     AksSong, Arpeggio, Cell, ChannelLink, Effect, Instrument, InstrumentCell, InstrumentType, Note,
     Pattern, Position, PsgConfig, PsgType, SongFormat, Subsong, Track,
 };
+use ym2149_arkos_replayer::{ChannelPlayer, SampleCommand};
 fn empty_instrument() -> Instrument {
     Instrument {
         name: "Empty".into(),
@@ -367,7 +367,7 @@ fn run_single_tick(
     cell: Option<&Cell>,
     is_first_tick: bool,
     still_within_line: bool,
-) -> ym2149_arkos_replayer::channel_player::ChannelFrame {
+) -> ym2149_arkos_replayer::ChannelFrame {
     player.play_frame(cell, 0, is_first_tick, still_within_line)
 }
 

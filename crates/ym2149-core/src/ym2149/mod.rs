@@ -7,12 +7,12 @@
 //!
 //! # Architecture
 //!
-//! The emulator is organized into focused components:
+//! The emulator is organized into focused internal components:
 //!
-//! - [`generators`] - Tone, noise, and envelope generators
-//! - [`mixer`] - Audio mixing and output stage
-//! - [`dc_filter`] - DC offset removal
-//! - [`tables`] - Hardware lookup tables (volumes, envelopes)
+//! - Tone, noise, and envelope generators
+//! - Audio mixing and output stage
+//! - DC offset removal filter
+//! - Hardware lookup tables (volumes, envelopes)
 
 // Internal modules
 pub mod chip;

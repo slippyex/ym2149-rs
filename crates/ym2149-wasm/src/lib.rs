@@ -32,8 +32,10 @@
 //!
 //! # Module Organization
 //!
-//! - [`metadata`] - Metadata types and conversion functions
-//! - [`players`] - Player wrappers for different file formats
+//! Internal modules handle:
+//!
+//! - Metadata types and conversion functions
+//! - Player wrappers for different file formats
 
 #![warn(missing_docs)]
 
@@ -114,30 +116,24 @@ impl Ym2149Player {
     }
 
     /// Start playback.
-    pub fn play(&mut self) -> Result<(), JsValue> {
-        self.player
-            .play()
-            .map_err(|e| JsValue::from_str(&format!("Failed to play: {}", e)))
+    pub fn play(&mut self) {
+        self.player.play();
     }
 
     /// Pause playback.
     pub fn pause(&mut self) {
-        let _ = self.player.pause();
+        self.player.pause();
     }
 
     /// Stop playback and reset to beginning.
-    pub fn stop(&mut self) -> Result<(), JsValue> {
-        self.player
-            .stop()
-            .map_err(|e| JsValue::from_str(&format!("Failed to stop: {}", e)))
+    pub fn stop(&mut self) {
+        self.player.stop();
     }
 
     /// Restart playback from the beginning.
-    pub fn restart(&mut self) -> Result<(), JsValue> {
-        self.player
-            .stop()
-            .and_then(|_| self.player.play())
-            .map_err(|e| JsValue::from_str(&format!("Failed to restart: {}", e)))
+    pub fn restart(&mut self) {
+        self.player.stop();
+        self.player.play();
     }
 
     /// Get current playback state.

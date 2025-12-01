@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 //! Visualization utilities for `bevy_ym2149`.
 //!
 //! This crate hosts all UI components, helpers, and Bevy systems that render

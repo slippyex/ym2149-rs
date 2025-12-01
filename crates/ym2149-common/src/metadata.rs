@@ -7,7 +7,7 @@
 ///
 /// Implementations of this trait provide a common interface to access
 /// song metadata regardless of the underlying file format.
-pub trait PlaybackMetadata {
+pub trait MetadataFields {
     /// Get the song title.
     fn title(&self) -> &str;
 
@@ -50,6 +50,14 @@ pub trait PlaybackMetadata {
     }
 }
 
+/// Unified metadata trait for chiptune playback.
+///
+/// This is a thin marker over [`MetadataFields`], provided for compatibility
+/// with the existing public API.
+pub trait PlaybackMetadata: MetadataFields {}
+
+impl<T: MetadataFields> PlaybackMetadata for T {}
+
 /// Basic metadata container implementing `PlaybackMetadata`.
 ///
 /// This is a simple struct that can be used when you need to store
@@ -72,7 +80,7 @@ pub struct BasicMetadata {
     pub loop_frame: Option<usize>,
 }
 
-impl PlaybackMetadata for BasicMetadata {
+impl MetadataFields for BasicMetadata {
     fn title(&self) -> &str {
         &self.title
     }

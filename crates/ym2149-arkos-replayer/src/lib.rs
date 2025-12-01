@@ -46,6 +46,14 @@ mod expression;
 mod fixed_point;
 mod psg;
 
+// Re-export internal modules for extended tests (hidden from docs)
+#[cfg(feature = "extended-tests")]
+#[doc(hidden)]
+pub use channel_player::{ChannelFrame, ChannelPlayer, SampleCommand};
+#[cfg(feature = "extended-tests")]
+#[doc(hidden)]
+pub use psg::calculate_period;
+
 // Public modules
 pub mod error;
 pub mod format;

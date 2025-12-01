@@ -6128,6 +6128,7 @@ dependencies = [
  "thiserror 1.0.69",
  "ym2149",
  "ym2149-common",
+ "ym2149-softsynth",
 ]
 
 [[package]]

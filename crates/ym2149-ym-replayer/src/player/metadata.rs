@@ -2,11 +2,11 @@
 //!
 //! This module handles song metadata access, formatting, and active effect queries.
 
-use super::ym_player::Ym6PlayerGeneric;
+use super::ym_player::YmPlayerGeneric;
 use super::ym6::Ym6Info;
 use ym2149::Ym2149Backend;
 
-impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> YmPlayerGeneric<B> {
     /// Get song metadata if available
     pub fn info(&self) -> Option<&Ym6Info> {
         self.info.as_ref()

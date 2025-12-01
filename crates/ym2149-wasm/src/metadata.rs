@@ -67,7 +67,7 @@ impl YmMetadata {
 
 /// Convert YM player info to metadata.
 pub fn metadata_from_summary(
-    player: &ym2149_ym_replayer::Ym6Player,
+    player: &ym2149_ym_replayer::YmPlayer,
     summary: &LoadSummary,
 ) -> YmMetadata {
     let (title, author, comments, frame_rate) = if let Some(info) = player.info() {

@@ -125,24 +125,43 @@ fn restore_terminal_mode() {}
 /// - Handles playback control keys
 /// - Restores terminal on exit
 pub fn run_visualization_loop(context: &StreamingContext) {
-    // Check if player has subsongs
-    let has_subsongs = {
+    // Check if player has subsongs and get PSG count
+    let (has_subsongs, psg_count, channel_count) = {
         let guard = context.player.lock();
-        guard.has_subsongs()
+        (
+            guard.has_subsongs(),
+            guard.psg_count(),
+            guard.channel_count(),
+        )
+    };
+
+    // Build mute keys help based on channel count
+    let mute_keys = if channel_count <= 3 {
+        "[1/2/3]=mute A/B/C".to_string()
+    } else if channel_count <= 6 {
+        "[1-6]=mute channels".to_string()
+    } else {
+        "[1-9,0]=mute ch 1-10".to_string()
     };
 
     if has_subsongs {
         println!(
-            "Playback running — keys: [1/2/3]=mute A/B/C, [↑/↓]=subsong, [space]=pause/resume, [q]=quit\n"
+            "Playback running — keys: {}, [↑/↓]=subsong, [space]=pause/resume, [q]=quit\n",
+            mute_keys
         );
     } else {
-        println!("Playback running — keys: [1/2/3]=mute A/B/C, [space]=pause/resume, [q]=quit\n");
+        println!(
+            "Playback running — keys: {}, [space]=pause/resume, [q]=quit\n",
+            mute_keys
+        );
     }
     let playback_start = Instant::now();
 
     // Hide cursor and add blank lines for visualization
+    // 1 line for status + 3 lines per PSG (volume bars, status, highlight)
+    let viz_lines = 1 + psg_count * 3;
     print!("\x1B[?25l");
-    for _ in 0..4 {
+    for _ in 0..viz_lines {
         println!();
     }
 
@@ -296,21 +315,28 @@ fn handle_key_press(
 ) {
     match event {
         KeyEvent::Regular(key) => match key {
-            b'1' | b'2' | b'3' => {
+            // Channel mute: 1-9 for channels 0-8, 0 for channel 9
+            b'1'..=b'9' => {
                 let ch = (key - b'1') as usize;
                 let mut guard = player.lock();
-                let muted = guard.is_channel_muted(ch);
-                guard.set_channel_mute(ch, !muted);
+                if ch < guard.channel_count() {
+                    let muted = guard.is_channel_muted(ch);
+                    guard.set_channel_mute(ch, !muted);
+                }
+            }
+            b'0' => {
+                // Channel 10 (index 9)
+                let mut guard = player.lock();
+                if guard.channel_count() > 9 {
+                    let muted = guard.is_channel_muted(9);
+                    guard.set_channel_mute(9, !muted);
+                }
             }
             b' ' => {
                 let mut guard = player.lock();
                 match guard.state() {
-                    PlaybackState::Playing => {
-                        let _ = guard.pause();
-                    }
-                    PlaybackState::Paused | PlaybackState::Stopped => {
-                        let _ = guard.play();
-                    }
+                    PlaybackState::Playing => guard.pause(),
+                    PlaybackState::Paused | PlaybackState::Stopped => guard.play(),
                 }
             }
             b'q' | b'Q' => {
@@ -344,6 +370,59 @@ fn handle_key_press(
     }
 }
 
+/// Channel names for display (A, B, C for each PSG).
+const CHANNEL_NAMES: [&str; 12] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+
+/// Extract channel data from PSG registers.
+struct ChannelData {
+    period: Option<u16>,
+    tone_enabled: bool,
+    noise_enabled: bool,
+    amplitude: u8,
+    env_enabled: bool,
+    env_shape: &'static str,
+}
+
+fn extract_channel_data(regs: &[u8; 16], channel: usize) -> ChannelData {
+    let mixer = regs[7];
+    let env_shape = get_envelope_shape_name(regs[15]);
+
+    match channel {
+        0 => ChannelData {
+            period: channel_period(regs[0], regs[1]),
+            tone_enabled: (mixer & 0x01) == 0,
+            noise_enabled: (mixer & 0x08) == 0,
+            amplitude: regs[8] & 0x0F,
+            env_enabled: (regs[8] & 0x10) != 0,
+            env_shape,
+        },
+        1 => ChannelData {
+            period: channel_period(regs[2], regs[3]),
+            tone_enabled: (mixer & 0x02) == 0,
+            noise_enabled: (mixer & 0x10) == 0,
+            amplitude: regs[9] & 0x0F,
+            env_enabled: (regs[9] & 0x10) != 0,
+            env_shape,
+        },
+        2 => ChannelData {
+            period: channel_period(regs[4], regs[5]),
+            tone_enabled: (mixer & 0x04) == 0,
+            noise_enabled: (mixer & 0x20) == 0,
+            amplitude: regs[10] & 0x0F,
+            env_enabled: (regs[10] & 0x10) != 0,
+            env_shape,
+        },
+        _ => ChannelData {
+            period: None,
+            tone_enabled: false,
+            noise_enabled: false,
+            amplitude: 0,
+            env_enabled: false,
+            env_shape: "",
+        },
+    }
+}
+
 /// Display a single visualization frame.
 fn display_frame(
     snapshot: &VisualSnapshot,
@@ -353,92 +432,23 @@ fn display_frame(
     fill_pct: f32,
     subsong_info: Option<(usize, usize)>,
 ) {
-    let regs = snapshot.registers;
-    let mixer_r7 = regs[7];
-    let envelope_shape_r15 = regs[15];
-
-    let period_a = channel_period(regs[0], regs[1]);
-    let period_b = channel_period(regs[2], regs[3]);
-    let period_c = channel_period(regs[4], regs[5]);
-
-    let tone_a = (mixer_r7 & 0x01) == 0;
-    let tone_b = (mixer_r7 & 0x02) == 0;
-    let tone_c = (mixer_r7 & 0x04) == 0;
-
-    let noise_a = (mixer_r7 & 0x08) == 0;
-    let noise_b = (mixer_r7 & 0x10) == 0;
-    let noise_c = (mixer_r7 & 0x20) == 0;
-
-    let amp_a = regs[8] & 0x0F;
-    let amp_b = regs[9] & 0x0F;
-    let amp_c = regs[10] & 0x0F;
-
-    let env_a = (regs[8] & 0x10) != 0;
-    let env_b = (regs[9] & 0x10) != 0;
-    let env_c = (regs[10] & 0x10) != 0;
-
-    let env_shape = get_envelope_shape_name(envelope_shape_r15);
-
-    let bar_len = 10;
-    let bar_a = create_volume_bar(amp_a as f32 / 15.0, bar_len);
-    let bar_b = create_volume_bar(amp_b as f32 / 15.0, bar_len);
-    let bar_c = create_volume_bar(amp_c as f32 / 15.0, bar_len);
-
+    let psg_count = snapshot.psg_count;
     let sync_buzzer_active = snapshot.sync_buzzer;
-    let sid_active = snapshot.sid_active;
-    let drum_active = snapshot.drum_active;
 
-    let highlight_a = format_channel_highlight(period_a, env_a, sid_active[0], drum_active[0]);
-    let highlight_b = format_channel_highlight(period_b, env_b, sid_active[1], drum_active[1]);
-    let highlight_c = format_channel_highlight(period_c, env_c, sid_active[2], drum_active[2]);
-
-    let status_a = create_channel_status(
-        tone_a,
-        noise_a,
-        amp_a,
-        env_a,
-        env_shape,
-        sid_active[0],
-        drum_active[0],
-        sync_buzzer_active,
-    );
-    let status_b = create_channel_status(
-        tone_b,
-        noise_b,
-        amp_b,
-        env_b,
-        env_shape,
-        sid_active[1],
-        drum_active[1],
-        sync_buzzer_active,
-    );
-    let status_c = create_channel_status(
-        tone_c,
-        noise_c,
-        amp_c,
-        env_c,
-        env_shape,
-        sid_active[2],
-        drum_active[2],
-        sync_buzzer_active,
-    );
-
-    let (muted_a, muted_b, muted_c) = {
+    // Get mute states and position
+    let (mute_states, pos_pct) = {
         let guard = player.lock();
-        (
-            guard.is_channel_muted(0),
-            guard.is_channel_muted(1),
-            guard.is_channel_muted(2),
-        )
+        let channel_count = guard.channel_count();
+        let mutes: Vec<bool> = (0..channel_count)
+            .map(|ch| guard.is_channel_muted(ch))
+            .collect();
+        let pos = (guard.get_playback_position() * 100.0).clamp(0.0, 100.0);
+        (mutes, pos)
     };
 
-    let pos_pct = {
-        let guard = player.lock();
-        (guard.get_playback_position() * 100.0).clamp(0.0, 100.0)
-    };
-
-    // Move cursor up and redraw
-    print!("\x1B[4A");
+    // Move cursor up: 1 status line + 3 lines per PSG
+    let lines_up = 1 + psg_count * 3;
+    print!("\x1B[{}A", lines_up);
 
     // Format subsong info if available
     let subsong_str = match subsong_info {
@@ -446,30 +456,82 @@ fn display_frame(
         None => String::new(),
     };
 
+    // PSG count indicator for multi-PSG songs
+    let psg_str = if psg_count > 1 {
+        format!(" | PSGs: {}", psg_count)
+    } else {
+        String::new()
+    };
+
     print!(
-        "\x1B[2K\r[{:.1}s] Progress: {:>5.1}% | Buffer: {:.1}%b | Overruns: {}{}\n",
+        "\x1B[2K\r[{:.1}s] Progress: {:>5.1}% | Buffer: {:.1}% | Overruns: {}{}{}\n",
         elapsed,
         pos_pct,
         fill_pct * 100.0,
         stats.overrun_count,
         subsong_str,
+        psg_str,
     );
-    print!(
-        "\x1B[2K\rA{} {:<18} | B{} {:<18} | C{} {:<18}\n",
-        if muted_a { "(M)" } else { "  " },
-        bar_a,
-        if muted_b { "(M)" } else { "  " },
-        bar_b,
-        if muted_c { "(M)" } else { "  " },
-        bar_c,
-    );
-    print!(
-        "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
-        status_a, status_b, status_c
-    );
-    print!(
-        "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
-        highlight_a, highlight_b, highlight_c
-    );
+
+    // Display each PSG
+    for psg_idx in 0..psg_count {
+        let regs = &snapshot.registers[psg_idx];
+        let base_ch = psg_idx * 3;
+
+        let bar_len = 10;
+        let mut bars = Vec::with_capacity(3);
+        let mut statuses = Vec::with_capacity(3);
+        let mut highlights = Vec::with_capacity(3);
+
+        for local_ch in 0..3 {
+            let global_ch = base_ch + local_ch;
+            let data = extract_channel_data(regs, local_ch);
+
+            let bar = create_volume_bar(data.amplitude as f32 / 15.0, bar_len);
+            let muted = mute_states.get(global_ch).copied().unwrap_or(false);
+            let ch_name = CHANNEL_NAMES.get(global_ch).unwrap_or(&"?");
+
+            bars.push(format!(
+                "{}{} {:<18}",
+                ch_name,
+                if muted { "(M)" } else { "   " },
+                bar
+            ));
+
+            let status = create_channel_status(
+                data.tone_enabled,
+                data.noise_enabled,
+                data.amplitude,
+                data.env_enabled,
+                data.env_shape,
+                snapshot.sid_active[global_ch],
+                snapshot.drum_active[global_ch],
+                sync_buzzer_active,
+            );
+            statuses.push(status);
+
+            let highlight = format_channel_highlight(
+                data.period,
+                data.env_enabled,
+                snapshot.sid_active[global_ch],
+                snapshot.drum_active[global_ch],
+            );
+            highlights.push(highlight);
+        }
+
+        // Print volume bars
+        print!(
+            "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
+            bars[0], bars[1], bars[2]
+        );
+        print!(
+            "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
+            statuses[0], statuses[1], statuses[2]
+        );
+        print!(
+            "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
+            highlights[0], highlights[1], highlights[2]
+        );
+    }
     io::stdout().flush().ok();
 }
