@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bevy::prelude::error;
 use parking_lot::RwLock;
-use ym2149_arkos_replayer::{parser::load_aks, player::ArkosPlayer};
+use ym2149_arkos_replayer::{AksSong, parser::load_aks, player::ArkosPlayer};
 use ym2149_ay_replayer::{
     AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG, PlaybackState as AyState,
 };
@@ -54,7 +54,8 @@ impl YmSongPlayer {
             frame_count: 0,
             duration_seconds: 0.0,
         };
-        let player = ArkosPlayer::new(song.clone(), 0)
+        let song = Arc::new(song);
+        let player = ArkosPlayer::new_from_arc(Arc::clone(&song), 0)
             .map_err(|e| BevyYm2149Error::Other(format!("AKS player init failed: {e}")))?;
         Ok(Self::Arkos(Box::new(ArkosBevyPlayer::new(
             player, song, metadata,
@@ -386,7 +387,7 @@ fn metadata_from_ay(meta: &AyFileMetadata) -> Ym2149Metadata {
 /// Adapter that exposes [`ArkosPlayer`] through the same interface used by YM playback.
 pub struct ArkosBevyPlayer {
     player: ArkosPlayer,
-    song: ym2149_arkos_replayer::AksSong,
+    song: Arc<AksSong>,
     metadata: Ym2149Metadata,
     samples_per_frame: u32,
     estimated_frames: usize,
@@ -397,11 +398,7 @@ pub struct ArkosBevyPlayer {
 }
 
 impl ArkosBevyPlayer {
-    fn new(
-        player: ArkosPlayer,
-        song: ym2149_arkos_replayer::AksSong,
-        mut metadata: Ym2149Metadata,
-    ) -> Self {
+    fn new(player: ArkosPlayer, song: Arc<AksSong>, mut metadata: Ym2149Metadata) -> Self {
         let samples_per_frame = (YM2149_SAMPLE_RATE_F32 / player.replay_frequency_hz())
             .round()
             .max(1.0) as u32;
@@ -514,7 +511,7 @@ impl ArkosBevyPlayer {
         // Convert 1-based input to 0-based
         let zero_based = index.saturating_sub(1);
         if zero_based < self.song.subsongs.len()
-            && let Ok(new_player) = ArkosPlayer::new(self.song.clone(), zero_based)
+            && let Ok(new_player) = ArkosPlayer::new_from_arc(Arc::clone(&self.song), zero_based)
         {
             self.player = new_player;
             self.current_subsong = zero_based;

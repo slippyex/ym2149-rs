@@ -94,6 +94,8 @@ pub struct ArkosPlayer {
     cached_metadata: ArkosMetadata,
     /// Reusable frame buffer to avoid per-tick allocations
     frame_buffer: Vec<ChannelFrame>,
+    /// Reusable PSG sample buffers to avoid per-frame allocations
+    psg_sample_buffers: Vec<Vec<f32>>,
 }
 
 impl ArkosPlayer {
@@ -194,6 +196,10 @@ impl ArkosPlayer {
 
         let frame_buffer = vec![ChannelFrame::default(); channel_count];
 
+        // Pre-allocate PSG sample buffers (one per PSG chip, sized for typical frame)
+        let psg_count = psg_bank.psg_count();
+        let psg_sample_buffers = (0..psg_count).map(|_| Vec::with_capacity(2048)).collect();
+
         let mut player = Self {
             song,
             effect_context,
@@ -212,6 +218,7 @@ impl ArkosPlayer {
             output_sample_rate,
             cached_metadata,
             frame_buffer,
+            psg_sample_buffers,
         };
 
         player.current_speed = determine_speed_for_location(&player.song, subsong_index, 0, 0);
@@ -397,26 +404,30 @@ impl ArkosPlayer {
 
         let mut sample_pos = 0;
         let total_samples = buffer.len();
+        let psg_count = self.psg_bank.psg_count();
 
         while sample_pos < total_samples {
             let samples_until_tick = (self.samples_per_tick - self.sample_counter).ceil() as usize;
             let samples_to_generate = samples_until_tick.min(total_samples - sample_pos);
 
-            let mut psg_buffers = Vec::with_capacity(self.psg_bank.psg_count());
-            for psg_idx in 0..self.psg_bank.psg_count() {
-                let samples = self
-                    .psg_bank
+            // Reuse pre-allocated PSG sample buffers instead of allocating new ones
+            for psg_idx in 0..psg_count {
+                let psg_buffer = &mut self.psg_sample_buffers[psg_idx];
+                psg_buffer.clear();
+                psg_buffer.resize(samples_to_generate, 0.0);
+                self.psg_bank
                     .get_chip_mut(psg_idx)
-                    .generate_samples(samples_to_generate);
-                psg_buffers.push(samples);
+                    .generate_samples_into(psg_buffer);
             }
 
+            // Mix all PSG outputs
+            let inv_psg_count = 1.0 / psg_count as f32;
             for sample_idx in 0..samples_to_generate {
                 let mut mixed_sample = 0.0;
-                for psg_buffer in &psg_buffers {
+                for psg_buffer in &self.psg_sample_buffers {
                     mixed_sample += psg_buffer[sample_idx];
                 }
-                buffer[sample_pos + sample_idx] = mixed_sample / self.psg_bank.psg_count() as f32;
+                buffer[sample_pos + sample_idx] = mixed_sample * inv_psg_count;
             }
 
             self.mix_active_samples(sample_pos, samples_to_generate, buffer);

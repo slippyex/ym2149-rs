@@ -115,3 +115,15 @@ impl BevyYm2149Error {
 
 /// Type alias for Result using BevyYm2149Error
 pub type Result<T> = std::result::Result<T, BevyYm2149Error>;
+
+impl From<String> for BevyYm2149Error {
+    fn from(s: String) -> Self {
+        BevyYm2149Error::Other(s)
+    }
+}
+
+impl From<&str> for BevyYm2149Error {
+    fn from(s: &str) -> Self {
+        BevyYm2149Error::Other(s.to_string())
+    }
+}

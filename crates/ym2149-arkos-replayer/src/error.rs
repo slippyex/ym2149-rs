@@ -74,3 +74,15 @@ impl From<std::num::ParseFloatError> for ArkosError {
         }
     }
 }
+
+impl From<String> for ArkosError {
+    fn from(s: String) -> Self {
+        ArkosError::InvalidFormat(s)
+    }
+}
+
+impl From<&str> for ArkosError {
+    fn from(s: &str) -> Self {
+        ArkosError::InvalidFormat(s.to_string())
+    }
+}

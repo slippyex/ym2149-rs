@@ -47,8 +47,12 @@ pub struct VisualSnapshot {
 /// This trait abstracts over different YM chip implementations,
 /// allowing the CLI to work with various backends.
 pub trait RealtimeChip: PlaybackController + Send {
-    /// Generate audio samples.
-    fn generate_samples(&mut self, count: usize) -> Vec<f32>;
+    /// Generate audio samples (allocates - prefer `generate_samples_into` for hot paths).
+    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
+        let mut buffer = vec![0.0; count];
+        self.generate_samples_into(&mut buffer);
+        buffer
+    }
 
     /// Generate audio samples into a pre-allocated buffer (zero-allocation hot path).
     fn generate_samples_into(&mut self, buffer: &mut [f32]);
@@ -98,10 +102,6 @@ pub trait RealtimeChip: PlaybackController + Send {
 }
 
 impl<B: Ym2149Backend + 'static> RealtimeChip for Ym6PlayerGeneric<B> {
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        Ym6PlayerGeneric::generate_samples(self, count)
-    }
-
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         Ym6PlayerGeneric::generate_samples_into(self, buffer)
     }
@@ -181,10 +181,6 @@ impl PlaybackController for ArkosPlayerWrapper {
 }
 
 impl RealtimeChip for ArkosPlayerWrapper {
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        self.player.generate_samples(count)
-    }
-
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         self.player.generate_samples_into(buffer);
     }
@@ -297,10 +293,6 @@ impl PlaybackController for AyPlayerWrapper {
 }
 
 impl RealtimeChip for AyPlayerWrapper {
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        self.player.generate_samples(count)
-    }
-
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         self.player.generate_samples_into(buffer);
     }
@@ -398,13 +390,6 @@ impl PlaybackController for SndhPlayerWrapper {
 }
 
 impl RealtimeChip for SndhPlayerWrapper {
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        use ym2149_common::ChiptunePlayer;
-        let mut buffer = vec![0.0; count];
-        self.player.generate_samples_into(&mut buffer);
-        buffer
-    }
-
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         use ym2149_common::ChiptunePlayer;
         self.player.generate_samples_into(buffer);

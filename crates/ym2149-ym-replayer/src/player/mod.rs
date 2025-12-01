@@ -71,16 +71,8 @@ impl Default for TimingConfig {
     }
 }
 
-/// Playback state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlaybackState {
-    /// Stopped
-    Stopped,
-    /// Currently playing
-    Playing,
-    /// Paused
-    Paused,
-}
+// Re-export PlaybackState from ym2149-common to avoid duplication
+pub use ym2149_common::PlaybackState;
 
 /// Simple playback controller trait for future expansion
 pub trait PlaybackController {

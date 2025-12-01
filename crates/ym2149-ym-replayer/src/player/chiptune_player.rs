@@ -3,11 +3,11 @@
 //! This module implements the unified `ChiptunePlayer` trait from `ym2149-common`,
 //! providing a common interface for YM file playback alongside other chiptune formats.
 
-use super::PlaybackState as InternalState;
+use super::PlaybackState;
 use super::ym_player::Ym6PlayerGeneric;
 use super::ym6::Ym6Info;
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, PlaybackMetadata, PlaybackState};
+use ym2149_common::{ChiptunePlayer, PlaybackMetadata};
 
 /// Metadata wrapper for YM6 files.
 ///
@@ -85,15 +85,6 @@ impl PlaybackMetadata for Ym6Metadata {
     }
 }
 
-/// Convert internal playback state to common PlaybackState.
-fn convert_state(state: InternalState) -> PlaybackState {
-    match state {
-        InternalState::Stopped => PlaybackState::Stopped,
-        InternalState::Playing => PlaybackState::Playing,
-        InternalState::Paused => PlaybackState::Paused,
-    }
-}
-
 impl<B: Ym2149Backend> ChiptunePlayer for Ym6PlayerGeneric<B> {
     type Metadata = Ym6Metadata;
 
@@ -111,7 +102,7 @@ impl<B: Ym2149Backend> ChiptunePlayer for Ym6PlayerGeneric<B> {
     }
 
     fn state(&self) -> PlaybackState {
-        convert_state(<Self as super::PlaybackController>::state(self))
+        <Self as super::PlaybackController>::state(self)
     }
 
     fn metadata(&self) -> &Self::Metadata {

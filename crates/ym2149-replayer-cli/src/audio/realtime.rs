@@ -8,16 +8,8 @@ use super::{BUFFER_BACKOFF_MICROS, RingBuffer};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-/// Playback state for real-time player
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlaybackState {
-    /// Player is stopped
-    Stopped,
-    /// Player is playing
-    Playing,
-    /// Player is paused
-    Paused,
-}
+// Re-export PlaybackState from ym2149-common
+pub use ym2149_common::PlaybackState;
 
 /// Real-time audio player with streaming
 pub struct RealtimePlayer {
