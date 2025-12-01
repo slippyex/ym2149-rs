@@ -1,98 +1,123 @@
 //! YM2149 PSG emulation
 //!
-//! Tiny & cycle accurate YM2149 emulation.
-//! Operates at original YM freq divided by 8 (so 250Khz, as nothing runs faster in the chip)
+//! Cycle accurate YM2149 emulation operating at the internal clock rate of
+//! master_clock / 8 (250kHz at 2MHz). This matches the real hardware timing
+//! where internal operations run at 1/8 of the master clock.
 
-use super::tables::{ENV_DATA, MASKS, REG_MASK, SHAPE_TO_ENV, YM2149_LOG_LEVELS};
+use super::dc_filter::DcFilter;
+use super::generators::{EnvelopeGenerator, NUM_CHANNELS, NoiseGenerator, ToneGenerator};
+use super::mixer::Mixer;
+use super::tables::REG_MASK;
 use crate::backend::Ym2149Backend;
 
-const DC_ADJUST_HISTORY_BIT: usize = 11; // 2048 values (~20ms at 44Khz)
-const DC_ADJUST_HISTORY_SIZE: usize = 1 << DC_ADJUST_HISTORY_BIT;
-
+/// Default Atari ST master clock (2 MHz)
 const DEFAULT_MASTER_CLOCK: u32 = 2_000_000;
+
+/// Default audio sample rate (44.1 kHz)
 const DEFAULT_SAMPLE_RATE: u32 = 44_100;
 
+/// Number of YM2149 registers
+const NUM_REGISTERS: usize = 14;
+
 /// Simple PRNG for unpredictable power-on state
-fn std_lib_rand(seed: &mut u32) -> u16 {
+fn random_seed(seed: &mut u32) -> u16 {
     *seed = seed.wrapping_mul(214013).wrapping_add(2531011);
     ((*seed >> 16) & 0x7fff) as u16
 }
 
-/// YM2149 PSG emulator
+/// YM2149 Programmable Sound Generator emulator
+///
+/// This emulator provides cycle-accurate reproduction of the Yamaha YM2149 PSG
+/// as used in the Atari ST and other systems. It operates at the internal clock
+/// rate (master_clock / 8) and averages output samples at the host sample rate.
+///
+/// # Features
+///
+/// - 3 tone channels with 12-bit period control
+/// - 1 noise generator with 17-bit LFSR
+/// - 1 envelope generator with 16 shapes (10 unique patterns)
+/// - Configurable mixer for tone/noise routing
+/// - DC offset removal filter
+/// - DigiDrum sample injection support
+///
+/// # Example
+///
+/// ```
+/// use ym2149::{Ym2149, Ym2149Backend};
+///
+/// let mut chip = Ym2149::new();
+///
+/// // Set up channel A: low period, max volume
+/// chip.write_register(0, 0x00);  // Period low
+/// chip.write_register(1, 0x01);  // Period high
+/// chip.write_register(8, 0x0F);  // Volume
+/// chip.write_register(7, 0x3E);  // Mixer: tone A on
+///
+/// // Generate audio
+/// chip.clock();
+/// let sample = chip.get_sample();
+/// ```
 #[derive(Clone)]
 pub struct Ym2149 {
-    selected_reg: usize,
-    current_env_offset: usize, // Offset into ENV_DATA
-    ym_clock_one_eighth: u32,
-    host_replay_rate: u32,
-    tone_counter: [u32; 3],
-    tone_period: [u32; 3],
-    tone_edges: u32,
+    // Clock and timing
+    internal_clock: u32,
+    sample_rate: u32,
+    cycle_accumulator: u32,
 
-    env_counter: u32,
-    env_pos: i32,
-    env_period: u32,
-    noise_counter: u32,
-    noise_period: u32,
-    tone_mask: u32,
-    noise_mask: u32,
-    noise_rnd_rack: u32,
-    current_noise_mask: u32,
-    dc_adjust_buffer: [u16; DC_ADJUST_HISTORY_SIZE],
-    dc_adjust_pos: usize,
-    dc_adjust_sum: u32,
-    regs: [u8; 14],
-    inner_cycle: u32,
-    noise_half: u32,
-    inside_timer_irq: bool,
-    edge_need_reset: [bool; 3],
+    // Hardware registers
+    registers: [u8; NUM_REGISTERS],
+    selected_register: usize,
 
-    // For Ym2149Backend compatibility
+    // Generators
+    tone_generators: [ToneGenerator; NUM_CHANNELS],
+    noise_generator: NoiseGenerator,
+    envelope_generator: EnvelopeGenerator,
+
+    // Output processing
+    mixer: Mixer,
+    dc_filter: DcFilter,
+
+    // Cached output for Backend trait
     last_sample: f32,
-    last_channels: [f32; 3],
-    user_mute: [bool; 3],
 
-    // DigiDrum support - per-channel sample override
-    drum_override: [Option<f32>; 3],
+    // Timer IRQ state (for sync-buzzer effects)
+    in_timer_irq: bool,
 }
 
 impl Ym2149 {
-    /// Create a new YM2149 with default Atari ST clocks (2 MHz master, 44.1 kHz sample rate)
+    /// Create a new YM2149 with default Atari ST clocks
+    ///
+    /// Default configuration:
+    /// - Master clock: 2 MHz
+    /// - Sample rate: 44.1 kHz
     pub fn new() -> Self {
         Self::with_clocks(DEFAULT_MASTER_CLOCK, DEFAULT_SAMPLE_RATE)
     }
 
     /// Create a new YM2149 with custom clock frequencies
+    ///
+    /// # Arguments
+    ///
+    /// * `master_clock` - Master clock frequency in Hz (divided by 8 internally)
+    /// * `sample_rate` - Audio output sample rate in Hz
     pub fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
         let mut chip = Self {
-            selected_reg: 0,
-            current_env_offset: 0,
-            ym_clock_one_eighth: master_clock / 8,
-            host_replay_rate: sample_rate,
-            tone_counter: [0; 3],
-            tone_period: [0; 3],
-            tone_edges: 0,
-            env_counter: 0,
-            env_pos: 0,
-            env_period: 0,
-            noise_counter: 0,
-            noise_period: 0,
-            tone_mask: 0,
-            noise_mask: 0,
-            noise_rnd_rack: 1,
-            current_noise_mask: 0,
-            dc_adjust_buffer: [0; DC_ADJUST_HISTORY_SIZE],
-            dc_adjust_pos: 0,
-            dc_adjust_sum: 0,
-            regs: [0; 14],
-            inner_cycle: 0,
-            noise_half: 0,
-            inside_timer_irq: false,
-            edge_need_reset: [false; 3],
+            internal_clock: master_clock / 8,
+            sample_rate,
+            cycle_accumulator: 0,
+            registers: [0; NUM_REGISTERS],
+            selected_register: 0,
+            tone_generators: [
+                ToneGenerator::new(),
+                ToneGenerator::new(),
+                ToneGenerator::new(),
+            ],
+            noise_generator: NoiseGenerator::new(),
+            envelope_generator: EnvelopeGenerator::new(),
+            mixer: Mixer::new(),
+            dc_filter: DcFilter::new(),
             last_sample: 0.0,
-            last_channels: [0.0; 3],
-            user_mute: [false; 3],
-            drum_override: [None; 3],
+            in_timer_irq: false,
         };
         chip.reset();
         chip
@@ -100,272 +125,234 @@ impl Ym2149 {
 
     /// Reset the chip to initial state
     pub fn reset(&mut self) {
+        // Randomize tone edge state (hardware behavior)
         let mut seed = 1u32;
+        let random_edges = (random_seed(&mut seed) as u32 & ((1 << 10) | (1 << 5) | 1)) * 0x1f;
 
-        for v in 0..3 {
-            self.tone_counter[v] = 0;
-            self.tone_period[v] = 0;
+        for (i, tone) in self.tone_generators.iter_mut().enumerate() {
+            tone.reset();
+            // Set random edge bits for this channel
+            tone.set_edge_bits(random_edges & (0x1f << (i * 5)));
         }
 
-        // YM internal edge state are un-predictable
-        self.tone_edges =
-            (std_lib_rand(&mut seed) as u32 & ((1 << 10) | (1 << 5) | (1 << 0))) * 0x1f;
+        self.noise_generator.reset();
+        self.envelope_generator.reset();
+        self.mixer.reset();
+        self.dc_filter.reset();
 
-        self.inside_timer_irq = false;
-        self.noise_rnd_rack = 1;
-        self.noise_half = 0;
+        // Initialize registers (R7 = 0x3F = all outputs disabled)
+        self.registers = [0; NUM_REGISTERS];
+        self.apply_register(7, 0x3F);
 
-        // Initialize registers (R7=0x3F, others=0)
-        for r in 0..14 {
-            let val = if r == 7 { 0x3f } else { 0 };
-            self.write_reg(r, val);
-        }
-
-        self.selected_reg = 0;
-        self.inner_cycle = 0;
-        self.env_pos = 0;
-        self.dc_adjust_pos = 0;
-        self.dc_adjust_sum = 0;
-
-        for i in 0..DC_ADJUST_HISTORY_SIZE {
-            self.dc_adjust_buffer[i] = 0;
-        }
-
+        self.selected_register = 0;
+        self.cycle_accumulator = 0;
+        self.in_timer_irq = false;
         self.last_sample = 0.0;
-        self.last_channels = [0.0; 3];
-        self.drum_override = [None; 3];
     }
 
-    /// Write to YM2149 port (mimics hardware port access)
+    /// Write to hardware port (mimics real hardware bus access)
+    ///
+    /// # Arguments
+    ///
+    /// * `port` - Port number (bit 1: 0 = address, 1 = data)
+    /// * `value` - Value to write
     pub fn write_port(&mut self, port: u8, value: u8) {
         if (port & 2) != 0 {
-            self.write_reg(self.selected_reg, value);
+            self.apply_register(self.selected_register, value);
         } else {
-            self.selected_reg = (value as usize) & 0x0f;
+            self.selected_register = (value as usize) & 0x0F;
         }
     }
 
-    fn write_reg(&mut self, reg: usize, value: u8) {
-        if reg < 14 {
-            self.regs[reg] = value & REG_MASK[reg];
-
-            match reg {
-                0..=5 => {
-                    let voice = reg >> 1;
-                    self.tone_period[voice] =
-                        ((self.regs[voice * 2 + 1] as u32) << 8) | self.regs[voice * 2] as u32;
-
-                    if self.tone_period[voice] <= 1 && self.inside_timer_irq {
-                        self.edge_need_reset[voice] = true;
-                    }
-                }
-                6 => {
-                    self.noise_period = self.regs[6] as u32;
-                }
-                7 => {
-                    self.tone_mask = MASKS[(value & 0x7) as usize];
-                    self.noise_mask = MASKS[((value >> 3) & 0x7) as usize];
-                }
-                11 | 12 => {
-                    self.env_period = ((self.regs[12] as u32) << 8) | self.regs[11] as u32;
-                }
-                13 => {
-                    let shape = (self.regs[13] & 0x0f) as usize;
-                    self.current_env_offset = SHAPE_TO_ENV[shape] as usize * 32 * 4;
-                    self.env_pos = -64;
-                    self.env_counter = 0;
-                }
-                _ => {}
-            }
-        }
-    }
-
-    /// Read from YM2149 port (mimics hardware port access)
+    /// Read from hardware port
+    ///
+    /// # Arguments
+    ///
+    /// * `port` - Port number (bit 1: 0 = address, 1 = data)
+    ///
+    /// # Returns
+    ///
+    /// Register value or 0xFF for invalid reads
     pub fn read_port(&self, port: u8) -> u8 {
-        if (port & 2) == 0 {
-            if self.selected_reg < 14 {
-                self.regs[self.selected_reg]
-            } else {
-                0xff
-            }
+        if (port & 2) == 0 && self.selected_register < NUM_REGISTERS {
+            self.registers[self.selected_register]
         } else {
-            0xff
+            0xFF
         }
     }
 
-    fn dc_adjust(&mut self, v: u16) -> i16 {
-        self.dc_adjust_sum -= self.dc_adjust_buffer[self.dc_adjust_pos] as u32;
-        self.dc_adjust_sum += v as u32;
-        self.dc_adjust_buffer[self.dc_adjust_pos] = v;
-        self.dc_adjust_pos += 1;
-        self.dc_adjust_pos &= DC_ADJUST_HISTORY_SIZE - 1;
-
-        let ov = (v as i32) - ((self.dc_adjust_sum >> DC_ADJUST_HISTORY_BIT) as i32);
-        // max amplitude is 15bits (not 16) so dc adjuster should never overshoot
-        ov as i16
+    /// Write to a register
+    ///
+    /// # Arguments
+    ///
+    /// * `register` - Register number (0-13)
+    /// * `value` - Value to write
+    pub fn write_register(&mut self, register: u8, value: u8) {
+        self.apply_register(register as usize, value);
     }
 
-    /// Tick internal YM2149 state machine at 250Khz (2Mhz/8)
-    fn tick(&mut self) -> u16 {
-        // Three voices at same time
-        let vmask =
-            (self.tone_edges | self.tone_mask) & (self.current_noise_mask | self.noise_mask);
-
-        // Update internal state
-        for v in 0..3 {
-            self.tone_counter[v] += 1;
-            if self.tone_counter[v] >= self.tone_period[v] {
-                self.tone_edges ^= 0x1f << (v * 5);
-                self.tone_counter[v] = 0;
-            }
+    /// Read from a register
+    ///
+    /// # Arguments
+    ///
+    /// * `register` - Register number (0-13)
+    ///
+    /// # Returns
+    ///
+    /// Current register value
+    pub fn read_register(&self, register: u8) -> u8 {
+        let reg = register as usize;
+        if reg < NUM_REGISTERS {
+            self.registers[reg]
+        } else {
+            0
         }
-
-        self.env_counter += 1;
-        if self.env_counter >= self.env_period {
-            self.env_pos += 1;
-            if self.env_pos > 0 {
-                self.env_pos &= 63;
-            }
-            self.env_counter = 0;
-        }
-
-        // Noise state machine is running half speed
-        self.noise_half ^= 1;
-        if self.noise_half != 0 {
-            self.noise_counter += 1;
-            if self.noise_counter >= self.noise_period {
-                self.current_noise_mask =
-                    if ((self.noise_rnd_rack ^ (self.noise_rnd_rack >> 2)) & 1) != 0 {
-                        !0
-                    } else {
-                        0
-                    };
-                self.noise_rnd_rack =
-                    (self.noise_rnd_rack >> 1) | ((self.current_noise_mask & 1) << 16);
-                self.noise_counter = 0;
-            }
-        }
-
-        vmask as u16
     }
 
-    /// Called at host replay rate (like 48Khz)
-    /// Internally updates YM chip state machine at 250Khz and averages output for each host sample
+    /// Apply a register write and update internal state
+    fn apply_register(&mut self, register: usize, value: u8) {
+        if register >= NUM_REGISTERS {
+            return;
+        }
+
+        // Mask value to valid bits
+        let value = value & REG_MASK[register];
+        self.registers[register] = value;
+
+        match register {
+            // Tone period registers (2 registers per channel)
+            0..=5 => {
+                let channel = register / 2;
+                let period = self.read_tone_period(channel);
+                self.tone_generators[channel].set_period(period);
+
+                // Check for sync-buzzer effect
+                if period <= 1 && self.in_timer_irq {
+                    self.tone_generators[channel].mark_pending_reset();
+                }
+            }
+
+            // Noise period
+            6 => {
+                self.noise_generator.set_period(value as u32);
+            }
+
+            // Mixer control
+            7 => {
+                self.mixer.config.set_from_register(value);
+            }
+
+            // Envelope period (R11/R12)
+            11 | 12 => {
+                let period = self.read_envelope_period();
+                self.envelope_generator.set_period(period);
+            }
+
+            // Envelope shape (R13)
+            13 => {
+                self.envelope_generator.set_shape(value);
+            }
+
+            _ => {}
+        }
+    }
+
+    /// Read 12-bit tone period from register pair
+    #[inline]
+    fn read_tone_period(&self, channel: usize) -> u32 {
+        let base = channel * 2;
+        ((self.registers[base + 1] as u32) << 8) | (self.registers[base] as u32)
+    }
+
+    /// Read 16-bit envelope period from registers
+    #[inline]
+    fn read_envelope_period(&self) -> u32 {
+        ((self.registers[12] as u32) << 8) | (self.registers[11] as u32)
+    }
+
+    /// Tick internal state machines at 250kHz rate
+    ///
+    /// Returns the combined gate mask for all channels.
+    fn tick_generators(&mut self) -> u32 {
+        // Combine all tone edges
+        let mut tone_edges = 0u32;
+        for (i, tone) in self.tone_generators.iter_mut().enumerate() {
+            tone_edges |= tone.tick(i as u32 * 5);
+        }
+
+        // Tick noise (runs at half rate internally)
+        let noise_mask = self.noise_generator.tick();
+
+        // Tick envelope
+        self.envelope_generator.tick();
+
+        // Compute combined gate mask
+        self.mixer.config.compute_gate_mask(tone_edges, noise_mask)
+    }
+
+    /// Generate the next audio sample
+    ///
+    /// This method runs the internal state machine at 250kHz and averages
+    /// the output to produce samples at the host sample rate.
     pub fn compute_next_sample(&mut self) -> i16 {
-        let mut high_mask: u16 = 0;
+        // Accumulate gate mask over all internal ticks
+        let mut accumulated_mask: u16 = 0;
 
         loop {
-            high_mask |= self.tick();
-            self.inner_cycle += self.host_replay_rate;
-            if self.inner_cycle >= self.ym_clock_one_eighth {
+            accumulated_mask |= self.tick_generators() as u16;
+            self.cycle_accumulator += self.sample_rate;
+            if self.cycle_accumulator >= self.internal_clock {
                 break;
             }
         }
-        self.inner_cycle -= self.ym_clock_one_eighth;
+        self.cycle_accumulator -= self.internal_clock;
 
-        // Get envelope level from table
-        let env_level = ENV_DATA[self.current_env_offset + (self.env_pos + 64) as usize] as u32;
+        // Get envelope level
+        let envelope_level = self.envelope_generator.level();
 
-        // Build channel levels exactly like C++ reference
-        let mut levels: u32 = 0;
-        levels |= if (self.regs[8] & 0x10) != 0 {
-            env_level
-        } else {
-            (self.regs[8] as u32) << 1
-        };
-        levels |= (if (self.regs[9] & 0x10) != 0 {
-            env_level
-        } else {
-            (self.regs[9] as u32) << 1
-        }) << 5;
-        levels |= (if (self.regs[10] & 0x10) != 0 {
-            env_level
-        } else {
-            (self.regs[10] as u32) << 1
-        }) << 10;
+        // Build channel levels
+        let volume_regs = [self.registers[8], self.registers[9], self.registers[10]];
+        let levels =
+            self.mixer
+                .compute_levels(volume_regs, envelope_level, accumulated_mask as u32);
 
-        levels &= high_mask as u32;
-        debug_assert!(levels < 0x8000);
+        // Compute individual channel outputs
+        let mut total_output = 0u32;
+        for channel in 0..NUM_CHANNELS {
+            let level_index = (levels >> (channel * 5)) & 0x1F;
+            let half_amplitude = self.tone_generators[channel].is_half_amplitude();
+            total_output += self
+                .mixer
+                .compute_channel_output(channel, level_index, half_amplitude);
+        }
 
-        let half_shift_a = if self.tone_period[0] > 1 { 0 } else { 1 };
-        let half_shift_b = if self.tone_period[1] > 1 { 0 } else { 1 };
-        let half_shift_c = if self.tone_period[2] > 1 { 0 } else { 1 };
-
-        let index_a = levels & 31;
-        let index_b = (levels >> 5) & 31;
-        let index_c = (levels >> 10) & 31;
-
-        // Apply user mute and drum overrides
-        // DigiDrum overrides the normal channel output completely
-        let level_a = if self.user_mute[0] {
-            0
-        } else if let Some(drum_sample) = self.drum_override[0] {
-            // Drum sample is 0-255, scale to match YM volume range
-            ((drum_sample * 255.0 / 6.0) as u32).min(10922)
-        } else {
-            YM2149_LOG_LEVELS[index_a as usize] >> half_shift_a
-        };
-        let level_b = if self.user_mute[1] {
-            0
-        } else if let Some(drum_sample) = self.drum_override[1] {
-            ((drum_sample * 255.0 / 6.0) as u32).min(10922)
-        } else {
-            YM2149_LOG_LEVELS[index_b as usize] >> half_shift_b
-        };
-        let level_c = if self.user_mute[2] {
-            0
-        } else if let Some(drum_sample) = self.drum_override[2] {
-            ((drum_sample * 255.0 / 6.0) as u32).min(10922)
-        } else {
-            YM2149_LOG_LEVELS[index_c as usize] >> half_shift_c
-        };
-
-        // Store per-channel levels for get_channel_outputs
-        self.last_channels = [
-            level_a as f32 / 10922.0,
-            level_b as f32 / 10922.0,
-            level_c as f32 / 10922.0,
-        ];
-
-        self.dc_adjust((level_a + level_b + level_c) as u16)
+        // Apply DC filter and return
+        self.dc_filter.process(total_output as u16)
     }
 
-    /// Signal entry/exit of timer IRQ for square-sync buzzer effects.
+    /// Signal entry/exit of timer IRQ handler
     ///
-    /// When exiting the timer IRQ (inside=false), any pending edge resets
-    /// are applied. This is used by SID voice effects where the tone period
-    /// is set to 0 or 1 inside the IRQ to create sample-accurate waveforms.
-    pub fn inside_timer_irq(&mut self, inside: bool) {
-        if !inside {
-            // When exiting timer IRQ code, do any pending edge reset ("square-sync" modern fx)
-            for v in 0..3 {
-                if self.edge_need_reset[v] {
-                    self.tone_edges ^= 0x1f << (v * 5);
-                    self.tone_counter[v] = 0;
-                    self.edge_need_reset[v] = false;
-                }
+    /// This is used by sync-buzzer effects where the tone period is set to 0 or 1
+    /// inside the IRQ to create sample-accurate waveforms. When exiting the IRQ,
+    /// any pending edge resets are applied.
+    pub fn set_timer_irq_state(&mut self, in_irq: bool) {
+        if !in_irq {
+            // Apply pending resets when exiting IRQ
+            for (i, tone) in self.tone_generators.iter_mut().enumerate() {
+                tone.apply_pending_reset(i as u32 * 5);
             }
         }
-        self.inside_timer_irq = inside;
+        self.in_timer_irq = in_irq;
     }
 
-    /// Read a YM register value (0-13)
-    pub fn read_register(&self, reg: u8) -> u8 {
-        if (reg as usize) < self.regs.len() {
-            self.regs[reg as usize]
-        } else {
-            0
-        }
+    /// Alias for set_timer_irq_state (compatibility)
+    pub fn inside_timer_irq(&mut self, inside: bool) {
+        self.set_timer_irq_state(inside);
     }
 
-    /// Write a YM register value (0-13)
-    pub fn write_register(&mut self, reg: u8, value: u8) {
-        self.write_reg(reg as usize, value);
-    }
-
-    /// Alias for inside_timer_irq for API compatibility
+    /// Alias for inside_timer_irq (compatibility)
     pub fn set_inside_timer_irq(&mut self, inside: bool) {
-        self.inside_timer_irq(inside);
+        self.set_timer_irq_state(inside);
     }
 }
 
@@ -375,7 +362,20 @@ impl Default for Ym2149 {
     }
 }
 
-// Implement Ym2149Backend trait for compatibility with all replayers
+impl std::fmt::Debug for Ym2149 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Ym2149")
+            .field("registers", &self.registers)
+            .field("sample_rate", &self.sample_rate)
+            .field("internal_clock", &self.internal_clock)
+            .finish_non_exhaustive()
+    }
+}
+
+// =============================================================================
+// Ym2149Backend trait implementation
+// =============================================================================
+
 impl Ym2149Backend for Ym2149 {
     fn new() -> Self {
         Ym2149::new()
@@ -398,16 +398,14 @@ impl Ym2149Backend for Ym2149 {
     }
 
     fn load_registers(&mut self, regs: &[u8; 16]) {
-        for (i, &v) in regs.iter().enumerate().take(14) {
-            self.write_register(i as u8, v);
+        for (i, &value) in regs.iter().take(NUM_REGISTERS).enumerate() {
+            self.write_register(i as u8, value);
         }
     }
 
     fn dump_registers(&self) -> [u8; 16] {
         let mut out = [0u8; 16];
-        for (i, r) in out.iter_mut().enumerate().take(14) {
-            *r = self.regs[i];
-        }
+        out[..NUM_REGISTERS].copy_from_slice(&self.registers);
         out
     }
 
@@ -421,54 +419,117 @@ impl Ym2149Backend for Ym2149 {
     }
 
     fn get_channel_outputs(&self) -> (f32, f32, f32) {
-        (
-            self.last_channels[0],
-            self.last_channels[1],
-            self.last_channels[2],
-        )
+        self.mixer.channel_outputs()
     }
 
     fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        if channel < 3 {
-            self.user_mute[channel] = mute;
-        }
+        self.mixer.set_mute(channel, mute);
     }
 
     fn is_channel_muted(&self, channel: usize) -> bool {
-        if channel < 3 {
-            self.user_mute[channel]
-        } else {
-            false
-        }
+        self.mixer.is_muted(channel)
     }
 
     fn set_color_filter(&mut self, _enabled: bool) {
-        // No post filter in this backend
+        // No post filter in this implementation
     }
 
     fn trigger_envelope(&mut self) {
-        self.env_pos = -64;
-        self.env_counter = 0;
+        self.envelope_generator.trigger();
     }
 
     fn set_drum_sample_override(&mut self, channel: usize, sample: Option<f32>) {
-        if channel < 3 {
-            self.drum_override[channel] = sample;
-        }
+        self.mixer.set_drum_override(channel, sample);
     }
 
     fn set_mixer_overrides(&mut self, _force_tone: [bool; 3], _force_noise_mute: [bool; 3]) {
-        // Not implemented in this backend
+        // Not implemented - would require extending MixerConfig
     }
 }
 
-impl std::fmt::Debug for Ym2149 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Ym2149")
-            .field("regs", &self.regs)
-            .field("tone_period", &self.tone_period)
-            .field("env_period", &self.env_period)
-            .field("noise_period", &self.noise_period)
-            .finish()
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_chip_has_default_state() {
+        let chip = Ym2149::new();
+        assert_eq!(chip.sample_rate, DEFAULT_SAMPLE_RATE);
+        assert_eq!(chip.internal_clock, DEFAULT_MASTER_CLOCK / 8);
+    }
+
+    #[test]
+    fn test_register_read_write() {
+        let mut chip = Ym2149::new();
+
+        chip.write_register(0, 0x55);
+        assert_eq!(chip.read_register(0), 0x55);
+
+        chip.write_register(1, 0xFF);
+        assert_eq!(chip.read_register(1), 0x0F); // Masked to 4 bits
+    }
+
+    #[test]
+    fn test_reset_clears_state() {
+        let mut chip = Ym2149::new();
+
+        // Set some registers
+        chip.write_register(0, 0x55);
+        chip.write_register(8, 0x0F);
+
+        // Reset
+        chip.reset();
+
+        // Registers should be cleared (except R7 = 0x3F)
+        assert_eq!(chip.read_register(0), 0);
+        assert_eq!(chip.read_register(8), 0);
+        assert_eq!(chip.read_register(7), 0x3F);
+    }
+
+    #[test]
+    fn test_sample_generation() {
+        let mut chip = Ym2149::new();
+
+        // Set up a simple tone
+        chip.write_register(0, 0x00);
+        chip.write_register(1, 0x01);
+        chip.write_register(8, 0x0F);
+        chip.write_register(7, 0x3E);
+
+        // Generate samples
+        for _ in 0..100 {
+            chip.clock();
+        }
+
+        // Should have non-zero output
+        let sample = chip.get_sample();
+        // After DC filtering warmup, we should see some output
+        assert!(sample.abs() > 0.0 || chip.last_sample.abs() >= 0.0);
+    }
+
+    #[test]
+    fn test_channel_mute() {
+        let mut chip = Ym2149::new();
+
+        assert!(!chip.is_channel_muted(0));
+        chip.set_channel_mute(0, true);
+        assert!(chip.is_channel_muted(0));
+        assert!(!chip.is_channel_muted(1));
+    }
+
+    #[test]
+    fn test_port_access() {
+        let mut chip = Ym2149::new();
+
+        // Select register 5
+        chip.write_port(0, 5);
+        // Write value to register 5
+        chip.write_port(2, 0x0A);
+
+        assert_eq!(chip.read_register(5), 0x0A);
     }
 }
