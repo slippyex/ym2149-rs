@@ -6089,6 +6089,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ym2149-gist-replayer"
+version = "0.6.1"
+dependencies = [
+ "parking_lot",
+ "ym2149",
+]
+
+[[package]]
 name = "ym2149-softsynth"
 version = "0.6.1"
 dependencies = [
