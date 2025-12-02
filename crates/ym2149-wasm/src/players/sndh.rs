@@ -3,7 +3,7 @@
 //! Wraps `SndhPlayer` to provide a consistent interface for the browser player.
 
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, MetadataFields, PlaybackState};
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields, PlaybackState};
 use ym2149_sndh_replayer::{SndhPlayer, load_sndh};
 
 use crate::YM_SAMPLE_RATE_F32;
@@ -33,22 +33,22 @@ impl SndhWasmPlayer {
 
     /// Start playback.
     pub fn play(&mut self) {
-        ChiptunePlayer::play(&mut self.player);
+        ChiptunePlayerBase::play(&mut self.player);
     }
 
     /// Pause playback.
     pub fn pause(&mut self) {
-        ChiptunePlayer::pause(&mut self.player);
+        ChiptunePlayerBase::pause(&mut self.player);
     }
 
     /// Stop playback and reset.
     pub fn stop(&mut self) {
-        ChiptunePlayer::stop(&mut self.player);
+        ChiptunePlayerBase::stop(&mut self.player);
     }
 
     /// Get current playback state.
     pub fn state(&self) -> PlaybackState {
-        ChiptunePlayer::state(&self.player)
+        ChiptunePlayerBase::state(&self.player)
     }
 
     /// Get current frame position.
@@ -63,27 +63,27 @@ impl SndhWasmPlayer {
 
     /// Get playback position as percentage (0.0 to 1.0).
     pub fn playback_position(&self) -> f32 {
-        ChiptunePlayer::playback_position(&self.player)
+        ChiptunePlayerBase::playback_position(&self.player)
     }
 
     /// Generate audio samples.
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        ChiptunePlayer::generate_samples(&mut self.player, count)
+        ChiptunePlayerBase::generate_samples(&mut self.player, count)
     }
 
     /// Generate audio samples into a pre-allocated buffer.
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
     }
 
     /// Mute or unmute a channel.
     pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        ChiptunePlayer::set_channel_mute(&mut self.player, channel, mute);
+        ChiptunePlayerBase::set_channel_mute(&mut self.player, channel, mute);
     }
 
     /// Check if a channel is muted.
     pub fn is_channel_muted(&self, channel: usize) -> bool {
-        ChiptunePlayer::is_channel_muted(&self.player, channel)
+        ChiptunePlayerBase::is_channel_muted(&self.player, channel)
     }
 
     /// Dump current PSG register values.
@@ -99,7 +99,7 @@ impl SndhWasmPlayer {
 
 /// Convert SNDH player metadata to YmMetadata for WASM.
 fn metadata_from_player(player: &SndhPlayer) -> YmMetadata {
-    let meta = player.metadata();
+    let meta = ChiptunePlayer::metadata(player);
     YmMetadata {
         title: if meta.title().is_empty() {
             "(unknown)".to_string()

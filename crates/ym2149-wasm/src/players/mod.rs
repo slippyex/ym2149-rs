@@ -11,7 +11,7 @@ use arkos::ArkosWasmPlayer;
 use ay::AyWasmPlayer;
 use sndh::SndhWasmPlayer;
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, PlaybackState};
+use ym2149_common::{ChiptunePlayerBase, PlaybackState};
 
 /// Unified player enum for all supported formats.
 pub enum BrowserSongPlayer {
@@ -106,7 +106,7 @@ impl BrowserSongPlayer {
     /// Get playback position as percentage (0.0 to 1.0).
     pub fn playback_position(&self) -> f32 {
         match self {
-            BrowserSongPlayer::Ym(player) => player.get_playback_position(),
+            BrowserSongPlayer::Ym(player) => player.playback_position(),
             BrowserSongPlayer::Arkos(player) => player.playback_position(),
             BrowserSongPlayer::Ay(player) => player.playback_position(),
             BrowserSongPlayer::Sndh(player) => player.playback_position(),

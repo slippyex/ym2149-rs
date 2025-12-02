@@ -4,7 +4,7 @@ use bevy::prelude::error;
 use parking_lot::RwLock;
 use ym2149_arkos_replayer::{AksSong, parser::load_aks, player::ArkosPlayer};
 use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG};
-use ym2149_common::{ChiptunePlayer, MetadataFields};
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields};
 use ym2149_sndh_replayer::{SndhPlayer, is_sndh_data, load_sndh};
 use ym2149_ym_replayer::{self, LoadSummary, YmPlayer};
 
@@ -80,7 +80,7 @@ impl YmSongPlayer {
             .init_subsong(default_subsong)
             .map_err(|e| BevyYm2149Error::Other(format!("SNDH init failed: {e}")))?;
 
-        let meta = ym2149_common::ChiptunePlayer::metadata(&player);
+        let meta = ChiptunePlayer::metadata(&player);
         let metadata = Ym2149Metadata {
             title: meta.title().to_string(),
             author: meta.author().to_string(),
@@ -404,19 +404,19 @@ impl ArkosBevyPlayer {
     }
 
     pub(crate) fn play(&mut self) {
-        ChiptunePlayer::play(&mut self.player);
+        ChiptunePlayerBase::play(&mut self.player);
     }
 
     pub(crate) fn pause(&mut self) {
-        ChiptunePlayer::pause(&mut self.player);
+        ChiptunePlayerBase::pause(&mut self.player);
     }
 
     pub(crate) fn stop(&mut self) {
-        ChiptunePlayer::stop(&mut self.player);
+        ChiptunePlayerBase::stop(&mut self.player);
     }
 
     pub(crate) fn state(&self) -> ym2149_common::PlaybackState {
-        ChiptunePlayer::state(&self.player)
+        ChiptunePlayerBase::state(&self.player)
     }
 
     pub(crate) fn current_frame(&self) -> usize {
@@ -459,7 +459,7 @@ impl ArkosBevyPlayer {
     }
 
     pub(crate) fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
     }
 
     fn refill_cache(&mut self) {
@@ -527,20 +527,20 @@ impl AyBevyPlayer {
         if self.unsupported {
             return;
         }
-        ChiptunePlayer::play(&mut self.player);
+        ChiptunePlayerBase::play(&mut self.player);
         self.check_and_mark_unsupported();
     }
 
     fn pause(&mut self) {
-        ChiptunePlayer::pause(&mut self.player);
+        ChiptunePlayerBase::pause(&mut self.player);
     }
 
     fn stop(&mut self) {
-        ChiptunePlayer::stop(&mut self.player);
+        ChiptunePlayerBase::stop(&mut self.player);
     }
 
     fn state(&self) -> ym2149_common::PlaybackState {
-        ChiptunePlayer::state(&self.player)
+        ChiptunePlayerBase::state(&self.player)
     }
 
     fn current_frame(&self) -> usize {
@@ -571,14 +571,14 @@ impl AyBevyPlayer {
             buffer.fill(0.0);
             return;
         }
-        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
         if self.check_and_mark_unsupported() {
             buffer.fill(0.0);
         }
     }
 
     fn fill_cache(&mut self) {
-        ChiptunePlayer::generate_samples_into(
+        ChiptunePlayerBase::generate_samples_into(
             &mut self.player,
             &mut self.cache[..AY_CACHE_SAMPLES],
         );
@@ -667,19 +667,19 @@ impl SndhBevyPlayer {
     }
 
     fn play(&mut self) {
-        ChiptunePlayer::play(&mut self.player);
+        ChiptunePlayerBase::play(&mut self.player);
     }
 
     fn pause(&mut self) {
-        ChiptunePlayer::pause(&mut self.player);
+        ChiptunePlayerBase::pause(&mut self.player);
     }
 
     fn stop(&mut self) {
-        ChiptunePlayer::stop(&mut self.player);
+        ChiptunePlayerBase::stop(&mut self.player);
     }
 
     fn state(&self) -> ym2149_common::PlaybackState {
-        ChiptunePlayer::state(&self.player)
+        ChiptunePlayerBase::state(&self.player)
     }
 
     fn current_frame(&self) -> usize {
@@ -703,11 +703,11 @@ impl SndhBevyPlayer {
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
     }
 
     fn fill_cache(&mut self) {
-        ChiptunePlayer::generate_samples_into(
+        ChiptunePlayerBase::generate_samples_into(
             &mut self.player,
             &mut self.cache[..SNDH_CACHE_SAMPLES],
         );
@@ -735,15 +735,15 @@ impl SndhBevyPlayer {
     }
 
     pub fn subsong_count(&self) -> usize {
-        ChiptunePlayer::subsong_count(&self.player)
+        ChiptunePlayerBase::subsong_count(&self.player)
     }
 
     pub fn current_subsong(&self) -> usize {
-        ChiptunePlayer::current_subsong(&self.player)
+        ChiptunePlayerBase::current_subsong(&self.player)
     }
 
     pub fn set_subsong(&mut self, index: usize) -> bool {
-        if ChiptunePlayer::set_subsong(&mut self.player, index) {
+        if ChiptunePlayerBase::set_subsong(&mut self.player, index) {
             // Reset cache
             self.cache_pos = 0;
             self.cache_len = 0;

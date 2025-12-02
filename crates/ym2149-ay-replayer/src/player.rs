@@ -7,7 +7,7 @@ use crate::error::{AyError, Result};
 use crate::format::{AyFile, AyPoints, AySong};
 use crate::machine::AyMachine;
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, MetadataFields, PlaybackState};
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields, PlaybackState};
 
 const SAMPLE_RATE: u32 = 44_100;
 const FRAME_RATE_HZ: f32 = 50.0;
@@ -527,9 +527,7 @@ fn build_metadata(
 // ChiptunePlayer trait implementation
 // ============================================================================
 
-impl ChiptunePlayer for AyPlayer {
-    type Metadata = AyMetadata;
-
+impl ChiptunePlayerBase for AyPlayer {
     fn play(&mut self) {
         let _ = AyPlayer::play(self);
     }
@@ -544,10 +542,6 @@ impl ChiptunePlayer for AyPlayer {
 
     fn state(&self) -> PlaybackState {
         self.state
-    }
-
-    fn metadata(&self) -> &Self::Metadata {
-        &self.metadata
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
@@ -575,12 +569,19 @@ impl ChiptunePlayer for AyPlayer {
     }
 
     fn current_subsong(&self) -> usize {
-        // Return 1-based index
         self.metadata.song_index + 1
     }
 
     fn set_subsong(&mut self, _index: usize) -> bool {
         // AY requires reloading from raw data to switch songs
         false
+    }
+}
+
+impl ChiptunePlayer for AyPlayer {
+    type Metadata = AyMetadata;
+
+    fn metadata(&self) -> &Self::Metadata {
+        &self.metadata
     }
 }

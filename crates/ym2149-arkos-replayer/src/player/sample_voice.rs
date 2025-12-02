@@ -73,36 +73,33 @@ impl SampleVoiceMixer {
     ///
     /// * `segment` - Mutable slice to mix samples into (additive)
     pub fn mix_into(&mut self, segment: &mut [f32]) {
-        if self.active.is_none() {
+        let Some(active) = self.active.as_mut() else {
             return;
-        }
+        };
 
         let mut stop = false;
-        {
-            let active = self.active.as_mut().unwrap();
-            for sample in segment.iter_mut() {
-                if active.data.is_empty() {
+        for sample in segment.iter_mut() {
+            if active.data.is_empty() {
+                stop = true;
+                break;
+            }
+
+            let idx = active.position as usize;
+            if idx >= active.loop_end || idx >= active.data.len() {
+                if active.looping {
+                    active.position = active.loop_start as f32;
+                    continue;
+                } else {
                     stop = true;
                     break;
                 }
+            }
 
-                let idx = active.position as usize;
-                if idx >= active.loop_end || idx >= active.data.len() {
-                    if active.looping {
-                        active.position = active.loop_start as f32;
-                        continue;
-                    } else {
-                        stop = true;
-                        break;
-                    }
-                }
-
-                *sample += active.data[idx] * active.gain;
-                active.advance_position();
-                if active.step == 0.0 {
-                    stop = true;
-                    break;
-                }
+            *sample += active.data[idx] * active.gain;
+            active.advance_position();
+            if active.step == 0.0 {
+                stop = true;
+                break;
             }
         }
 

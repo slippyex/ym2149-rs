@@ -325,7 +325,7 @@ mod tests {
         player.load_frames(frames);
         player.play().unwrap();
 
-        let pos = player.get_playback_position();
+        let pos = player.playback_position();
         assert!((0.0..=1.0).contains(&pos));
     }
 

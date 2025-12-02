@@ -7,7 +7,7 @@ use crate::error::{Result, SndhError};
 use crate::machine::AtariMachine;
 use crate::parser::{SndhFile, SubsongInfo};
 use ym2149::Ym2149Backend;
-use ym2149_common::{BasicMetadata, ChiptunePlayer, PlaybackState};
+use ym2149_common::{BasicMetadata, ChiptunePlayer, ChiptunePlayerBase, PlaybackState};
 
 /// SNDH file player.
 ///
@@ -266,9 +266,7 @@ impl SndhPlayer {
     }
 }
 
-impl ChiptunePlayer for SndhPlayer {
-    type Metadata = BasicMetadata;
-
+impl ChiptunePlayerBase for SndhPlayer {
     fn play(&mut self) {
         if self.current_subsong > 0 {
             self.state = PlaybackState::Playing;
@@ -290,10 +288,6 @@ impl ChiptunePlayer for SndhPlayer {
 
     fn state(&self) -> PlaybackState {
         self.state
-    }
-
-    fn metadata(&self) -> &Self::Metadata {
-        &self.metadata
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
@@ -332,6 +326,14 @@ impl ChiptunePlayer for SndhPlayer {
         } else {
             false
         }
+    }
+}
+
+impl ChiptunePlayer for SndhPlayer {
+    type Metadata = BasicMetadata;
+
+    fn metadata(&self) -> &Self::Metadata {
+        &self.metadata
     }
 }
 

@@ -22,6 +22,9 @@ ym2149-common = { path = "../ym2149-common", version = "0.7" }
 # Motorola 68000 CPU emulation
 m68000 = "0.2"
 
+# Error handling
+thiserror.workspace = true
+
 [dev-dependencies]
 anyhow.workspace = true
 

@@ -183,12 +183,12 @@ sequenceDiagram
 
 ---
 
-## Layer 1: Backend Trait
+## Layer 1: Backend Trait & Player Traits
 
-### Purpose
+### Chip Backend Trait
+
 Defines a common interface for all YM2149 chip implementations, enabling alternative backends.
 
-### Trait Definition
 ```rust
 pub trait Ym2149Backend: Send {
     fn new() -> Self where Self: Sized;
@@ -208,11 +208,49 @@ pub trait Ym2149Backend: Send {
 }
 ```
 
+### Player Trait Hierarchy (ym2149-common)
+
+The player traits provide a unified interface across all replayers:
+
+```rust
+// Object-safe base trait for dynamic dispatch
+pub trait ChiptunePlayerBase: Send {
+    fn play(&mut self);
+    fn pause(&mut self);
+    fn stop(&mut self);
+    fn state(&self) -> PlaybackState;
+    fn is_playing(&self) -> bool;
+    fn generate_samples_into(&mut self, buffer: &mut [f32]);
+    fn generate_samples(&mut self, count: usize) -> Vec<f32>;
+    fn sample_rate(&self) -> u32;
+    fn set_channel_mute(&mut self, channel: usize, mute: bool);
+    fn is_channel_muted(&self, channel: usize) -> bool;
+    fn playback_position(&self) -> f32;
+    fn subsong_count(&self) -> usize;
+    fn current_subsong(&self) -> usize;
+    fn set_subsong(&mut self, index: usize) -> bool;
+    fn has_subsongs(&self) -> bool;
+    fn psg_count(&self) -> usize;
+    fn channel_count(&self) -> usize;
+}
+
+// Full trait with associated Metadata type
+pub trait ChiptunePlayer: ChiptunePlayerBase {
+    type Metadata: PlaybackMetadata;
+    fn metadata(&self) -> &Self::Metadata;
+}
+```
+
+**Usage:**
+- Use `ChiptunePlayerBase` when you need trait objects (`Box<dyn ChiptunePlayerBase>`)
+- Use `ChiptunePlayer` when you need access to the specific metadata type
+
 ### Design Rationale
 - **Send bound**: Enables multi-threaded audio pipelines
-- **Associated types avoided**: Simple generic parameter for flexibility
+- **Associated types avoided in base**: Keeps `ChiptunePlayerBase` object-safe for dynamic dispatch
 - **Register-level API**: Matches hardware interface for accuracy
 - **Sample-level control**: Allows precise timing control
+- **Trait hierarchy**: Separates object-safe operations from metadata access
 
 ---
 

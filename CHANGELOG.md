@@ -18,15 +18,24 @@ All notable changes to the ym2149-rs project.
 - **SNDH support in bevy_ym2149** - Bevy plugin automatically detects and plays SNDH files
 - **SNDH support in ym2149-wasm** - WASM player supports SNDH files in the browser
 - **`ym2149-common` crate** - New shared crate providing unified traits and types across all replayers:
-  - `ChiptunePlayer` trait - Common playback interface for all player types (play, pause, stop, state, generate_samples)
+  - `ChiptunePlayerBase` trait - Object-safe base trait for dynamic dispatch (play, pause, stop, state, generate_samples, subsong support, multi-PSG)
+  - `ChiptunePlayer` trait - Extends `ChiptunePlayerBase` with metadata access via associated type
   - `PlaybackMetadata` trait - Unified metadata access across YM, AKS, AY, and SNDH formats
   - `PlaybackState` enum - Standard playback states (Stopped, Playing, Paused)
   - `BasicMetadata` struct - Simple metadata container for generic use cases
-- `ChiptunePlayer` implementations for all four player types:
+- `ChiptunePlayerBase` and `ChiptunePlayer` implementations for all four player types:
   - `YmPlayerGeneric<B>` in `ym2149-ym-replayer`
   - `ArkosPlayer` in `ym2149-arkos-replayer`
   - `AyPlayer` in `ym2149-ay-replayer`
   - `SndhPlayer` in `ym2149-sndh-replayer`
+- **Multi-PSG CLI visualization** - CLI replayer now displays all PSG chips for Arkos songs with 6+ channels:
+  - Dynamic channel display (A-L for up to 12 channels / 4 PSGs)
+  - Extended mute controls (keys 1-9, 0 for channels 1-10)
+  - PSG count indicator in status line
+- **WASM Mobile Audio** - Fixed audio playback on iOS/Android browsers:
+  - AudioContext created on user interaction (tap/click)
+  - Automatic resume from suspended state
+  - Visibility change handler for background/foreground transitions
 
 ### Changed
 - **YM2149 Core Emulation Rewrite** - Ported Leonard/Oxygene's cycle-accurate AtariAudio implementation:
@@ -45,15 +54,17 @@ All notable changes to the ym2149-rs project.
 - **`AyPlaybackState` deprecated** - Use `PlaybackState` from `ym2149-common` instead (backwards-compatible alias provided)
 - **CLI uses native SNDH replayer** - Removed dependency on external `atari-audio` crate; all SNDH playback now uses `ym2149-sndh-replayer`
 
-### Removed
-- **`atari-audio` crate** - Removed from workspace; functionality fully integrated into `ym2149-sndh-replayer` and `ym2149-core`
-- **`empiric_dac.rs`** - Removed legacy DAC implementation from `ym2149-core`; replaced by accurate logarithmic tables
 
 ### Fixed
 - Removed redundant `AyPlaybackState` enum - now uses unified `PlaybackState` from `ym2149-common`
 - Metadata moved from `ym2149-core` to `ym2149-common` (core crate now only handles YM2149 chip emulation)
 - SNDH metadata now correctly extracted from ICE-packed files (decompression handled internally)
 - Fixed Clippy warnings across the entire workspace
+
+### Documentation
+- Added comprehensive documentation to `bevy_ym2149::playlist` module (all public types and fields)
+- Added documentation to `bevy_ym2149_viz` crate (components, builders, systems, uniforms)
+- WASM example page updated with all four formats (YM, AKS, SNDH, AY) grouped by format type
 
 ### Migration Guide
 ```rust
@@ -65,13 +76,19 @@ use ym2149_ay_replayer::PlaybackState;
 // or
 use ym2149_common::PlaybackState;
 
-// New unified interface
-use ym2149_common::ChiptunePlayer;
-player.play();
-player.pause();
-player.stop();
-let state = player.state(); // Returns PlaybackState
-let meta = player.metadata(); // Returns &impl PlaybackMetadata
+// New unified interface - use ChiptunePlayerBase for playback methods
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase};
+player.play();         // from ChiptunePlayerBase
+player.pause();        // from ChiptunePlayerBase
+player.stop();         // from ChiptunePlayerBase
+let state = player.state();    // from ChiptunePlayerBase
+let meta = player.metadata();  // from ChiptunePlayer (requires concrete type)
+
+// For trait objects, use ChiptunePlayerBase
+fn play_any(player: &mut dyn ChiptunePlayerBase) {
+    player.play();
+    player.generate_samples_into(&mut buffer);
+}
 ```
 
 ## [v0.6.1] - 2025-11-20

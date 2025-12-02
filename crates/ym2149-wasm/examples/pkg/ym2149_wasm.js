@@ -132,7 +132,7 @@ function takeFromExternrefTable0(idx) {
     return value;
 }
 /**
- * Set panic hook for better error messages in the browser console
+ * Set panic hook for better error messages in the browser console.
  */
 export function init_panic_hook() {
     wasm.init_panic_hook();
@@ -142,9 +142,9 @@ const Ym2149PlayerFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_ym2149player_free(ptr >>> 0, 1));
 /**
- * Main YM2149 player for WebAssembly
+ * Main YM2149 player for WebAssembly.
  *
- * This player handles YM file playback in the browser, generating audio samples
+ * This player handles YM/AKS/AY file playback in the browser, generating audio samples
  * that can be fed into the Web Audio API.
  */
 export class Ym2149Player {
@@ -161,7 +161,7 @@ export class Ym2149Player {
         wasm.__wbg_ym2149player_free(ptr, 0);
     }
     /**
-     * Get current playback state
+     * Get current playback state.
      * @returns {boolean}
      */
     is_playing() {
@@ -176,7 +176,7 @@ export class Ym2149Player {
         wasm.ym2149player_set_volume(this.__wbg_ptr, volume);
     }
     /**
-     * Get total frame count
+     * Get total frame count.
      * @returns {number}
      */
     frame_count() {
@@ -184,7 +184,7 @@ export class Ym2149Player {
         return ret >>> 0;
     }
     /**
-     * Get the current register values (for visualization)
+     * Get the current register values (for visualization).
      * @returns {Uint8Array}
      */
     get_registers() {
@@ -194,14 +194,14 @@ export class Ym2149Player {
         return v1;
     }
     /**
-     * Seek to a specific frame (silently ignored for Arkos backend).
+     * Seek to a specific frame (silently ignored for Arkos/AY backends).
      * @param {number} frame
      */
     seek_to_frame(frame) {
         wasm.ym2149player_seek_to_frame(this.__wbg_ptr, frame);
     }
     /**
-     * Get current frame position
+     * Get current frame position.
      * @returns {number}
      */
     frame_position() {
@@ -209,12 +209,12 @@ export class Ym2149Player {
         return ret >>> 0;
     }
     /**
-     * Generate audio samples
+     * Generate audio samples.
      *
-     * Returns a Float32Array containing interleaved stereo samples.
+     * Returns a Float32Array containing mono samples.
      * The number of samples generated depends on the sample rate and frame rate.
      *
-     * For 44.1kHz at 50Hz frame rate: 882 samples per frame
+     * For 44.1kHz at 50Hz frame rate: 882 samples per frame.
      * @param {number} count
      * @returns {Float32Array}
      */
@@ -225,7 +225,7 @@ export class Ym2149Player {
         return v1;
     }
     /**
-     * Check if a channel is muted
+     * Check if a channel is muted.
      * @param {number} channel
      * @returns {boolean}
      */
@@ -234,7 +234,7 @@ export class Ym2149Player {
         return ret !== 0;
     }
     /**
-     * Mute or unmute a channel (0-2)
+     * Mute or unmute a channel (0-2).
      * @param {number} channel
      * @param {boolean} mute
      */
@@ -242,21 +242,21 @@ export class Ym2149Player {
         wasm.ym2149player_set_channel_mute(this.__wbg_ptr, channel, mute);
     }
     /**
-     * Enable or disable the ST color filter
+     * Enable or disable the ST color filter.
      * @param {boolean} enabled
      */
     set_color_filter(enabled) {
         wasm.ym2149player_set_color_filter(this.__wbg_ptr, enabled);
     }
     /**
-     * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos backend).
+     * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos/AY backends).
      * @param {number} percentage
      */
     seek_to_percentage(percentage) {
         wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, percentage);
     }
     /**
-     * Get playback position as percentage (0.0 to 1.0)
+     * Get playback position as percentage (0.0 to 1.0).
      * @returns {number}
      */
     position_percentage() {
@@ -264,7 +264,7 @@ export class Ym2149Player {
         return ret;
     }
     /**
-     * Generate samples into a pre-allocated buffer (zero-allocation)
+     * Generate samples into a pre-allocated buffer (zero-allocation).
      *
      * This is more efficient than `generate_samples` as it reuses the same buffer.
      * @param {Float32Array} buffer
@@ -275,15 +275,17 @@ export class Ym2149Player {
         wasm.ym2149player_generateSamplesInto(this.__wbg_ptr, ptr0, len0, buffer);
     }
     /**
-     * Create a new player from YM file data
+     * Create a new player from file data.
+     *
+     * Automatically detects the file format (YM, AKS, AY, or SNDH).
      *
      * # Arguments
      *
-     * * `data` - YM file data as Uint8Array
+     * * `data` - File data as Uint8Array
      *
      * # Returns
      *
-     * Result containing the player or an error message
+     * Result containing the player or an error message.
      * @param {Uint8Array} data
      */
     constructor(data) {
@@ -298,31 +300,25 @@ export class Ym2149Player {
         return this;
     }
     /**
-     * Start playback
+     * Start playback.
      */
     play() {
-        const ret = wasm.ym2149player_play(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
+        wasm.ym2149player_play(this.__wbg_ptr);
     }
     /**
-     * Stop playback and reset to beginning
+     * Stop playback and reset to beginning.
      */
     stop() {
-        const ret = wasm.ym2149player_stop(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
+        wasm.ym2149player_stop(this.__wbg_ptr);
     }
     /**
-     * Pause playback
+     * Pause playback.
      */
     pause() {
         wasm.ym2149player_pause(this.__wbg_ptr);
     }
     /**
-     * Get current playback state as string
+     * Get current playback state as string.
      * @returns {string}
      */
     state() {
@@ -338,7 +334,7 @@ export class Ym2149Player {
         }
     }
     /**
-     * Get current volume (0.0 to 1.0)
+     * Get current volume (0.0 to 1.0).
      * @returns {number}
      */
     volume() {
@@ -346,16 +342,13 @@ export class Ym2149Player {
         return ret;
     }
     /**
-     * Restart playback from the beginning
+     * Restart playback from the beginning.
      */
     restart() {
-        const ret = wasm.ym2149player_restart(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
+        wasm.ym2149player_restart(this.__wbg_ptr);
     }
     /**
-     * Get metadata about the loaded YM file
+     * Get metadata about the loaded file.
      * @returns {YmMetadata}
      */
     get metadata() {
@@ -369,7 +362,7 @@ const YmMetadataFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_ymmetadata_free(ptr >>> 0, 1));
 /**
- * YM file metadata exposed to JavaScript
+ * YM file metadata exposed to JavaScript.
  */
 export class YmMetadata {
 
@@ -393,7 +386,7 @@ export class YmMetadata {
         wasm.__wbg_ymmetadata_free(ptr, 0);
     }
     /**
-     * Get frame rate in Hz
+     * Get frame rate in Hz.
      * @returns {number}
      */
     get frame_rate() {
@@ -401,7 +394,7 @@ export class YmMetadata {
         return ret >>> 0;
     }
     /**
-     * Get frame count
+     * Get frame count.
      * @returns {number}
      */
     get frame_count() {
@@ -409,7 +402,7 @@ export class YmMetadata {
         return ret >>> 0;
     }
     /**
-     * Get duration in seconds
+     * Get duration in seconds.
      * @returns {number}
      */
     get duration_seconds() {
@@ -417,7 +410,7 @@ export class YmMetadata {
         return ret;
     }
     /**
-     * Get the song title
+     * Get the song title.
      * @returns {string}
      */
     get title() {
@@ -433,7 +426,7 @@ export class YmMetadata {
         }
     }
     /**
-     * Get the song author
+     * Get the song author.
      * @returns {string}
      */
     get author() {
@@ -449,7 +442,7 @@ export class YmMetadata {
         }
     }
     /**
-     * Get the YM format version
+     * Get the YM format version.
      * @returns {string}
      */
     get format() {
@@ -465,7 +458,7 @@ export class YmMetadata {
         }
     }
     /**
-     * Get the song comments
+     * Get the song comments.
      * @returns {string}
      */
     get comments() {

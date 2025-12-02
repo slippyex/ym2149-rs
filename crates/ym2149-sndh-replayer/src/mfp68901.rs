@@ -1,5 +1,26 @@
-//! MFP68901 Timer emulation
+//! MFP68901 (MC68901) Multi-Function Peripheral timer emulation.
+//!
+//! The MFP68901 is a versatile peripheral chip used in the Atari ST for:
+//! - Four programmable timers (A, B, C, D)
+//! - Interrupt management
+//! - Serial I/O (not emulated here)
+//!
+//! In SNDH replayers, the MFP timers are commonly used for:
+//! - SID voice emulation (high-frequency timer interrupts)
+//! - Sample playback timing
+//! - Special effects (arpeggio, vibrato, etc.)
+//!
+//! ## Timer Modes
+//!
+//! Each timer can operate in:
+//! - **Counter mode**: Counts down at a prescaled clock rate
+//! - **Event mode**: Counts external events (e.g., STE DAC triggers)
+//!
+//! ## Memory Map
+//!
+//! The MFP is mapped at 0xFFFA00-0xFFFA25 on the Atari ST.
 
+/// MFP clock frequency (2.4576 MHz).
 const ATARI_MFP_CLOCK: u32 = 2457600;
 
 /// Timer prescaler values (MFP clock divided by prescaler)

@@ -448,13 +448,11 @@ pub(in crate::plugin) fn initialize_playback(
         // If a new player is already prepared (e.g., crossfade finalized), refresh only the audio source.
         // But if there's a pending_subsong, we need to do a full reload to apply it.
         if playback.needs_reload
-            && playback.player.is_some()
-            && playback.metrics.is_some()
             && !playback.inline_player
             && playback.pending_subsong.is_none()
+            && let Some(player_arc) = playback.player.clone()
+            && let Some(metrics) = playback.metrics
         {
-            let player_arc = playback.player.clone().unwrap();
-            let metrics = playback.metrics.unwrap();
             let metadata = Ym2149Metadata {
                 title: playback.song_title.clone(),
                 author: playback.song_author.clone(),

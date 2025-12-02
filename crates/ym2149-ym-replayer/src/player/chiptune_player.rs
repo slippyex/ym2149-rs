@@ -7,7 +7,7 @@ use super::PlaybackState;
 use super::ym_player::YmPlayerGeneric;
 use super::ym6::Ym6Info;
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, MetadataFields};
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields};
 
 /// Metadata wrapper for YM6 files.
 ///
@@ -85,11 +85,8 @@ impl MetadataFields for Ym6Metadata {
     }
 }
 
-impl<B: Ym2149Backend> ChiptunePlayer for YmPlayerGeneric<B> {
-    type Metadata = Ym6Metadata;
-
+impl<B: Ym2149Backend> ChiptunePlayerBase for YmPlayerGeneric<B> {
     fn play(&mut self) {
-        // Use the existing PlaybackController implementation
         let _ = <Self as super::PlaybackController>::play(self);
     }
 
@@ -105,16 +102,23 @@ impl<B: Ym2149Backend> ChiptunePlayer for YmPlayerGeneric<B> {
         <Self as super::PlaybackController>::state(self)
     }
 
-    fn metadata(&self) -> &Self::Metadata {
-        &self.cached_metadata
-    }
-
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        // Use the existing implementation
         YmPlayerGeneric::generate_samples_into(self, buffer);
     }
 
     fn sample_rate(&self) -> u32 {
         self.sample_rate
+    }
+
+    fn playback_position(&self) -> f32 {
+        YmPlayerGeneric::playback_position(self)
+    }
+}
+
+impl<B: Ym2149Backend> ChiptunePlayer for YmPlayerGeneric<B> {
+    type Metadata = Ym6Metadata;
+
+    fn metadata(&self) -> &Self::Metadata {
+        &self.cached_metadata
     }
 }

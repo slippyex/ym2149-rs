@@ -4,18 +4,26 @@ Shared traits and types for YM2149 chiptune replayers.
 
 ## Overview
 
-This crate provides the unified interface that all replayer crates (`ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`) implement. It enables writing format-agnostic code that works with any chiptune player.
+This crate provides the unified interface that all replayer crates (`ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`, `ym2149-sndh-replayer`) implement. It enables writing format-agnostic code that works with any chiptune player.
 
 ## Key Types
 
-### `ChiptunePlayer` trait
+### Trait Hierarchy
 
-Common playback interface for all player types:
+```
+ChiptunePlayerBase (object-safe)
+    │
+    └── ChiptunePlayer (adds metadata access)
+```
+
+### `ChiptunePlayerBase` trait
+
+Object-safe base trait for playback operations. Use this when you need trait objects (`Box<dyn ChiptunePlayerBase>`):
 
 ```rust
-use ym2149_common::{ChiptunePlayer, PlaybackState};
+use ym2149_common::{ChiptunePlayerBase, PlaybackState};
 
-fn play_any<P: ChiptunePlayer>(player: &mut P) {
+fn play_any(player: &mut dyn ChiptunePlayerBase) {
     player.play();
 
     // Generate audio samples
@@ -23,6 +31,27 @@ fn play_any<P: ChiptunePlayer>(player: &mut P) {
     player.generate_samples_into(&mut buffer);
 
     // Check playback state
+    if player.state() == PlaybackState::Playing {
+        println!("Playing audio...");
+    }
+}
+```
+
+### `ChiptunePlayer` trait
+
+Extends `ChiptunePlayerBase` with metadata access. Use this when you need the specific metadata type:
+
+```rust
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, PlaybackState};
+
+fn play_with_info<P: ChiptunePlayer>(player: &mut P) {
+    player.play();
+
+    // Generate audio samples (from ChiptunePlayerBase)
+    let mut buffer = vec![0.0f32; 882];
+    player.generate_samples_into(&mut buffer);
+
+    // Access metadata (from ChiptunePlayer)
     if player.state() == PlaybackState::Playing {
         println!("Currently playing: {}", player.metadata().title());
     }
@@ -92,10 +121,11 @@ All replayer crates re-export these types, so you typically don't need to depend
 
 ```rust
 // These are equivalent:
-use ym2149_common::ChiptunePlayer;
-use ym2149_ym_replayer::ChiptunePlayer;
-use ym2149_arkos_replayer::ChiptunePlayer;
-use ym2149_ay_replayer::ChiptunePlayer;
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase};
+use ym2149_ym_replayer::{ChiptunePlayer, ChiptunePlayerBase};
+use ym2149_arkos_replayer::{ChiptunePlayer, ChiptunePlayerBase};
+use ym2149_ay_replayer::{ChiptunePlayer, ChiptunePlayerBase};
+use ym2149_sndh_replayer::{ChiptunePlayer, ChiptunePlayerBase};
 ```
 
 ## License

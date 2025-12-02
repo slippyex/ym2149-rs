@@ -442,7 +442,7 @@ fn display_frame(
         let mutes: Vec<bool> = (0..channel_count)
             .map(|ch| guard.is_channel_muted(ch))
             .collect();
-        let pos = (guard.get_playback_position() * 100.0).clamp(0.0, 100.0);
+        let pos = (guard.playback_position() * 100.0).clamp(0.0, 100.0);
         (mutes, pos)
     };
 

@@ -4,7 +4,7 @@
 //! providing a common interface for AKS file playback alongside other chiptune formats.
 
 use super::ArkosPlayer;
-use ym2149_common::{ChiptunePlayer, MetadataFields, PlaybackState};
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields, PlaybackState};
 
 /// Metadata wrapper for Arkos songs.
 ///
@@ -73,9 +73,7 @@ impl MetadataFields for ArkosMetadata {
     }
 }
 
-impl ChiptunePlayer for ArkosPlayer {
-    type Metadata = ArkosMetadata;
-
+impl ChiptunePlayerBase for ArkosPlayer {
     fn play(&mut self) {
         let _ = ArkosPlayer::play(self);
     }
@@ -94,10 +92,6 @@ impl ChiptunePlayer for ArkosPlayer {
         } else {
             PlaybackState::Stopped
         }
-    }
-
-    fn metadata(&self) -> &Self::Metadata {
-        &self.cached_metadata
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
@@ -131,7 +125,6 @@ impl ChiptunePlayer for ArkosPlayer {
     }
 
     fn current_subsong(&self) -> usize {
-        // Return 1-based index for consistency
         self.subsong_index + 1
     }
 
@@ -142,5 +135,17 @@ impl ChiptunePlayer for ArkosPlayer {
         } else {
             false
         }
+    }
+
+    fn psg_count(&self) -> usize {
+        ArkosPlayer::psg_count(self)
+    }
+}
+
+impl ChiptunePlayer for ArkosPlayer {
+    type Metadata = ArkosMetadata;
+
+    fn metadata(&self) -> &Self::Metadata {
+        &self.cached_metadata
     }
 }

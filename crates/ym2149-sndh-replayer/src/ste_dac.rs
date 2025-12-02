@@ -1,4 +1,30 @@
-//! STE DAC emulation
+//! Atari STE DMA Sound (DAC) emulation.
+//!
+//! The Atari STE introduced DMA-based digital audio playback, allowing
+//! 8-bit mono or stereo samples to be played directly from memory without
+//! CPU intervention.
+//!
+//! ## Features
+//!
+//! - Sample rates: 6.25 kHz, 12.5 kHz, 25 kHz, or 50 kHz
+//! - Mono or stereo playback
+//! - Loop mode for continuous playback
+//! - Microwire interface for volume control
+//!
+//! ## Memory Map
+//!
+//! The STE sound hardware is mapped at 0xFF8900-0xFF893F:
+//! - 0xFF8901: Sound control (bit 0 = enable)
+//! - 0xFF8903-0xFF8907: Sample start address
+//! - 0xFF8909-0xFF890D: Current sample pointer
+//! - 0xFF890F-0xFF8913: Sample end address
+//! - 0xFF8921: Sound mode (frequency, mono/stereo)
+//! - 0xFF8922-0xFF8925: Microwire interface
+//!
+//! ## Special Support
+//!
+//! This implementation supports the "Tao MS3" driver technique which
+//! outputs 4 interleaved voice samples at 50 kHz for software mixing.
 
 use crate::mfp68901::Mfp68901;
 

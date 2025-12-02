@@ -14,12 +14,11 @@ mod visualization;
 mod viz_helpers;
 
 use audio::{DEFAULT_SAMPLE_RATE, StreamConfig};
-use std::sync::Arc;
 use std::time::Instant;
 use ym2149::Ym2149Backend;
 use ym2149_arkos_replayer::ArkosPlayer;
 use ym2149_ay_replayer::{AyPlayer, CPC_UNSUPPORTED_MSG};
-use ym2149_common::ChiptunePlayer;
+use ym2149_common::ChiptunePlayerBase;
 use ym2149_sndh_replayer::SndhPlayer;
 use ym2149_ym_replayer::player::ym_player::YmPlayerGeneric;
 
@@ -46,112 +45,24 @@ pub struct VisualSnapshot {
     pub drum_active: [bool; MAX_PSG_COUNT * 3],
 }
 
-/// Common trait for real-time chip emulation backends.
+/// CLI-specific trait for real-time chip emulation with visualization.
 ///
-/// This trait abstracts over different YM chip implementations,
-/// allowing the CLI to work with various backends.
-pub trait RealtimeChip: Send {
-    /// Start playback.
-    fn play(&mut self);
-
-    /// Pause playback.
-    fn pause(&mut self);
-
-    /// Stop playback.
-    fn stop(&mut self);
-
-    /// Get current playback state.
-    fn state(&self) -> ym2149_common::PlaybackState;
-
-    /// Generate audio samples (allocates - prefer `generate_samples_into` for hot paths).
-    fn generate_samples(&mut self, count: usize) -> Vec<f32> {
-        let mut buffer = vec![0.0; count];
-        self.generate_samples_into(&mut buffer);
-        buffer
-    }
-
-    /// Generate audio samples into a pre-allocated buffer (zero-allocation hot path).
-    fn generate_samples_into(&mut self, buffer: &mut [f32]);
-
+/// This trait extends [`ChiptunePlayerBase`] with CLI-specific methods for
+/// visualization and effects. All playback methods are inherited from the base trait.
+pub trait RealtimeChip: ChiptunePlayerBase {
     /// Get current chip state for visualization.
     fn visual_snapshot(&self) -> VisualSnapshot;
 
-    /// Mute or unmute a channel.
-    fn set_channel_mute(&mut self, channel: usize, mute: bool);
-
-    /// Check if a channel is muted.
-    fn is_channel_muted(&self, channel: usize) -> bool;
-
-    /// Get playback position as percentage (0.0 to 1.0).
-    fn get_playback_position(&self) -> f32;
-
-    /// Enable/disable ST color filter when supported.
+    /// Enable/disable ST color filter.
     fn set_color_filter(&mut self, enabled: bool);
 
-    /// Optional reason why playback can't continue (e.g., unsupported format).
+    /// Optional reason why playback can't continue.
     fn unsupported_reason(&self) -> Option<&'static str> {
         None
-    }
-
-    /// Get the number of subsongs/tracks in this file.
-    /// Returns 1 for formats that don't support multiple subsongs.
-    fn subsong_count(&self) -> usize {
-        1
-    }
-
-    /// Get the current subsong index (1-based for SNDH, 0-based for AKS).
-    /// Returns 1 for formats that don't support multiple subsongs.
-    fn current_subsong(&self) -> usize {
-        1
-    }
-
-    /// Switch to a different subsong. Returns true if successful.
-    /// The index is 1-based for SNDH, 0-based for AKS.
-    fn set_subsong(&mut self, _index: usize) -> bool {
-        false
-    }
-
-    /// Check if this player supports multiple subsongs.
-    fn has_subsongs(&self) -> bool {
-        self.subsong_count() > 1
-    }
-
-    /// Get the number of PSG chips (default: 1).
-    fn psg_count(&self) -> usize {
-        1
-    }
-
-    /// Get the total number of channels (PSG count × 3).
-    fn channel_count(&self) -> usize {
-        self.psg_count() * 3
     }
 }
 
 impl<B: Ym2149Backend + 'static> RealtimeChip for YmPlayerGeneric<B> {
-    fn play(&mut self) {
-        use ym2149_common::ChiptunePlayer;
-        ChiptunePlayer::play(self);
-    }
-
-    fn pause(&mut self) {
-        use ym2149_common::ChiptunePlayer;
-        ChiptunePlayer::pause(self);
-    }
-
-    fn stop(&mut self) {
-        use ym2149_common::ChiptunePlayer;
-        ChiptunePlayer::stop(self);
-    }
-
-    fn state(&self) -> ym2149_common::PlaybackState {
-        use ym2149_common::ChiptunePlayer;
-        ChiptunePlayer::state(self)
-    }
-
-    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        YmPlayerGeneric::generate_samples_into(self, buffer)
-    }
-
     fn visual_snapshot(&self) -> VisualSnapshot {
         let regs = self.dump_registers();
         let (sync, sid, drum) = self.get_active_effects();
@@ -170,62 +81,69 @@ impl<B: Ym2149Backend + 'static> RealtimeChip for YmPlayerGeneric<B> {
         }
     }
 
-    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        self.set_channel_mute(channel, mute);
-    }
-
-    fn is_channel_muted(&self, channel: usize) -> bool {
-        self.is_channel_muted(channel)
-    }
-
-    fn get_playback_position(&self) -> f32 {
-        YmPlayerGeneric::get_playback_position(self)
-    }
-
     fn set_color_filter(&mut self, enabled: bool) {
-        self.set_color_filter(enabled);
+        YmPlayerGeneric::set_color_filter(self, enabled);
     }
+}
+
+/// Macro to implement ChiptunePlayerBase by delegating to an inner player field.
+macro_rules! delegate_chiptune_player_base {
+    ($wrapper:ty, $field:ident) => {
+        impl ChiptunePlayerBase for $wrapper {
+            fn play(&mut self) {
+                ChiptunePlayerBase::play(&mut self.$field);
+            }
+            fn pause(&mut self) {
+                ChiptunePlayerBase::pause(&mut self.$field);
+            }
+            fn stop(&mut self) {
+                ChiptunePlayerBase::stop(&mut self.$field);
+            }
+            fn state(&self) -> ym2149_common::PlaybackState {
+                ChiptunePlayerBase::state(&self.$field)
+            }
+            fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+                ChiptunePlayerBase::generate_samples_into(&mut self.$field, buffer);
+            }
+            fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+                ChiptunePlayerBase::set_channel_mute(&mut self.$field, channel, mute);
+            }
+            fn is_channel_muted(&self, channel: usize) -> bool {
+                ChiptunePlayerBase::is_channel_muted(&self.$field, channel)
+            }
+            fn playback_position(&self) -> f32 {
+                ChiptunePlayerBase::playback_position(&self.$field)
+            }
+            fn subsong_count(&self) -> usize {
+                ChiptunePlayerBase::subsong_count(&self.$field)
+            }
+            fn current_subsong(&self) -> usize {
+                ChiptunePlayerBase::current_subsong(&self.$field)
+            }
+            fn set_subsong(&mut self, index: usize) -> bool {
+                ChiptunePlayerBase::set_subsong(&mut self.$field, index)
+            }
+            fn psg_count(&self) -> usize {
+                ChiptunePlayerBase::psg_count(&self.$field)
+            }
+        }
+    };
 }
 
 // ArkosPlayer wrapper for CLI integration
 pub struct ArkosPlayerWrapper {
     player: ArkosPlayer,
-    song: Arc<ym2149_arkos_replayer::AksSong>,
-    current_subsong: usize,
 }
 
 impl ArkosPlayerWrapper {
     pub fn new(player: ArkosPlayer) -> Self {
-        let song = player.song();
-        Self {
-            player,
-            song,
-            current_subsong: 0,
-        }
+        Self { player }
     }
 }
 
+delegate_chiptune_player_base!(ArkosPlayerWrapper, player);
+
 impl RealtimeChip for ArkosPlayerWrapper {
-    fn play(&mut self) {
-        ChiptunePlayer::play(&mut self.player);
-    }
-
-    fn pause(&mut self) {
-        ChiptunePlayer::pause(&mut self.player);
-    }
-
-    fn stop(&mut self) {
-        ChiptunePlayer::stop(&mut self.player);
-    }
-
-    fn state(&self) -> ym2149_common::PlaybackState {
-        ChiptunePlayer::state(&self.player)
-    }
-
-    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
-    }
-
     fn visual_snapshot(&self) -> VisualSnapshot {
         let psg_count = self.player.psg_count().min(MAX_PSG_COUNT);
         let mut registers = [[0u8; 16]; MAX_PSG_COUNT];
@@ -243,47 +161,8 @@ impl RealtimeChip for ArkosPlayerWrapper {
         }
     }
 
-    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        ChiptunePlayer::set_channel_mute(&mut self.player, channel, mute);
-    }
-
-    fn is_channel_muted(&self, channel: usize) -> bool {
-        ChiptunePlayer::is_channel_muted(&self.player, channel)
-    }
-
-    fn get_playback_position(&self) -> f32 {
-        ChiptunePlayer::playback_position(&self.player)
-    }
-
     fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for Arkos
-    }
-
-    fn psg_count(&self) -> usize {
-        self.player.psg_count()
-    }
-
-    fn subsong_count(&self) -> usize {
-        ChiptunePlayer::subsong_count(&self.player)
-    }
-
-    fn current_subsong(&self) -> usize {
-        ChiptunePlayer::current_subsong(&self.player)
-    }
-
-    fn set_subsong(&mut self, index: usize) -> bool {
-        // Convert 1-based input to 0-based - Arkos requires special handling
-        // because it needs to recreate the player with a new subsong
-        let zero_based = index.saturating_sub(1);
-        if zero_based < self.song.subsongs.len()
-            && let Ok(new_player) = ArkosPlayer::new_from_arc(Arc::clone(&self.song), zero_based)
-        {
-            self.player = new_player;
-            self.current_subsong = zero_based;
-            ChiptunePlayer::play(&mut self.player);
-            return true;
-        }
-        false
     }
 }
 
@@ -298,27 +177,9 @@ impl AyPlayerWrapper {
     }
 }
 
+delegate_chiptune_player_base!(AyPlayerWrapper, player);
+
 impl RealtimeChip for AyPlayerWrapper {
-    fn play(&mut self) {
-        ChiptunePlayer::play(&mut self.player);
-    }
-
-    fn pause(&mut self) {
-        ChiptunePlayer::pause(&mut self.player);
-    }
-
-    fn stop(&mut self) {
-        ChiptunePlayer::stop(&mut self.player);
-    }
-
-    fn state(&self) -> ym2149_common::PlaybackState {
-        ChiptunePlayer::state(&self.player)
-    }
-
-    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
-    }
-
     fn visual_snapshot(&self) -> VisualSnapshot {
         let mut registers = [[0u8; 16]; MAX_PSG_COUNT];
         registers[0] = self.player.chip().dump_registers();
@@ -331,18 +192,6 @@ impl RealtimeChip for AyPlayerWrapper {
         }
     }
 
-    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        ChiptunePlayer::set_channel_mute(&mut self.player, channel, mute);
-    }
-
-    fn is_channel_muted(&self, channel: usize) -> bool {
-        ChiptunePlayer::is_channel_muted(&self.player, channel)
-    }
-
-    fn get_playback_position(&self) -> f32 {
-        ChiptunePlayer::playback_position(&self.player)
-    }
-
     fn set_color_filter(&mut self, enabled: bool) {
         self.player.set_color_filter(enabled);
     }
@@ -351,14 +200,6 @@ impl RealtimeChip for AyPlayerWrapper {
         self.player
             .requires_cpc_firmware()
             .then_some(CPC_UNSUPPORTED_MSG)
-    }
-
-    fn subsong_count(&self) -> usize {
-        ChiptunePlayer::subsong_count(&self.player)
-    }
-
-    fn current_subsong(&self) -> usize {
-        ChiptunePlayer::current_subsong(&self.player)
     }
 }
 
@@ -389,31 +230,13 @@ impl SndhPlayerWrapper {
     /// Get player metadata
     pub fn metadata(&self) -> &ym2149_common::BasicMetadata {
         use ym2149_common::ChiptunePlayer;
-        self.player.metadata()
+        ChiptunePlayer::metadata(&self.player)
     }
 }
 
+delegate_chiptune_player_base!(SndhPlayerWrapper, player);
+
 impl RealtimeChip for SndhPlayerWrapper {
-    fn play(&mut self) {
-        ChiptunePlayer::play(&mut self.player);
-    }
-
-    fn pause(&mut self) {
-        ChiptunePlayer::pause(&mut self.player);
-    }
-
-    fn stop(&mut self) {
-        ChiptunePlayer::stop(&mut self.player);
-    }
-
-    fn state(&self) -> ym2149_common::PlaybackState {
-        ChiptunePlayer::state(&self.player)
-    }
-
-    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        ChiptunePlayer::generate_samples_into(&mut self.player, buffer);
-    }
-
     fn visual_snapshot(&self) -> VisualSnapshot {
         // SNDH uses native 68000 code - extract YM registers from the emulated PSG
         let mut registers = [[0u8; 16]; MAX_PSG_COUNT];
@@ -427,32 +250,8 @@ impl RealtimeChip for SndhPlayerWrapper {
         }
     }
 
-    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        ChiptunePlayer::set_channel_mute(&mut self.player, channel, mute);
-    }
-
-    fn is_channel_muted(&self, channel: usize) -> bool {
-        ChiptunePlayer::is_channel_muted(&self.player, channel)
-    }
-
-    fn get_playback_position(&self) -> f32 {
-        ChiptunePlayer::playback_position(&self.player)
-    }
-
     fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for SNDH (uses actual 68000 code)
-    }
-
-    fn subsong_count(&self) -> usize {
-        ChiptunePlayer::subsong_count(&self.player)
-    }
-
-    fn current_subsong(&self) -> usize {
-        ChiptunePlayer::current_subsong(&self.player)
-    }
-
-    fn set_subsong(&mut self, index: usize) -> bool {
-        ChiptunePlayer::set_subsong(&mut self.player, index)
     }
 }
 

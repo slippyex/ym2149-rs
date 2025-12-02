@@ -114,17 +114,17 @@ ym2149-ym-replayer = "0.7"
 ```
 
 ```rust
-use ym2149_ym_replayer::{load_song, ChiptunePlayer, PlaybackMetadata};
+use ym2149_ym_replayer::{load_song, ChiptunePlayer, ChiptunePlayerBase, PlaybackMetadata};
 
 fn main() -> anyhow::Result<()> {
     let data = std::fs::read("song.ym")?;
     let (mut player, summary) = load_song(&data)?;
 
-    // Use the unified ChiptunePlayer interface
+    // Use the unified ChiptunePlayerBase interface for playback
     player.play();
     let samples = player.generate_samples(summary.samples_per_frame as usize);
 
-    // Access metadata via PlaybackMetadata trait
+    // Access metadata via ChiptunePlayer trait (extends ChiptunePlayerBase)
     let meta = player.metadata();
     println!("{} by {} • {} frames", meta.title(), meta.author(), summary.frame_count);
     Ok(())

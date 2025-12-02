@@ -6082,6 +6082,7 @@ version = "0.7.0"
 dependencies = [
  "anyhow",
  "m68000",
+ "thiserror 1.0.69",
  "ym2149",
  "ym2149-common",
 ]

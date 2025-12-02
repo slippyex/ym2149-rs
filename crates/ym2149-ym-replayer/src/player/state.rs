@@ -97,8 +97,8 @@ impl<B: Ym2149Backend> YmPlayerGeneric<B> {
         }
     }
 
-    /// Get playback position as a percentage (0.0 to 1.0)
-    pub fn get_playback_position(&self) -> f32 {
+    /// Get playback position as a percentage (0.0 to 1.0).
+    pub fn playback_position(&self) -> f32 {
         if self.is_tracker_mode {
             if let Some(tracker) = &self.tracker {
                 if tracker.total_frames == 0 {
