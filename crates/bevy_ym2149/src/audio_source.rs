@@ -6,6 +6,7 @@ use bevy::reflect::TypePath;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
+use ym2149_common::MetadataFields;
 
 use crate::error::{BevyYm2149Error, Result};
 use crate::playback::ToneSettings;
@@ -51,6 +52,8 @@ impl Clone for Ym2149AudioSource {
 }
 
 /// Metadata about a YM2149 audio file
+///
+/// Implements [`MetadataFields`] from `ym2149-common` for unified metadata access.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Ym2149Metadata {
     /// Song title
@@ -63,6 +66,32 @@ pub struct Ym2149Metadata {
     pub frame_count: usize,
     /// Duration in seconds (approximate)
     pub duration_seconds: f32,
+}
+
+impl MetadataFields for Ym2149Metadata {
+    fn title(&self) -> &str {
+        &self.title
+    }
+
+    fn author(&self) -> &str {
+        &self.author
+    }
+
+    fn comments(&self) -> &str {
+        &self.comment
+    }
+
+    fn format(&self) -> &str {
+        "YM" // Generic - actual format could be YM, AKS, AY, SNDH
+    }
+
+    fn frame_count(&self) -> Option<usize> {
+        Some(self.frame_count)
+    }
+
+    fn duration_seconds(&self) -> Option<f32> {
+        Some(self.duration_seconds)
+    }
 }
 
 impl Ym2149AudioSource {

@@ -1,6 +1,47 @@
-# YM2149-RS Monorepo
+# YM2149-RS
+
+**The most complete YM2149/AY-3-8910 ecosystem in Rust.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## What is the YM2149?
+
+The **Yamaha YM2149** (and its compatible sibling, the General Instrument **AY-3-8910**) is a **Programmable Sound Generator (PSG)** — a dedicated audio chip that defined the sound of an entire computing era.
+
+**Three square-wave channels. One noise generator. Hardware envelopes. Pure 8-bit soul.**
+
+If you've ever heard music from an **Atari ST**, **Amstrad CPC**, **ZX Spectrum 128**, **MSX**, or countless arcade machines from the 1980s, you've heard this chip. It powered everything from game soundtracks to the legendary European demoscene, where programmers pushed these simple waveforms to create surprisingly complex and powerful music.
+
+The YM2149 doesn't do wavetables or samples (mostly). It doesn't do FM synthesis. What it does is generate raw, characterful square waves with programmable frequencies, a shared noise source, and distinctive hardware envelopes — all mixed through a logarithmic DAC that gives it that unmistakable warm, buzzy, *chiptune* sound.
+
+**This crate brings that sound to Rust** — cycle-accurate, format-complete, and ready for your emulator, game, or nostalgia project.
+
+## Why YM2149-RS?
+
+**For Demoscene Enthusiasts & Chiptune Artists:**
+Play back your entire collection of YM, SNDH, AY, and Arkos Tracker files with authentic sound reproduction — in the terminal, browser, or your next retro-inspired game.
+
+**For Game Developers:**
+Drop authentic PSG audio into Bevy games with a single plugin. Playlists, crossfades, visualizations, and audio-reactive gameplay hooks included.
+
+**For Emulator Authors:**
+A clean, well-tested YM2149 core with configurable backends. Integrate the chip into your Atari ST, CPC, or custom system emulator.
+
+**For the Curious:**
+Explore how classic sound chips work. The codebase is documented, tested, and designed to be readable.
+
+### What Makes This Special
+
+| Feature | Description |
+|---------|-------------|
+| **Cycle-Accurate Core** | Precise emulation of all PSG features — envelopes, noise, mixer, SID voice, Sync Buzzer, and digi-drum effects |
+| **Multi-PSG Emulation** | Run multiple YM2149 chips in parallel — natively supported via Arkos Tracker format for authentic dual/triple-chip music |
+| **Six Format Replayers** | YM (1-6), YMT1/YMT2, GIST, Arkos Tracker (.aks), ZXAY/EMUL (.ay), and SNDH with full 68000 CPU emulation |
+| **Zero-Compromise Bevy Integration** | Not a wrapper around C code — pure Rust from chip to speaker |
+| **Runs Everywhere** | CLI, native apps, WASM browser player, Bevy games — same codebase |
+| **Production-Ready** | 165+ tests, documented APIs, real-world demoscene fixtures |
+
+---
 
 | Crate | crates.io | docs.rs |
 |-------|-----------|---------|
@@ -182,8 +223,19 @@ fn main() {
 }
 ```
 
-Need a reference scene? `cargo run --example advanced_example -p bevy_ym2149_examples`.  
+Need a reference scene? `cargo run --example advanced_example -p bevy_ym2149_examples`.
 Want to try the browser demo? Open https://slippyex.github.io/ym2149-rs/web/simple-player.html (auto-built via GitHub Pages).
+
+## Where to Find Music Files
+
+Looking for chiptunes to play? These community archives have thousands of tracks:
+
+| Archive | Format | Description |
+|---------|--------|-------------|
+| [SNDH Archive](https://sndh.atari.org/) | `.sndh` | The definitive Atari ST music collection — demoscene classics, game soundtracks, and more |
+| [ST-Sound / Leonard](https://pacidemo.planet-d.net/aldn/index.html) | `.ym` | Curated YM archive by Leonard/Oxygene with high-quality rips |
+| [Project AY](https://worldofspectrum.org/projectay/gdmusic.htm) | `.ay` | ZX Spectrum and Amstrad CPC music archive |
+| [Arkos Tracker 3](https://bitbucket.org/JulienNevo/arkostracker3/src/master/) | `.aks` | Source repository with example songs and the tracker itself |
 
 ## Documentation & Guides
 
@@ -193,7 +245,7 @@ Want to try the browser demo? Open https://slippyex.github.io/ym2149-rs/web/simp
 - `crates/bevy_ym2149_examples/README.md` – example matrix + screenshot gallery (incl. playlist crossfade UI)
 - [ARCHITECTURE.md](ARCHITECTURE.md) – YM + Arkos playback pipelines and layering details
 - [crates/ym2149-core/STREAMING_GUIDE.md](crates/ym2149-core/STREAMING_GUIDE.md) – low-latency streaming details
-- `examples/arkos/` – curated Arkos Tracker `.ym/.aks` files for regression tests and the wasm demo
+- `examples/` – curated list of `.ym`,`.aks`, `.ay`, and `.sndh` files for regression tests and the wasm demo
 
 Need to refresh the wasm demo bundle? Run `scripts/build-wasm-examples.sh`
 from the repo root to rebuild via `wasm-pack` and copy the output into

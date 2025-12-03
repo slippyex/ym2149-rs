@@ -251,10 +251,20 @@ impl Ym2149Playback {
     ///
     /// # Arguments
     ///
-    /// * `source_path` - Path to a YM file (YM2-YM6 formats supported)
+    /// * `source_path` - Path to a YM file (YM2-YM6 formats supported).
+    ///   Should not be empty; an empty path will cause a load error.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use bevy_ym2149::Ym2149Playback;
+    /// let playback = Ym2149Playback::new("assets/music/song.ym");
+    /// ```
     pub fn new(source_path: impl Into<String>) -> Self {
+        let path = source_path.into();
+        debug_assert!(!path.is_empty(), "source_path should not be empty");
         Self {
-            source_path: Some(source_path.into()),
+            source_path: Some(path),
             source_bytes: None,
             source_asset: None,
             state: PlaybackState::Idle,
@@ -312,10 +322,17 @@ impl Ym2149Playback {
     }
 
     /// Create a new playback component backed by an in-memory YM buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - Raw YM file data. Should not be empty; empty data will cause
+    ///   a load error.
     pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
+        let data = bytes.into();
+        debug_assert!(!data.is_empty(), "bytes should not be empty");
         Self {
             source_path: None,
-            source_bytes: Some(Arc::new(bytes.into())),
+            source_bytes: Some(Arc::new(data)),
             source_asset: None,
             state: PlaybackState::Idle,
             frame_position: 0,
@@ -551,7 +568,7 @@ impl Ym2149Playback {
     /// ```ignore
     /// if let Some(player_arc) = playback.player_handle() {
     ///     let player = player_arc.read();  // Concurrent reads allowed
-    ///     let frame = player.get_current_frame();
+    ///     let frame = player.current_frame();
     /// }
     /// ```
     pub fn player_handle(&self) -> Option<SharedSongPlayer> {

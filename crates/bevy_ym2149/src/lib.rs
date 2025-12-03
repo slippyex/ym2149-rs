@@ -107,24 +107,22 @@ pub mod plugin;
 pub mod presets;
 pub mod synth;
 
-// Internal modules - implementation details (hidden from docs but accessible for tests)
-#[doc(hidden)]
+// Semi-public modules - advanced features (documented but not primary API)
 pub mod audio_bridge;
-#[doc(hidden)]
-pub mod audio_reactive;
-#[doc(hidden)]
 pub mod audio_source;
-#[doc(hidden)]
-pub mod diagnostics;
-#[doc(hidden)]
 pub mod oscilloscope;
-#[doc(hidden)]
-pub mod song_player;
-#[doc(hidden)]
-pub mod streaming;
+
+// Internal modules - implementation details (not part of public API)
+pub(crate) mod audio_reactive;
+pub(crate) mod diagnostics;
+pub(crate) mod song_player;
+pub(crate) mod streaming;
 
 // Re-export ym2149 core types
 pub use ::ym2149::*;
+
+// Re-export common types from ym2149-common for unified API
+pub use ym2149_common::MetadataFields;
 
 // === Primary Public API ===
 
@@ -157,30 +155,30 @@ pub use playlist::{
 // Synth controller
 pub use synth::YmSynthController;
 
-// === Advanced/Internal API (hidden from docs but accessible) ===
+// === Advanced API (documented, for power users) ===
 
-#[doc(hidden)]
-pub use audio_bridge::AudioBridgeBuffers;
-#[doc(hidden)]
+// Audio bridge for custom audio routing
 pub use audio_bridge::{
-    AudioBridgeMix, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice, BridgeAudioSinks,
+    AudioBridgeBuffers, AudioBridgeMix, AudioBridgeMixes, AudioBridgeTargets, BridgeAudioDevice,
+    BridgeAudioSinks,
 };
-#[doc(hidden)]
-pub use audio_reactive::{AudioReactiveState, ReactiveMetrics};
-#[doc(hidden)]
+
+// Audio source for direct asset manipulation
 pub use audio_source::{Ym2149AudioSource, Ym2149Loader, Ym2149Metadata};
-#[doc(hidden)]
-pub use diagnostics::{BUFFER_FILL_PATH, FRAME_POSITION_PATH, update_diagnostics};
-#[doc(hidden)]
-pub use events::AudioBridgeRequest;
-#[doc(hidden)]
-pub use events::{ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, YmSfxRequest};
-#[doc(hidden)]
-pub use music_state::process_music_state_requests;
-#[doc(hidden)]
+
+// Oscilloscope buffer for visualization
 pub use oscilloscope::OscilloscopeBuffer;
-#[doc(hidden)]
+
+// Advanced event types
+pub use events::{
+    AudioBridgeRequest, ChannelSnapshot, MusicStateRequest, PlaylistAdvanceRequest, YmSfxRequest,
+};
+
+// Advanced playlist control
 pub use playlist::{
     CrossfadeTrigger, CrossfadeWindow, Ym2149PlaylistLoader, advance_playlist_players,
     drive_crossfade_playlists, handle_playlist_requests, register_playlist_assets,
 };
+
+// Music state processing
+pub use music_state::process_music_state_requests;

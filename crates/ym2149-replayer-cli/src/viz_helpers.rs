@@ -84,19 +84,22 @@ pub fn create_channel_status(
 
 /// Create a Unicode block bar representing an amplitude value
 ///
-/// Generates a string of █ characters proportional to the amplitude level.
-/// This is useful for creating visual volume meters in terminal applications.
+/// Generates a fixed-width string with █ characters proportional to the amplitude level,
+/// padded with spaces to maintain consistent width. This is useful for creating visual
+/// volume meters in terminal applications with proper alignment.
 ///
 /// # Arguments
 /// * `amplitude` - Amplitude value (0.0 to 1.0+, clamped internally)
-/// * `max_length` - Maximum bar length in characters
+/// * `max_length` - Maximum bar length in characters (also the fixed output width)
 ///
 /// # Returns
-/// String of █ characters representing the amplitude
+/// Fixed-width string of █ characters padded with spaces
 pub fn create_volume_bar(amplitude: f32, max_length: usize) -> String {
     let normalized = amplitude.clamp(0.0, 1.0);
     let block_count = (normalized * max_length as f32) as usize;
-    "█".repeat(block_count.min(max_length))
+    let blocks = "█".repeat(block_count.min(max_length));
+    let spaces = " ".repeat(max_length.saturating_sub(block_count));
+    format!("{}{}", blocks, spaces)
 }
 
 #[cfg(test)]
@@ -153,13 +156,15 @@ mod tests {
     #[test]
     fn test_volume_bar_empty() {
         let bar = create_volume_bar(0.0, 10);
-        assert_eq!(bar.chars().count(), 0);
+        assert_eq!(bar.chars().count(), 10); // Fixed width with spaces
+        assert_eq!(bar.trim().len(), 0); // No blocks
     }
 
     #[test]
     fn test_volume_bar_half() {
         let bar = create_volume_bar(0.5, 10);
-        assert_eq!(bar.chars().count(), 5);
+        assert_eq!(bar.chars().count(), 10); // Fixed width
+        assert_eq!(bar.trim().chars().count(), 5); // 5 blocks
     }
 
     #[test]
@@ -171,7 +176,8 @@ mod tests {
     #[test]
     fn test_volume_bar_negative_clamping() {
         let bar = create_volume_bar(-0.5, 10);
-        assert_eq!(bar.chars().count(), 0);
+        assert_eq!(bar.chars().count(), 10); // Fixed width
+        assert_eq!(bar.trim().len(), 0); // No blocks (clamped to 0)
     }
 
     #[test]

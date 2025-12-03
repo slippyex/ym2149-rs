@@ -727,13 +727,13 @@ pub(in crate::plugin) fn process_playback_frames(
         }
 
         if playback.state != PlaybackState::Playing {
-            playback.seek(player.get_current_frame() as u32);
+            playback.seek(player.current_frame() as u32);
             continue;
         }
 
         runtime.time_since_last_frame += delta;
 
-        let samples_per_frame = player.samples_per_frame_value() as usize;
+        let samples_per_frame = player.samples_per_frame() as usize;
         if samples_per_frame == 0 {
             continue;
         }
@@ -745,7 +745,7 @@ pub(in crate::plugin) fn process_playback_frames(
             runtime.frames_rendered += 1;
 
             let prev_frame = playback.frame_position;
-            playback.frame_position = player.get_current_frame() as u32;
+            playback.frame_position = player.current_frame() as u32;
 
             let mut mono_samples = vec![0.0f32; samples_per_frame];
             let mut channel_samples_raw = vec![[0.0f32; 3]; samples_per_frame];
@@ -854,7 +854,7 @@ pub(in crate::plugin) fn process_playback_frames(
             }
         }
 
-        playback.seek(player.get_current_frame() as u32);
+        playback.seek(player.current_frame() as u32);
         let crossfade_complete = playback
             .crossfade
             .as_ref()

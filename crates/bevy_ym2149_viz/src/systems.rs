@@ -101,7 +101,9 @@ pub fn update_detailed_channel_display(
         && let Some(player) = playback.player_handle()
     {
         let player_locked = player.read();
-        let chip = player_locked.get_chip();
+        let Some(chip) = player_locked.chip() else {
+            return;
+        };
         let regs = chip.dump_registers();
 
         let period_a = get_channel_period(regs[0], regs[1]);

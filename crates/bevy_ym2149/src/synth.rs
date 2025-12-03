@@ -203,7 +203,7 @@ impl YmSynthPlayer {
     }
 
     /// Returns the number of samples generated per frame.
-    pub fn samples_per_frame_value(&self) -> u32 {
+    pub fn samples_per_frame(&self) -> u32 {
         self.samples_per_frame
     }
 

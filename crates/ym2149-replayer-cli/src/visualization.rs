@@ -159,7 +159,9 @@ pub fn run_visualization_loop(context: &StreamingContext) {
 
     // Hide cursor and add blank lines for visualization
     // 1 line for status + 3 lines per PSG (volume bars, status, highlight)
-    let viz_lines = 1 + psg_count * 3;
+    // + separator lines between PSGs (psg_count - 1)
+    let separator_lines = psg_count.saturating_sub(1);
+    let viz_lines = 1 + psg_count * 3 + separator_lines;
     print!("\x1B[?25l");
     for _ in 0..viz_lines {
         println!();
@@ -373,6 +375,9 @@ fn handle_key_press(
 /// Channel names for display (A, B, C for each PSG).
 const CHANNEL_NAMES: [&str; 12] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
 
+/// Fixed column width for consistent alignment across all PSGs.
+const COLUMN_WIDTH: usize = 26;
+
 /// Extract channel data from PSG registers.
 struct ChannelData {
     period: Option<u16>,
@@ -450,8 +455,9 @@ fn display_frame(
         (mutes, pos)
     };
 
-    // Move cursor up: 1 status line + 3 lines per PSG
-    let lines_up = 1 + psg_count * 3;
+    // Move cursor up: 1 status line + 3 lines per PSG + separators between PSGs
+    let separator_lines = psg_count.saturating_sub(1);
+    let lines_up = 1 + psg_count * 3 + separator_lines;
     print!("\x1B[{}A", lines_up);
 
     // Format subsong info if available
@@ -477,12 +483,20 @@ fn display_frame(
         psg_str,
     );
 
+    // Separator line for multi-PSG display
+    let separator = format!("{:-<w$}   {:-<w$}   {:-<w$}", "", "", "", w = COLUMN_WIDTH);
+
     // Display each PSG
     for psg_idx in 0..psg_count {
+        // Print separator between PSGs (not before the first one)
+        if psg_idx > 0 {
+            print!("\x1B[2K\r{}\n", separator);
+        }
+
         let regs = &snapshot.registers[psg_idx];
         let base_ch = psg_idx * 3;
 
-        let bar_len = 10;
+        let bar_len = 12;
         let mut bars = Vec::with_capacity(3);
         let mut statuses = Vec::with_capacity(3);
         let mut highlights = Vec::with_capacity(3);
@@ -495,8 +509,9 @@ fn display_frame(
             let muted = mute_states.get(global_ch).copied().unwrap_or(false);
             let ch_name = CHANNEL_NAMES.get(global_ch).unwrap_or(&"?");
 
+            // Format: "A    ████████████" or "A(M) ████████████" - fixed width
             bars.push(format!(
-                "{}{} {:<18}",
+                "{}{} {}",
                 ch_name,
                 if muted { "(M)" } else { "   " },
                 bar
@@ -523,18 +538,27 @@ fn display_frame(
             highlights.push(highlight);
         }
 
-        // Print volume bars
+        // Print all three lines with fixed column width
         print!(
-            "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
-            bars[0], bars[1], bars[2]
+            "\x1B[2K\r{:<w$} | {:<w$} | {:<w$}\n",
+            bars[0],
+            bars[1],
+            bars[2],
+            w = COLUMN_WIDTH
         );
         print!(
-            "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
-            statuses[0], statuses[1], statuses[2]
+            "\x1B[2K\r{:<w$} | {:<w$} | {:<w$}\n",
+            statuses[0],
+            statuses[1],
+            statuses[2],
+            w = COLUMN_WIDTH
         );
         print!(
-            "\x1B[2K\r{:<22} | {:<22} | {:<22}\n",
-            highlights[0], highlights[1], highlights[2]
+            "\x1B[2K\r{:<w$} | {:<w$} | {:<w$}\n",
+            highlights[0],
+            highlights[1],
+            highlights[2],
+            w = COLUMN_WIDTH
         );
     }
     io::stdout().flush().ok();
