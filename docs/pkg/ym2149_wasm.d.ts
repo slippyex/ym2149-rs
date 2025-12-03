@@ -1,155 +1,168 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Set panic hook for better error messages in the browser console
+ * Set panic hook for better error messages in the browser console.
  */
 export function init_panic_hook(): void;
 /**
- * Main YM2149 player for WebAssembly
+ * Main YM2149 player for WebAssembly.
  *
- * This player handles YM file playback in the browser, generating audio samples
+ * This player handles YM/AKS/AY file playback in the browser, generating audio samples
  * that can be fed into the Web Audio API.
  */
 export class Ym2149Player {
   free(): void;
   [Symbol.dispose](): void;
   /**
-   * Get current playback state
+   * Get current playback state.
    */
   is_playing(): boolean;
   /**
-   * Set volume (0.0 to 1.0)
-   * Note: Volume control is done in JavaScript via Web Audio API gain node
+   * Set volume (0.0 to 1.0). Applied to generated samples.
    */
-  set_volume(_volume: number): void;
+  set_volume(volume: number): void;
   /**
-   * Get total frame count
+   * Get total frame count.
    */
   frame_count(): number;
   /**
-   * Get the current register values (for visualization)
+   * Get the current register values (for visualization).
    */
   get_registers(): Uint8Array;
   /**
-   * Seek to a specific frame
-   * Note: Seeking is implemented by stopping and restarting playback
+   * Seek to a specific frame (silently ignored for Arkos/AY backends).
    */
-  seek_to_frame(_frame: number): void;
+  seek_to_frame(frame: number): void;
   /**
-   * Get current frame position
+   * Get current frame position.
    */
   frame_position(): number;
   /**
-   * Generate audio samples
+   * Generate audio samples.
    *
-   * Returns a Float32Array containing interleaved stereo samples.
+   * Returns a Float32Array containing mono samples.
    * The number of samples generated depends on the sample rate and frame rate.
    *
-   * For 44.1kHz at 50Hz frame rate: 882 samples per frame
+   * For 44.1kHz at 50Hz frame rate: 882 samples per frame.
    */
   generateSamples(count: number): Float32Array;
   /**
-   * Check if a channel is muted
+   * Check if a channel is muted.
    */
   is_channel_muted(channel: number): boolean;
   /**
-   * Mute or unmute a channel (0-2)
+   * Mute or unmute a channel (0-2).
    */
   set_channel_mute(channel: number, mute: boolean): void;
   /**
-   * Enable or disable the ST color filter
+   * Enable or disable the ST color filter.
    */
   set_color_filter(enabled: boolean): void;
   /**
-   * Seek to a percentage of the song (0.0 to 1.0)
-   * Note: Seeking is implemented by stopping and restarting playback
+   * Get channel states for visualization (frequency, amplitude, note, effects).
+   *
+   * Returns a JsValue containing an object with channel data:
+   * ```json
+   * {
+   *   "channels": [
+   *     { "frequency": 440.0, "note": "A4", "amplitude": 0.8, "toneEnabled": true, "noiseEnabled": false, "envelopeEnabled": false },
+   *     ...
+   *   ],
+   *   "envelope": { "period": 256, "shape": 14, "shapeName": "/\\/\\" }
+   * }
+   * ```
    */
-  seek_to_percentage(_percentage: number): void;
+  getChannelStates(): any;
   /**
-   * Get playback position as percentage (0.0 to 1.0)
+   * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos/AY backends).
+   */
+  seek_to_percentage(percentage: number): void;
+  /**
+   * Get playback position as percentage (0.0 to 1.0).
    */
   position_percentage(): number;
   /**
-   * Generate samples into a pre-allocated buffer (zero-allocation)
+   * Generate samples into a pre-allocated buffer (zero-allocation).
    *
    * This is more efficient than `generate_samples` as it reuses the same buffer.
    */
   generateSamplesInto(buffer: Float32Array): void;
   /**
-   * Create a new player from YM file data
+   * Create a new player from file data.
+   *
+   * Automatically detects the file format (YM, AKS, AY, or SNDH).
    *
    * # Arguments
    *
-   * * `data` - YM file data as Uint8Array
+   * * `data` - File data as Uint8Array
    *
    * # Returns
    *
-   * Result containing the player or an error message
+   * Result containing the player or an error message.
    */
   constructor(data: Uint8Array);
   /**
-   * Start playback
+   * Start playback.
    */
   play(): void;
   /**
-   * Stop playback and reset to beginning
+   * Stop playback and reset to beginning.
    */
   stop(): void;
   /**
-   * Pause playback
+   * Pause playback.
    */
   pause(): void;
   /**
-   * Get current playback state as string
+   * Get current playback state as string.
    */
   state(): string;
   /**
-   * Get current volume
-   * Note: Always returns 1.0 as volume is handled in JavaScript
+   * Get current volume (0.0 to 1.0).
    */
   volume(): number;
   /**
-   * Restart playback from the beginning
+   * Restart playback from the beginning.
    */
   restart(): void;
   /**
-   * Get metadata about the loaded YM file
+   * Get metadata about the loaded file.
    */
   readonly metadata: YmMetadata;
 }
 /**
- * YM file metadata exposed to JavaScript
+ * YM file metadata exposed to JavaScript.
  */
 export class YmMetadata {
   private constructor();
   free(): void;
   [Symbol.dispose](): void;
   /**
-   * Get frame rate in Hz
+   * Get frame rate in Hz.
    */
   readonly frame_rate: number;
   /**
-   * Get frame count
+   * Get frame count.
    */
   readonly frame_count: number;
   /**
-   * Get duration in seconds
+   * Get duration in seconds.
    */
   readonly duration_seconds: number;
   /**
-   * Get the song title
+   * Get the song title.
    */
   readonly title: string;
   /**
-   * Get the song author
+   * Get the song author.
    */
   readonly author: string;
   /**
-   * Get the YM format version
+   * Get the YM format version.
    */
   readonly format: string;
   /**
-   * Get the song comments
+   * Get the song comments.
    */
   readonly comments: string;
 }
@@ -159,27 +172,30 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_ym2149player_free: (a: number, b: number) => void;
-  readonly __wbg_ymmetadata_free: (a: number, b: number) => void;
   readonly ym2149player_frame_count: (a: number) => number;
   readonly ym2149player_frame_position: (a: number) => number;
   readonly ym2149player_generateSamples: (a: number, b: number) => [number, number];
   readonly ym2149player_generateSamplesInto: (a: number, b: number, c: number, d: any) => void;
+  readonly ym2149player_getChannelStates: (a: number) => any;
   readonly ym2149player_get_registers: (a: number) => [number, number];
   readonly ym2149player_is_channel_muted: (a: number, b: number) => number;
   readonly ym2149player_is_playing: (a: number) => number;
   readonly ym2149player_metadata: (a: number) => number;
   readonly ym2149player_new: (a: number, b: number) => [number, number, number];
   readonly ym2149player_pause: (a: number) => void;
-  readonly ym2149player_play: (a: number) => [number, number];
+  readonly ym2149player_play: (a: number) => void;
   readonly ym2149player_position_percentage: (a: number) => number;
-  readonly ym2149player_restart: (a: number) => [number, number];
+  readonly ym2149player_restart: (a: number) => void;
   readonly ym2149player_seek_to_frame: (a: number, b: number) => void;
   readonly ym2149player_seek_to_percentage: (a: number, b: number) => void;
   readonly ym2149player_set_channel_mute: (a: number, b: number, c: number) => void;
   readonly ym2149player_set_color_filter: (a: number, b: number) => void;
+  readonly ym2149player_set_volume: (a: number, b: number) => void;
   readonly ym2149player_state: (a: number) => [number, number];
-  readonly ym2149player_stop: (a: number) => [number, number];
+  readonly ym2149player_stop: (a: number) => void;
   readonly ym2149player_volume: (a: number) => number;
+  readonly init_panic_hook: () => void;
+  readonly __wbg_ymmetadata_free: (a: number, b: number) => void;
   readonly ymmetadata_author: (a: number) => [number, number];
   readonly ymmetadata_comments: (a: number) => [number, number];
   readonly ymmetadata_duration_seconds: (a: number) => number;
@@ -187,12 +203,12 @@ export interface InitOutput {
   readonly ymmetadata_frame_count: (a: number) => number;
   readonly ymmetadata_frame_rate: (a: number) => number;
   readonly ymmetadata_title: (a: number) => [number, number];
-  readonly init_panic_hook: () => void;
-  readonly ym2149player_set_volume: (a: number, b: number) => void;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  readonly __wbindgen_exn_store: (a: number) => void;
+  readonly __externref_table_alloc: () => number;
+  readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-  readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_start: () => void;
 }

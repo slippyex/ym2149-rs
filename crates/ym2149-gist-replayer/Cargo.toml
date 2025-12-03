@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "GI Sound Tool (GIST) file parser and multi-PSG player for YM2149"
 readme = "README.md"
 documentation = "https://docs.rs/ym2149-gist-replayer"
-keywords = ["ym2149", "arkos", "tracker", "chiptune", "atari", "gist"]
+keywords = ["ym2149", "gist", "chiptune", "atari", "psg"]
 categories = ["multimedia::audio", "parsing"]
 
 [dependencies]

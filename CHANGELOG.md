@@ -2,7 +2,7 @@
 
 All notable changes to the ym2149-rs project.
 
-## [Unreleased] - v0.7.0
+## 2025/12/03 - v0.7.0
 
 ### Added
 - **`ChannelStates` module** - New `ym2149::channel_state` module for unified register-based visualization:

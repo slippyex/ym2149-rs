@@ -1,0 +1,32 @@
+{
+  "name": "ym2149-wasm",
+  "type": "module",
+  "collaborators": [
+    "slippyex"
+  ],
+  "description": "WebAssembly bindings for YM2149 PSG emulator - play YM files in the browser",
+  "version": "0.7.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slippyex/ym2149-rs"
+  },
+  "files": [
+    "ym2149_wasm_bg.wasm",
+    "ym2149_wasm.js",
+    "ym2149_wasm.d.ts"
+  ],
+  "main": "ym2149_wasm.js",
+  "homepage": "https://github.com/slippyex/ym2149-rs",
+  "types": "ym2149_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "keywords": [
+    "ym2149",
+    "wasm",
+    "webassembly",
+    "chiptune",
+    "browser"
+  ]
+}

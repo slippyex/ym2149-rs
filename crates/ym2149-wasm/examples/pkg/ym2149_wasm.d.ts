@@ -59,6 +59,21 @@ export class Ym2149Player {
    */
   set_color_filter(enabled: boolean): void;
   /**
+   * Get channel states for visualization (frequency, amplitude, note, effects).
+   *
+   * Returns a JsValue containing an object with channel data:
+   * ```json
+   * {
+   *   "channels": [
+   *     { "frequency": 440.0, "note": "A4", "amplitude": 0.8, "toneEnabled": true, "noiseEnabled": false, "envelopeEnabled": false },
+   *     ...
+   *   ],
+   *   "envelope": { "period": 256, "shape": 14, "shapeName": "/\\/\\" }
+   * }
+   * ```
+   */
+  getChannelStates(): any;
+  /**
    * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos/AY backends).
    */
   seek_to_percentage(percentage: number): void;
@@ -161,6 +176,7 @@ export interface InitOutput {
   readonly ym2149player_frame_position: (a: number) => number;
   readonly ym2149player_generateSamples: (a: number, b: number) => [number, number];
   readonly ym2149player_generateSamplesInto: (a: number, b: number, c: number, d: any) => void;
+  readonly ym2149player_getChannelStates: (a: number) => any;
   readonly ym2149player_get_registers: (a: number) => [number, number];
   readonly ym2149player_is_channel_muted: (a: number, b: number) => number;
   readonly ym2149player_is_playing: (a: number) => number;
@@ -188,9 +204,11 @@ export interface InitOutput {
   readonly ymmetadata_frame_rate: (a: number) => number;
   readonly ymmetadata_title: (a: number) => [number, number];
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  readonly __wbindgen_exn_store: (a: number) => void;
+  readonly __externref_table_alloc: () => number;
+  readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-  readonly __wbindgen_externrefs: WebAssembly.Table;
   readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_start: () => void;
 }

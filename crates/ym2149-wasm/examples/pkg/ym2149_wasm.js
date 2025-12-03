@@ -35,6 +35,21 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr, len);
 }
 
+function addToExternrefTable0(obj) {
+    const idx = wasm.__externref_table_alloc();
+    wasm.__wbindgen_externrefs.set(idx, obj);
+    return idx;
+}
+
+function handleError(f, args) {
+    try {
+        return f.apply(this, args);
+    } catch (e) {
+        const idx = addToExternrefTable0(e);
+        wasm.__wbindgen_exn_store(idx);
+    }
+}
+
 let WASM_VECTOR_LEN = 0;
 
 const cachedTextEncoder = new TextEncoder();
@@ -247,6 +262,25 @@ export class Ym2149Player {
      */
     set_color_filter(enabled) {
         wasm.ym2149player_set_color_filter(this.__wbg_ptr, enabled);
+    }
+    /**
+     * Get channel states for visualization (frequency, amplitude, note, effects).
+     *
+     * Returns a JsValue containing an object with channel data:
+     * ```json
+     * {
+     *   "channels": [
+     *     { "frequency": 440.0, "note": "A4", "amplitude": 0.8, "toneEnabled": true, "noiseEnabled": false, "envelopeEnabled": false },
+     *     ...
+     *   ],
+     *   "envelope": { "period": 256, "shape": 14, "shapeName": "/\\/\\" }
+     * }
+     * ```
+     * @returns {any}
+     */
+    getChannelStates() {
+        const ret = wasm.ym2149player_getChannelStates(this.__wbg_ptr);
+        return ret;
     }
     /**
      * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos/AY backends).
@@ -534,10 +568,26 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_log_8cec76766b8c0e33 = function(arg0) {
         console.log(arg0);
     };
+    imports.wbg.__wbg_new_1acc0b6eea89d040 = function() {
+        const ret = new Object();
+        return ret;
+    };
     imports.wbg.__wbg_new_8a6f238a6ece86ea = function() {
         const ret = new Error();
         return ret;
     };
+    imports.wbg.__wbg_new_e17d9f43105b08be = function() {
+        const ret = new Array();
+        return ret;
+    };
+    imports.wbg.__wbg_push_df81a39d04db858c = function(arg0, arg1) {
+        const ret = arg0.push(arg1);
+        return ret;
+    };
+    imports.wbg.__wbg_set_c2abbebe8b9ebee1 = function() { return handleError(function (arg0, arg1, arg2) {
+        const ret = Reflect.set(arg0, arg1, arg2);
+        return ret;
+    }, arguments) };
     imports.wbg.__wbg_stack_0ed75d68575b0f3c = function(arg0, arg1) {
         const ret = arg1.stack;
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -548,6 +598,11 @@ function __wbg_get_imports() {
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
+        // Cast intrinsic for `F64 -> Externref`.
+        const ret = arg0;
         return ret;
     };
     imports.wbg.__wbindgen_init_externref_table = function() {

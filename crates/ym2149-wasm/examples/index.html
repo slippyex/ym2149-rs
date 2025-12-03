@@ -1,264 +1,363 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YM2149 WASM Web Player</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>YM2149 Web Player</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
 
-        body {
-            font-family: 'Courier New', monospace;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                color: #fff;
+                min-height: 100vh;
+                padding: 20px;
+                padding-bottom: 40px;
+            }
 
-        .container {
-            max-width: 800px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 2px solid #00ff00;
-            border-radius: 10px;
-            padding: 40px;
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
-        }
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+            }
 
-        h1 {
-            color: #00ff00;
-            text-align: center;
-            font-size: 32px;
-            margin-bottom: 10px;
-            text-shadow: 0 0 10px #00ff00;
-        }
+            header {
+                text-align: center;
+                padding: 30px 0;
+            }
 
-        .subtitle {
-            text-align: center;
-            color: #00aaff;
-            margin-bottom: 30px;
-        }
+            h1 {
+                color: #00ff88;
+                font-size: 28px;
+                margin-bottom: 8px;
+                font-weight: 600;
+            }
 
-        .description {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 30px;
-            line-height: 1.6;
-        }
+            .subtitle {
+                color: #888;
+                font-size: 14px;
+            }
 
-        .cta-button {
-            display: block;
-            background: linear-gradient(135deg, #00ff00, #00cc00);
-            color: #000;
-            text-decoration: none;
-            padding: 20px 40px;
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(0, 255, 0, 0.4);
-        }
+            .cta-button {
+                display: block;
+                background: #00ff88;
+                color: #000;
+                text-decoration: none;
+                padding: 18px;
+                text-align: center;
+                font-size: 18px;
+                font-weight: 600;
+                border-radius: 12px;
+                margin: 20px 0 30px 0;
+                transition:
+                    transform 0.2s,
+                    box-shadow 0.2s;
+                box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+            }
 
-        .cta-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 255, 0, 0.6);
-        }
+            .cta-button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 25px rgba(0, 255, 136, 0.4);
+            }
 
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 30px;
-        }
+            .cta-button:active {
+                transform: translateY(0);
+            }
 
-        .feature {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 15px;
-            border-radius: 5px;
-            border-left: 3px solid #00ff00;
-        }
+            .section-title {
+                color: #00ff88;
+                font-size: 13px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                margin-bottom: 12px;
+                padding-left: 4px;
+            }
 
-        .feature h3 {
-            color: #00ff00;
-            margin-bottom: 5px;
-            font-size: 14px;
-        }
+            .song-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 30px;
+            }
 
-        .feature p {
-            font-size: 12px;
-            opacity: 0.9;
-        }
+            .song-item {
+                display: flex;
+                align-items: center;
+                background: rgba(255, 255, 255, 0.05);
+                padding: 14px 16px;
+                border-radius: 10px;
+                text-decoration: none;
+                color: #fff;
+                transition: background 0.2s;
+                -webkit-tap-highlight-color: transparent;
+            }
 
-        .test-files {
-            margin-top: 30px;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 20px;
-            border-radius: 5px;
-        }
+            .song-item:hover {
+                background: rgba(0, 255, 136, 0.1);
+            }
 
-        .test-files h2 {
-            color: #00ff00;
-            margin-bottom: 15px;
-        }
+            .song-item:active {
+                background: rgba(0, 255, 136, 0.15);
+            }
 
-        .format-section {
-            margin-bottom: 15px;
-        }
+            .song-icon {
+                font-size: 24px;
+                margin-right: 14px;
+                width: 32px;
+                text-align: center;
+            }
 
-        .format-section h3 {
-            color: #00aaff;
-            font-size: 13px;
-            margin-bottom: 8px;
-            border-bottom: 1px solid rgba(0, 170, 255, 0.3);
-            padding-bottom: 5px;
-        }
+            .song-info {
+                flex: 1;
+                min-width: 0;
+            }
 
-        .file-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-        }
+            .song-name {
+                font-size: 15px;
+                font-weight: 500;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
 
-        .file-item {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 10px;
-            border-radius: 3px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
-            color: #fff;
-            display: block;
-        }
+            .song-format {
+                font-size: 12px;
+                color: #666;
+                margin-top: 2px;
+            }
 
-        .file-item:hover {
-            background: rgba(0, 255, 0, 0.2);
-            transform: translateX(5px);
-        }
+            .song-arrow {
+                color: #444;
+                font-size: 18px;
+                margin-left: 10px;
+            }
 
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(0, 255, 0, 0.3);
-            font-size: 12px;
-            opacity: 0.7;
-        }
+            .features {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin-bottom: 30px;
+            }
 
-        .tech-stack {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            flex-wrap: wrap;
-            margin-top: 20px;
-        }
+            .feature {
+                background: rgba(255, 255, 255, 0.03);
+                padding: 14px;
+                border-radius: 10px;
+                text-align: center;
+            }
 
-        .tech-badge {
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 11px;
-            border: 1px solid #00ff00;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🎵 YM2149 Web Player</h1>
-        <div class="subtitle">Atari ST Chiptune Music in Your Browser via WebAssembly</div>
+            .feature-icon {
+                font-size: 24px;
+                margin-bottom: 6px;
+            }
 
-        <div class="description">
-            <p>
-                Experience authentic Atari ST chiptune music directly in your browser!
-                This player uses WebAssembly to run a cycle-accurate YM2149 PSG emulator,
-                delivering the same sound quality as the original hardware.
-            </p>
-        </div>
+            .feature-text {
+                font-size: 12px;
+                color: #888;
+            }
 
-        <a href="simple-player.html" class="cta-button">
-            🚀 Launch Web Player
-        </a>
+            .tech-badges {
+                display: flex;
+                justify-content: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-bottom: 20px;
+            }
 
-        <div class="features">
-            <div class="feature">
-                <h3>🎮 Full Control</h3>
-                <p>Play, pause, stop, and restart with responsive controls</p>
+            .tech-badge {
+                background: rgba(255, 255, 255, 0.05);
+                padding: 6px 12px;
+                border-radius: 20px;
+                font-size: 11px;
+                color: #666;
+            }
+
+            footer {
+                text-align: center;
+                padding-top: 20px;
+                border-top: 1px solid rgba(255, 255, 255, 0.05);
+                font-size: 12px;
+                color: #444;
+            }
+
+            footer a {
+                color: #00ff88;
+                text-decoration: none;
+            }
+
+            @media (max-width: 400px) {
+                body {
+                    padding: 15px;
+                }
+
+                h1 {
+                    font-size: 24px;
+                }
+
+                .cta-button {
+                    font-size: 16px;
+                    padding: 16px;
+                }
+
+                .features {
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px;
+                }
+
+                .feature {
+                    padding: 12px 8px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>YM2149 Web Player</h1>
+                <div class="subtitle">Atari ST Chiptunes in Your Browser</div>
+            </header>
+
+            <a href="simple-player.html" class="cta-button"> Open Player </a>
+
+            <div class="section-title">Example Songs</div>
+            <div class="song-list">
+                <a href="simple-player.html?file=Scout.ym" class="song-item">
+                    <span class="song-icon">🎵</span>
+                    <div class="song-info">
+                        <div class="song-name">Scout</div>
+                        <div class="song-format">YM - Atari ST</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a href="simple-player.html?file=Prelude.ym" class="song-item">
+                    <span class="song-icon">🎵</span>
+                    <div class="song-info">
+                        <div class="song-name">Prelude</div>
+                        <div class="song-format">YM - Atari ST</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Bullet_Sequence.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎧</span>
+                    <div class="song-info">
+                        <div class="song-name">Bullet Sequence</div>
+                        <div class="song-format">SNDH - Cube</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Elusive_Groove.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎧</span>
+                    <div class="song-info">
+                        <div class="song-name">Elusive Groove</div>
+                        <div class="song-format">SNDH - Cube</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Outpost.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎧</span>
+                    <div class="song-info">
+                        <div class="song-name">Outpost</div>
+                        <div class="song-format">SNDH - Cube</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Main_Menu.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎮</span>
+                    <div class="song-info">
+                        <div class="song-name">Main Menu</div>
+                        <div class="song-format">SNDH - Atari ST</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=JustAddCream.aks"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎹</span>
+                    <div class="song-info">
+                        <div class="song-name">Just Add Cream</div>
+                        <div class="song-format">AKS - Arkos Tracker</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a href="simple-player.html?file=LopEars.aks" class="song-item">
+                    <span class="song-icon">🎹</span>
+                    <div class="song-info">
+                        <div class="song-name">Lop Ears</div>
+                        <div class="song-format">AKS - Arkos Tracker</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=AcousticDreams.ay"
+                    class="song-item"
+                >
+                    <span class="song-icon">💾</span>
+                    <div class="song-info">
+                        <div class="song-name">Acoustic Dreams</div>
+                        <div class="song-format">AY - ZX Spectrum</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a href="simple-player.html?file=ZUB.AY" class="song-item">
+                    <span class="song-icon">💾</span>
+                    <div class="song-info">
+                        <div class="song-name">ZUB</div>
+                        <div class="song-format">AY - ZX Spectrum</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
             </div>
-            <div class="feature">
-                <h3>📊 Metadata</h3>
-                <p>View song title, author, and duration information</p>
-            </div>
-            <div class="feature">
-                <h3>🔊 Volume Control</h3>
-                <p>Adjust volume from 0-100%</p>
-            </div>
-            <div class="feature">
-                <h3>🎚️ Channel Muting</h3>
-                <p>Mute individual channels A, B, or C</p>
-            </div>
-            <div class="feature">
-                <h3>⚡ High Performance</h3>
-                <p>&lt;1% CPU usage, ~2MB memory</p>
-            </div>
-            <div class="feature">
-                <h3>📱 Mobile Ready</h3>
-                <p>Works on iOS, Android, and desktop</p>
-            </div>
-        </div>
 
-        <div class="test-files">
-            <h2>Test Files Included</h2>
-            <div class="format-section">
-                <h3>YM Format (Atari ST)</h3>
-                <div class="file-list">
-                    <a href="simple-player.html?file=Prelude.ym" class="file-item">📼 Prelude.ym</a>
-                    <a href="simple-player.html?file=Scout.ym" class="file-item">📼 Scout.ym</a>
+            <div class="section-title">Features</div>
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">🎛️</div>
+                    <div class="feature-text">Channel Muting</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔊</div>
+                    <div class="feature-text">Volume Control</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📱</div>
+                    <div class="feature-text">Mobile Ready</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">⚡</div>
+                    <div class="feature-text">Low CPU Usage</div>
                 </div>
             </div>
-            <div class="format-section">
-                <h3>AKS Format (Arkos Tracker)</h3>
-                <div class="file-list">
-                    <a href="simple-player.html?file=LopEars.aks" class="file-item">🎶 LopEars.aks</a>
-                    <a href="simple-player.html?file=JustAddCream.aks" class="file-item">🎶 JustAddCream.aks</a>
-                </div>
-            </div>
-            <div class="format-section">
-                <h3>SNDH Format (Atari ST)</h3>
-                <div class="file-list">
-                    <a href="simple-player.html?file=Main_Menu.sndh" class="file-item">🎵 Main_Menu.sndh</a>
-                    <a href="simple-player.html?file=Intensity_200hz.sndh" class="file-item">🎵 Intensity_200hz.sndh</a>
-                </div>
-            </div>
-            <div class="format-section">
-                <h3>AY Format (ZX Spectrum/Amstrad)</h3>
-                <div class="file-list">
-                    <a href="simple-player.html?file=AcousticDreams.ay" class="file-item">🎹 AcousticDreams.ay</a>
-                    <a href="simple-player.html?file=ZUB.AY" class="file-item">🎹 ZUB.AY</a>
-                </div>
-            </div>
-        </div>
 
-        <div class="tech-stack">
-            <span class="tech-badge">🦀 Rust</span>
-            <span class="tech-badge">🕸️ WebAssembly</span>
-            <span class="tech-badge">🎵 Web Audio API</span>
-            <span class="tech-badge">⚡ 6ns/clock</span>
-            <span class="tech-badge">📦 147KB</span>
-        </div>
+            <div class="tech-badges">
+                <span class="tech-badge">Rust</span>
+                <span class="tech-badge">WebAssembly</span>
+                <span class="tech-badge">Web Audio</span>
+            </div>
 
-        <div class="footer">
-            <p>YM2149 PSG Emulator - Hardware-accurate Atari ST sound chip emulation</p>
-            <p>Built with Rust + WebAssembly</p>
+            <footer>
+                <p>Hardware-accurate YM2149 PSG emulation</p>
+                <p><a href="https://github.com/slippyex">GitHub</a></p>
+            </footer>
         </div>
-    </div>
-</body>
+    </body>
 </html>

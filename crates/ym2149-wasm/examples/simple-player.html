@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YM2149 Web Player - Simple Example</title>
+    <title>YM2149 Web Player</title>
     <style>
         * {
             margin: 0;
@@ -12,315 +12,365 @@
         }
 
         body {
-            font-family: 'Courier New', monospace;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             color: #fff;
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             padding: 20px;
+            padding-bottom: 40px;
         }
 
-        .player {
-            background: rgba(0, 0, 0, 0.5);
-            border: 2px solid #00ff00;
-            border-radius: 10px;
-            padding: 30px;
-            max-width: 600px;
-            width: 100%;
-            box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
         }
 
         h1 {
-            color: #00ff00;
-            text-align: center;
-            margin-bottom: 10px;
+            color: #00ff88;
             font-size: 24px;
-            text-shadow: 0 0 10px #00ff00;
+            margin-bottom: 6px;
+            font-weight: 600;
         }
 
         .subtitle {
-            text-align: center;
-            color: #00aaff;
-            margin-bottom: 30px;
-            font-size: 12px;
+            color: #666;
+            font-size: 13px;
         }
 
-        .file-input {
-            margin-bottom: 30px;
+        .back-link {
+            display: inline-block;
+            color: #00ff88;
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 20px;
         }
 
-        input[type="file"] {
-            display: none;
+        .back-link:hover {
+            text-decoration: underline;
         }
 
-        .file-label {
-            display: block;
-            background: #00ff00;
-            color: #000;
-            padding: 15px;
-            text-align: center;
-            cursor: pointer;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-
-        .file-label:hover {
-            background: #00cc00;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-        }
-
-        .metadata {
-            background: rgba(0, 0, 0, 0.3);
+        /* Song info card */
+        .song-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
             padding: 20px;
-            border-radius: 5px;
             margin-bottom: 20px;
             display: none;
         }
 
-        .metadata.visible {
+        .song-card.visible {
             display: block;
         }
 
-        .metadata-row {
+        .song-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .song-author {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .song-meta {
             display: flex;
-            margin-bottom: 10px;
+            gap: 16px;
+            font-size: 12px;
+            color: #666;
         }
 
-        .metadata-label {
-            color: #00ff00;
-            min-width: 120px;
-            font-weight: bold;
-        }
-
-        .metadata-value {
-            color: #fff;
-            flex: 1;
-        }
-
-        .controls {
-            display: flex;
-            gap: 10px;
+        /* Progress bar */
+        .progress-container {
             margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        button {
-            flex: 1;
-            min-width: 80px;
-            padding: 15px;
-            background: #1a1a1a;
-            color: #00ff00;
-            border: 2px solid #00ff00;
-            border-radius: 5px;
-            cursor: pointer;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-
-        button:hover {
-            background: #00ff00;
-            color: #000;
-            box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
-        }
-
-        button:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
-
-        .volume-control {
-            margin-bottom: 20px;
-        }
-
-        .volume-label {
-            color: #00ff00;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        input[type="range"] {
-            width: 100%;
-            height: 8px;
-            background: #1a1a1a;
-            border: 1px solid #00ff00;
-            border-radius: 4px;
-            outline: none;
-            -webkit-appearance: none;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            background: #00ff00;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-        }
-
-        input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            background: #00ff00;
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-            border: none;
         }
 
         .progress-bar {
-            background: #1a1a1a;
-            border: 1px solid #00ff00;
-            border-radius: 5px;
-            height: 30px;
-            margin-bottom: 10px;
-            overflow: hidden;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            height: 6px;
             cursor: pointer;
+            overflow: hidden;
         }
 
         .progress-fill {
-            background: linear-gradient(90deg, #00ff00 0%, #00aa00 100%);
+            background: #00ff88;
             height: 100%;
             width: 0%;
             transition: width 0.1s linear;
+            border-radius: 4px;
         }
 
         .progress-time {
             display: flex;
             justify-content: space-between;
-            color: #00aaff;
             font-size: 12px;
-            margin-bottom: 20px;
+            color: #666;
+            margin-top: 8px;
         }
 
+        /* Main controls */
+        .main-controls {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .play-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: #00ff88;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .play-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 25px rgba(0, 255, 136, 0.4);
+        }
+
+        .play-btn:active {
+            transform: scale(0.98);
+        }
+
+        .play-btn:disabled {
+            background: #333;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .control-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #fff;
+            transition: background 0.2s;
+            align-self: center;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Channel toggles */
         .channels {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 24px;
         }
 
-        .channel {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 10px;
-            border-radius: 5px;
+        .channel-btn {
+            padding: 10px 20px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .channel-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .channel-btn.muted {
+            background: rgba(255, 0, 0, 0.2);
+            color: #ff6666;
+        }
+
+        /* Volume */
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding: 0 20px;
+        }
+
+        .volume-icon {
+            font-size: 18px;
+            color: #666;
+        }
+
+        .volume-slider {
+            flex: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #00ff88;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #00ff88;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        /* File input */
+        .file-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 16px;
             text-align: center;
         }
 
-        .channel-label {
-            color: #00ff00;
-            margin-bottom: 5px;
-            font-weight: bold;
+        .file-input {
+            display: none;
         }
 
-        .channel-toggle {
-            width: 100%;
+        .file-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
         }
 
-        .log {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid #00ff00;
-            border-radius: 5px;
-            padding: 10px;
+        .file-label:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .file-hint {
             font-size: 11px;
-            max-height: 150px;
-            overflow-y: auto;
-            color: #00ff00;
+            color: #555;
+            margin-top: 8px;
         }
 
-        .log-entry {
-            margin-bottom: 5px;
+        /* Status */
+        .status {
+            text-align: center;
+            font-size: 12px;
+            color: #444;
+            margin-top: 20px;
         }
 
-        @media (max-width: 600px) {
-            .controls {
-                flex-direction: column;
+        .status.ready {
+            color: #00ff88;
+        }
+
+        .status.error {
+            color: #ff6666;
+        }
+
+        /* Responsive */
+        @media (max-width: 400px) {
+            body {
+                padding: 15px;
             }
 
-            button {
-                width: 100%;
+            .play-btn {
+                width: 64px;
+                height: 64px;
+                font-size: 24px;
+            }
+
+            .control-btn {
+                width: 44px;
+                height: 44px;
+            }
+
+            .channel-btn {
+                padding: 8px 14px;
+                font-size: 12px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="player">
-        <h1>🎵 YM2149 Web Player</h1>
-        <div class="subtitle">Atari ST Chiptune Player in your Browser</div>
+    <div class="container">
+        <a href="index.html" class="back-link">← Back to songs</a>
 
-        <div class="file-input">
-            <input type="file" id="fileInput" accept=".ym,.aks,.sndh,.ay">
-            <label for="fileInput" class="file-label">
-                📁 Load YM / AKS / SNDH / AY File
-            </label>
-        </div>
+        <header>
+            <h1>YM2149 Player</h1>
+            <div class="subtitle">Atari ST Chiptune Player</div>
+        </header>
 
-        <div class="metadata" id="metadata">
-            <div class="metadata-row">
-                <span class="metadata-label">Title:</span>
-                <span class="metadata-value" id="title">-</span>
-            </div>
-            <div class="metadata-row">
-                <span class="metadata-label">Author:</span>
-                <span class="metadata-value" id="author">-</span>
-            </div>
-            <div class="metadata-row">
-                <span class="metadata-label">Format:</span>
-                <span class="metadata-value" id="format">-</span>
-            </div>
-            <div class="metadata-row">
-                <span class="metadata-label">Duration:</span>
-                <span class="metadata-value" id="duration">-</span>
-            </div>
-            <div class="metadata-row">
-                <span class="metadata-label">Frames:</span>
-                <span class="metadata-value" id="frames">-</span>
+        <div class="song-card" id="songCard">
+            <div class="song-title" id="songTitle">-</div>
+            <div class="song-author" id="songAuthor">-</div>
+            <div class="song-meta">
+                <span id="songFormat">-</span>
+                <span id="songFrames">- frames</span>
             </div>
         </div>
 
-        <div class="progress-bar" id="progressBar">
-            <div class="progress-fill" id="progressFill"></div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-time">
+                <span id="currentTime">0:00</span>
+                <span id="totalTime">0:00</span>
+            </div>
         </div>
 
-        <div class="progress-time">
-            <span id="currentTime">0:00</span>
-            <span id="totalTime">0:00</span>
-        </div>
-
-        <div class="controls">
-            <button id="playBtn" disabled>▶️ Play</button>
-            <button id="pauseBtn" disabled>⏸️ Pause</button>
-            <button id="stopBtn" disabled>⏹️ Stop</button>
-            <button id="restartBtn" disabled>🔄 Restart</button>
+        <div class="main-controls">
+            <button class="control-btn" id="restartBtn" disabled>⏮</button>
+            <button class="play-btn" id="playBtn" disabled>▶</button>
+            <button class="control-btn" id="stopBtn" disabled>⏹</button>
         </div>
 
         <div class="channels">
-            <div class="channel">
-                <div class="channel-label">Channel A</div>
-                <button class="channel-toggle" data-channel="0">Mute</button>
-            </div>
-            <div class="channel">
-                <div class="channel-label">Channel B</div>
-                <button class="channel-toggle" data-channel="1">Mute</button>
-            </div>
-            <div class="channel">
-                <div class="channel-label">Channel C</div>
-                <button class="channel-toggle" data-channel="2">Mute</button>
-            </div>
+            <button class="channel-btn" data-channel="0">A</button>
+            <button class="channel-btn" data-channel="1">B</button>
+            <button class="channel-btn" data-channel="2">C</button>
         </div>
 
-        <div class="volume-control">
-            <label class="volume-label" for="volumeSlider">
-                🔊 Volume: <span id="volumeValue">100</span>%
-            </label>
-            <input type="range" id="volumeSlider" min="0" max="100" value="100">
+        <div class="volume-container">
+            <span class="volume-icon">🔊</span>
+            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="100">
         </div>
 
-        <div class="log" id="log"></div>
+        <div class="file-section">
+            <input type="file" class="file-input" id="fileInput" accept=".ym,.aks,.sndh,.ay">
+            <label for="fileInput" class="file-label">Load File</label>
+            <div class="file-hint">YM, AKS, SNDH, AY formats supported</div>
+        </div>
+
+        <div class="status" id="status">Loading...</div>
     </div>
 
     <script type="module">
@@ -330,30 +380,26 @@
         let audioContext = null;
         let isPlaying = false;
         let updateInterval = null;
-        let audioSchedulerInterval = null;
-        let nextAudioTime = 0;
+        let scriptProcessor = null;
+        let audioElement = null;
+        let mediaStreamDest = null;
 
         // DOM elements
-        const fileInput = document.getElementById('fileInput');
         const playBtn = document.getElementById('playBtn');
-        const pauseBtn = document.getElementById('pauseBtn');
         const stopBtn = document.getElementById('stopBtn');
         const restartBtn = document.getElementById('restartBtn');
-        const volumeSlider = document.getElementById('volumeSlider');
-        const volumeValue = document.getElementById('volumeValue');
         const progressBar = document.getElementById('progressBar');
         const progressFill = document.getElementById('progressFill');
         const currentTime = document.getElementById('currentTime');
         const totalTime = document.getElementById('totalTime');
-        const metadataDiv = document.getElementById('metadata');
-        const logDiv = document.getElementById('log');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const fileInput = document.getElementById('fileInput');
+        const songCard = document.getElementById('songCard');
+        const statusEl = document.getElementById('status');
 
-        function log(message) {
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logDiv.appendChild(entry);
-            logDiv.scrollTop = logDiv.scrollHeight;
+        function setStatus(message, type = '') {
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
         }
 
         function formatTime(seconds) {
@@ -364,172 +410,147 @@
 
         function updateUI() {
             if (!wasmPlayer) return;
-
             const position = wasmPlayer.position_percentage();
-            const framePos = wasmPlayer.frame_position();
-            const frameCount = wasmPlayer.frame_count();
             const duration = wasmPlayer.metadata.duration_seconds;
-
             progressFill.style.width = `${position * 100}%`;
             currentTime.textContent = formatTime(position * duration);
-            totalTime.textContent = formatTime(duration);
         }
 
-        async function initWasm() {
-            log('Initializing WebAssembly module...');
-            await init();
-            log('✓ WASM initialized');
+        async function ensureAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+                } catch (e) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            return audioContext.state === 'running';
         }
 
-        function describeError(error) {
-            if (error instanceof Error && error.message) {
-                return error.message;
-            }
-            if (typeof error === 'string') {
-                return error;
-            }
-            if (error && typeof error === 'object' && 'message' in error) {
-                return error.message;
-            }
+        function startScriptProcessor() {
+            if (scriptProcessor) return;
+
+            const bufferSize = 4096;
+            scriptProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+
+            scriptProcessor.onaudioprocess = (e) => {
+                const outputBuffer = e.outputBuffer.getChannelData(0);
+                if (!isPlaying || !wasmPlayer) {
+                    for (let i = 0; i < outputBuffer.length; i++) outputBuffer[i] = 0;
+                    return;
+                }
+                const samples = wasmPlayer.generateSamples(outputBuffer.length);
+                for (let i = 0; i < outputBuffer.length && i < samples.length; i++) {
+                    outputBuffer[i] = samples[i];
+                }
+            };
+
+            // MediaStream approach for iOS
             try {
-                return JSON.stringify(error);
-            } catch (_) {
-                return String(error);
+                mediaStreamDest = audioContext.createMediaStreamDestination();
+                scriptProcessor.connect(mediaStreamDest);
+                audioElement = new Audio();
+                audioElement.srcObject = mediaStreamDest.stream;
+                audioElement.play().catch(() => {
+                    scriptProcessor.disconnect();
+                    scriptProcessor.connect(audioContext.destination);
+                });
+            } catch (e) {
+                scriptProcessor.connect(audioContext.destination);
             }
         }
 
-        async function loadFile(file) {
+        function stopScriptProcessor() {
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                scriptProcessor = null;
+            }
+            if (audioElement) {
+                audioElement.pause();
+                audioElement.srcObject = null;
+                audioElement = null;
+            }
+            mediaStreamDest = null;
+        }
+
+        function updateMetadata(metadata) {
+            document.getElementById('songTitle').textContent = metadata.title || 'Unknown';
+            document.getElementById('songAuthor').textContent = metadata.author || 'Unknown Artist';
+            document.getElementById('songFormat').textContent = metadata.format;
+            document.getElementById('songFrames').textContent = `${metadata.frame_count} frames`;
+            totalTime.textContent = formatTime(metadata.duration_seconds);
+            songCard.classList.add('visible');
+        }
+
+        async function loadFromUrl(fileName) {
             try {
-                log(`Loading file: ${file.name}...`);
+                setStatus(`Loading ${fileName}...`);
+                const response = await fetch(fileName);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                wasmPlayer = new Ym2149Player(uint8Array);
+                updateMetadata(wasmPlayer.metadata);
+
+                playBtn.disabled = false;
+                stopBtn.disabled = false;
+                restartBtn.disabled = false;
+
+                setStatus('Tap play to start', 'ready');
+            } catch (error) {
+                console.error('Load error:', error);
+                setStatus(`Error: ${error?.message || error}`, 'error');
+            }
+        }
+
+        async function loadFromFile(file) {
+            try {
+                setStatus(`Loading ${file.name}...`);
                 const arrayBuffer = await file.arrayBuffer();
                 const uint8Array = new Uint8Array(arrayBuffer);
 
                 wasmPlayer = new Ym2149Player(uint8Array);
-
-                const metadata = wasmPlayer.metadata;
-                document.getElementById('title').textContent = metadata.title || 'Unknown';
-                document.getElementById('author').textContent = metadata.author || 'Unknown';
-                document.getElementById('format').textContent = metadata.format;
-                document.getElementById('duration').textContent = formatTime(metadata.duration_seconds);
-                document.getElementById('frames').textContent = metadata.frame_count;
-
-                totalTime.textContent = formatTime(metadata.duration_seconds);
-                metadataDiv.classList.add('visible');
+                updateMetadata(wasmPlayer.metadata);
 
                 playBtn.disabled = false;
-                pauseBtn.disabled = false;
                 stopBtn.disabled = false;
                 restartBtn.disabled = false;
 
-                log(`✓ Loaded: ${metadata.title} by ${metadata.author}`);
-                log(`  Format: ${metadata.format}, Duration: ${formatTime(metadata.duration_seconds)}`);
-
+                setStatus('Tap play to start', 'ready');
             } catch (error) {
-                const message = describeError(error);
-                log(`✗ Error loading file: ${message}`);
-                alert(`Error loading file: ${message}`);
+                setStatus(`Error: ${error.message}`, 'error');
             }
-        }
-
-        function scheduleAudio() {
-            if (!isPlaying || !wasmPlayer || !audioContext) return;
-
-            const currentTime = audioContext.currentTime;
-            const bufferDuration = 0.02; // 20ms = 50Hz frame rate
-            const samplesPerFrame = 882; // 44.1kHz at 50Hz = 882 samples
-
-            // Schedule ahead by at least 100ms
-            while (nextAudioTime < currentTime + 0.1) {
-                const samples = wasmPlayer.generateSamples(samplesPerFrame);
-
-                const buffer = audioContext.createBuffer(1, samples.length, 44100);
-                buffer.getChannelData(0).set(samples);
-
-                const source = audioContext.createBufferSource();
-                source.buffer = buffer;
-
-                // Volume is applied in WASM; keep the graph simple.
-                source.connect(audioContext.destination);
-
-                source.start(nextAudioTime);
-                nextAudioTime += bufferDuration;
-            }
-        }
-
-        async function ensureAudioContext() {
-            // Create AudioContext on first user interaction (required for mobile)
-            if (!audioContext) {
-                audioContext = new AudioContext({ sampleRate: 44100 });
-                // Listen for state changes
-                audioContext.onstatechange = () => {
-                    log(`🔊 AudioContext state: ${audioContext.state}`);
-                };
-                log(`🔊 AudioContext created (state: ${audioContext.state})`);
-            }
-
-            // Resume if suspended (mobile browsers start in suspended state)
-            if (audioContext.state === 'suspended') {
-                try {
-                    await audioContext.resume();
-                    log(`🔊 AudioContext resumed (state: ${audioContext.state})`);
-                } catch (e) {
-                    log(`⚠️ Failed to resume AudioContext: ${e}`);
-                }
-            }
-
-            return audioContext.state === 'running';
         }
 
         async function play() {
-            if (!wasmPlayer) return;
+            if (!wasmPlayer || isPlaying) return;
 
-            // Don't start multiple times
-            if (isPlaying) {
-                log('⚠️ Already playing');
-                return;
-            }
-
-            // Ensure AudioContext is created and running (critical for mobile)
-            const audioReady = await ensureAudioContext();
-            if (!audioReady) {
-                log('⚠️ AudioContext not ready - tap Play again');
-                return;
-            }
-
+            await ensureAudioContext();
             wasmPlayer.play();
             isPlaying = true;
-
-            // Initialize audio time to current context time
-            nextAudioTime = audioContext.currentTime;
-
-            // Start audio scheduler (check every 50ms)
-            audioSchedulerInterval = setInterval(scheduleAudio, 50);
-
-            // Start UI update
+            startScriptProcessor();
             updateInterval = setInterval(updateUI, 100);
 
-            log('▶️ Playing');
+            playBtn.textContent = '⏸';
+            setStatus('Playing', 'ready');
         }
 
         function pause() {
-            if (!wasmPlayer) return;
+            if (!wasmPlayer || !isPlaying) return;
 
             wasmPlayer.pause();
             isPlaying = false;
-
-            // Stop audio scheduler
-            if (audioSchedulerInterval) {
-                clearInterval(audioSchedulerInterval);
-                audioSchedulerInterval = null;
-            }
-
-            // Stop UI updates
             if (updateInterval) {
                 clearInterval(updateInterval);
                 updateInterval = null;
             }
 
-            log('⏸️ Paused');
+            playBtn.textContent = '▶';
+            setStatus('Paused');
         }
 
         function stop() {
@@ -537,151 +558,86 @@
 
             wasmPlayer.stop();
             isPlaying = false;
-
-            // Stop audio scheduler
-            if (audioSchedulerInterval) {
-                clearInterval(audioSchedulerInterval);
-                audioSchedulerInterval = null;
-            }
-
-            // Stop UI updates
+            stopScriptProcessor();
             if (updateInterval) {
                 clearInterval(updateInterval);
                 updateInterval = null;
             }
 
-            // Reset audio time
-            nextAudioTime = 0;
-
-            updateUI();
-            log('⏹️ Stopped');
+            playBtn.textContent = '▶';
+            progressFill.style.width = '0%';
+            currentTime.textContent = '0:00';
+            setStatus('Stopped');
         }
 
         function restart() {
             if (!wasmPlayer) return;
-
             const wasPlaying = isPlaying;
-
-            // Stop everything first
             stop();
-
-            // Restart the WASM player
             wasmPlayer.restart();
-
-            // Resume playback if it was playing
-            if (wasPlaying) {
-                play();
-            }
-
-            updateUI();
-            log('🔄 Restarted');
+            if (wasPlaying) play();
         }
 
         // Event listeners
-        fileInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                await loadFile(file);
+        playBtn.addEventListener('click', async () => {
+            await ensureAudioContext();
+            if (isPlaying) {
+                pause();
+            } else {
+                play();
             }
         });
 
-        playBtn.addEventListener('click', play);
-        pauseBtn.addEventListener('click', pause);
         stopBtn.addEventListener('click', stop);
         restartBtn.addEventListener('click', restart);
 
         volumeSlider.addEventListener('input', (e) => {
-            const volume = e.target.value / 100;
-            volumeValue.textContent = e.target.value;
-            if (wasmPlayer) {
-                wasmPlayer.set_volume(volume);
-            }
+            if (wasmPlayer) wasmPlayer.set_volume(e.target.value / 100);
         });
 
         progressBar.addEventListener('click', (e) => {
             if (!wasmPlayer) return;
-
             const rect = progressBar.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const percentage = x / rect.width;
-
+            const percentage = (e.clientX - rect.left) / rect.width;
             wasmPlayer.seek_to_percentage(percentage);
             updateUI();
-            log(`⏩ Seeked to ${Math.floor(percentage * 100)}%`);
         });
 
-        // Channel mute toggles
-        document.querySelectorAll('.channel-toggle').forEach(btn => {
+        document.querySelectorAll('.channel-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 if (!wasmPlayer) return;
-
                 const channel = parseInt(btn.dataset.channel);
                 const isMuted = wasmPlayer.is_channel_muted(channel);
                 wasmPlayer.set_channel_mute(channel, !isMuted);
-
-                btn.textContent = isMuted ? 'Mute' : 'Unmute';
-                log(`Channel ${channel} ${isMuted ? 'unmuted' : 'muted'}`);
+                btn.classList.toggle('muted', !isMuted);
             });
         });
 
-        // Auto-load file from URL parameter
-        async function autoLoadFile() {
+        fileInput.addEventListener('change', async (e) => {
+            await ensureAudioContext();
+            const file = e.target.files[0];
+            if (file) await loadFromFile(file);
+        });
+
+        // Initialize
+        async function initialize() {
+            setStatus('Loading...');
+            await init();
+
             const urlParams = new URLSearchParams(window.location.search);
             const fileName = urlParams.get('file');
 
             if (fileName) {
-                try {
-                    log(`Auto-loading: ${fileName}...`);
-                    const response = await fetch(fileName);
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
-                    const arrayBuffer = await response.arrayBuffer();
-                    const uint8Array = new Uint8Array(arrayBuffer);
-
-                    wasmPlayer = new Ym2149Player(uint8Array);
-
-                    const metadata = wasmPlayer.metadata;
-                    document.getElementById('title').textContent = metadata.title || 'Unknown';
-                    document.getElementById('author').textContent = metadata.author || 'Unknown';
-                    document.getElementById('format').textContent = metadata.format;
-                    document.getElementById('duration').textContent = formatTime(metadata.duration_seconds);
-                    document.getElementById('frames').textContent = metadata.frame_count;
-
-                    totalTime.textContent = formatTime(metadata.duration_seconds);
-                    metadataDiv.classList.add('visible');
-
-                    playBtn.disabled = false;
-                    pauseBtn.disabled = false;
-                    stopBtn.disabled = false;
-                    restartBtn.disabled = false;
-
-                    log(`✓ Loaded: ${metadata.title} by ${metadata.author}`);
-                    log(`  Format: ${metadata.format}, Duration: ${formatTime(metadata.duration_seconds)}`);
-                } catch (error) {
-                    const message = describeError(error);
-                    log(`✗ Error auto-loading file: ${message}`);
-                }
+                await loadFromUrl(fileName);
+            } else {
+                setStatus('Select a file to play');
             }
         }
 
-        // Handle visibility change (for mobile when app goes to background)
-        document.addEventListener('visibilitychange', async () => {
-            if (document.visibilityState === 'visible' && isPlaying && audioContext) {
-                // Resume audio when tab becomes visible again
-                if (audioContext.state === 'suspended') {
-                    try {
-                        await audioContext.resume();
-                        log('🔊 AudioContext resumed after visibility change');
-                    } catch (e) {
-                        log(`⚠️ Failed to resume: ${e}`);
-                    }
-                }
-            }
+        initialize().catch(e => {
+            console.error('Init error:', e);
+            setStatus(`Error: ${e?.message || e}`, 'error');
         });
-
-        // Initialize
-        initWasm().then(() => autoLoadFile());
     </script>
 </body>
 </html>

@@ -35,6 +35,21 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr, len);
 }
 
+function addToExternrefTable0(obj) {
+    const idx = wasm.__externref_table_alloc();
+    wasm.__wbindgen_externrefs.set(idx, obj);
+    return idx;
+}
+
+function handleError(f, args) {
+    try {
+        return f.apply(this, args);
+    } catch (e) {
+        const idx = addToExternrefTable0(e);
+        wasm.__wbindgen_exn_store(idx);
+    }
+}
+
 let WASM_VECTOR_LEN = 0;
 
 const cachedTextEncoder = new TextEncoder();
@@ -132,7 +147,7 @@ function takeFromExternrefTable0(idx) {
     return value;
 }
 /**
- * Set panic hook for better error messages in the browser console
+ * Set panic hook for better error messages in the browser console.
  */
 export function init_panic_hook() {
     wasm.init_panic_hook();
@@ -142,9 +157,9 @@ const Ym2149PlayerFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_ym2149player_free(ptr >>> 0, 1));
 /**
- * Main YM2149 player for WebAssembly
+ * Main YM2149 player for WebAssembly.
  *
- * This player handles YM file playback in the browser, generating audio samples
+ * This player handles YM/AKS/AY file playback in the browser, generating audio samples
  * that can be fed into the Web Audio API.
  */
 export class Ym2149Player {
@@ -161,7 +176,7 @@ export class Ym2149Player {
         wasm.__wbg_ym2149player_free(ptr, 0);
     }
     /**
-     * Get current playback state
+     * Get current playback state.
      * @returns {boolean}
      */
     is_playing() {
@@ -169,15 +184,14 @@ export class Ym2149Player {
         return ret !== 0;
     }
     /**
-     * Set volume (0.0 to 1.0)
-     * Note: Volume control is done in JavaScript via Web Audio API gain node
-     * @param {number} _volume
+     * Set volume (0.0 to 1.0). Applied to generated samples.
+     * @param {number} volume
      */
-    set_volume(_volume) {
-        wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, _volume);
+    set_volume(volume) {
+        wasm.ym2149player_set_volume(this.__wbg_ptr, volume);
     }
     /**
-     * Get total frame count
+     * Get total frame count.
      * @returns {number}
      */
     frame_count() {
@@ -185,7 +199,7 @@ export class Ym2149Player {
         return ret >>> 0;
     }
     /**
-     * Get the current register values (for visualization)
+     * Get the current register values (for visualization).
      * @returns {Uint8Array}
      */
     get_registers() {
@@ -195,15 +209,14 @@ export class Ym2149Player {
         return v1;
     }
     /**
-     * Seek to a specific frame
-     * Note: Seeking is implemented by stopping and restarting playback
-     * @param {number} _frame
+     * Seek to a specific frame (silently ignored for Arkos/AY backends).
+     * @param {number} frame
      */
-    seek_to_frame(_frame) {
-        wasm.ym2149player_seek_to_frame(this.__wbg_ptr, _frame);
+    seek_to_frame(frame) {
+        wasm.ym2149player_seek_to_frame(this.__wbg_ptr, frame);
     }
     /**
-     * Get current frame position
+     * Get current frame position.
      * @returns {number}
      */
     frame_position() {
@@ -211,12 +224,12 @@ export class Ym2149Player {
         return ret >>> 0;
     }
     /**
-     * Generate audio samples
+     * Generate audio samples.
      *
-     * Returns a Float32Array containing interleaved stereo samples.
+     * Returns a Float32Array containing mono samples.
      * The number of samples generated depends on the sample rate and frame rate.
      *
-     * For 44.1kHz at 50Hz frame rate: 882 samples per frame
+     * For 44.1kHz at 50Hz frame rate: 882 samples per frame.
      * @param {number} count
      * @returns {Float32Array}
      */
@@ -227,7 +240,7 @@ export class Ym2149Player {
         return v1;
     }
     /**
-     * Check if a channel is muted
+     * Check if a channel is muted.
      * @param {number} channel
      * @returns {boolean}
      */
@@ -236,7 +249,7 @@ export class Ym2149Player {
         return ret !== 0;
     }
     /**
-     * Mute or unmute a channel (0-2)
+     * Mute or unmute a channel (0-2).
      * @param {number} channel
      * @param {boolean} mute
      */
@@ -244,22 +257,40 @@ export class Ym2149Player {
         wasm.ym2149player_set_channel_mute(this.__wbg_ptr, channel, mute);
     }
     /**
-     * Enable or disable the ST color filter
+     * Enable or disable the ST color filter.
      * @param {boolean} enabled
      */
     set_color_filter(enabled) {
         wasm.ym2149player_set_color_filter(this.__wbg_ptr, enabled);
     }
     /**
-     * Seek to a percentage of the song (0.0 to 1.0)
-     * Note: Seeking is implemented by stopping and restarting playback
-     * @param {number} _percentage
+     * Get channel states for visualization (frequency, amplitude, note, effects).
+     *
+     * Returns a JsValue containing an object with channel data:
+     * ```json
+     * {
+     *   "channels": [
+     *     { "frequency": 440.0, "note": "A4", "amplitude": 0.8, "toneEnabled": true, "noiseEnabled": false, "envelopeEnabled": false },
+     *     ...
+     *   ],
+     *   "envelope": { "period": 256, "shape": 14, "shapeName": "/\\/\\" }
+     * }
+     * ```
+     * @returns {any}
      */
-    seek_to_percentage(_percentage) {
-        wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, _percentage);
+    getChannelStates() {
+        const ret = wasm.ym2149player_getChannelStates(this.__wbg_ptr);
+        return ret;
     }
     /**
-     * Get playback position as percentage (0.0 to 1.0)
+     * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos/AY backends).
+     * @param {number} percentage
+     */
+    seek_to_percentage(percentage) {
+        wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, percentage);
+    }
+    /**
+     * Get playback position as percentage (0.0 to 1.0).
      * @returns {number}
      */
     position_percentage() {
@@ -267,7 +298,7 @@ export class Ym2149Player {
         return ret;
     }
     /**
-     * Generate samples into a pre-allocated buffer (zero-allocation)
+     * Generate samples into a pre-allocated buffer (zero-allocation).
      *
      * This is more efficient than `generate_samples` as it reuses the same buffer.
      * @param {Float32Array} buffer
@@ -278,15 +309,17 @@ export class Ym2149Player {
         wasm.ym2149player_generateSamplesInto(this.__wbg_ptr, ptr0, len0, buffer);
     }
     /**
-     * Create a new player from YM file data
+     * Create a new player from file data.
+     *
+     * Automatically detects the file format (YM, AKS, AY, or SNDH).
      *
      * # Arguments
      *
-     * * `data` - YM file data as Uint8Array
+     * * `data` - File data as Uint8Array
      *
      * # Returns
      *
-     * Result containing the player or an error message
+     * Result containing the player or an error message.
      * @param {Uint8Array} data
      */
     constructor(data) {
@@ -301,31 +334,25 @@ export class Ym2149Player {
         return this;
     }
     /**
-     * Start playback
+     * Start playback.
      */
     play() {
-        const ret = wasm.ym2149player_play(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
+        wasm.ym2149player_play(this.__wbg_ptr);
     }
     /**
-     * Stop playback and reset to beginning
+     * Stop playback and reset to beginning.
      */
     stop() {
-        const ret = wasm.ym2149player_stop(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
+        wasm.ym2149player_stop(this.__wbg_ptr);
     }
     /**
-     * Pause playback
+     * Pause playback.
      */
     pause() {
         wasm.ym2149player_pause(this.__wbg_ptr);
     }
     /**
-     * Get current playback state as string
+     * Get current playback state as string.
      * @returns {string}
      */
     state() {
@@ -341,8 +368,7 @@ export class Ym2149Player {
         }
     }
     /**
-     * Get current volume
-     * Note: Always returns 1.0 as volume is handled in JavaScript
+     * Get current volume (0.0 to 1.0).
      * @returns {number}
      */
     volume() {
@@ -350,16 +376,13 @@ export class Ym2149Player {
         return ret;
     }
     /**
-     * Restart playback from the beginning
+     * Restart playback from the beginning.
      */
     restart() {
-        const ret = wasm.ym2149player_restart(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
+        wasm.ym2149player_restart(this.__wbg_ptr);
     }
     /**
-     * Get metadata about the loaded YM file
+     * Get metadata about the loaded file.
      * @returns {YmMetadata}
      */
     get metadata() {
@@ -373,7 +396,7 @@ const YmMetadataFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_ymmetadata_free(ptr >>> 0, 1));
 /**
- * YM file metadata exposed to JavaScript
+ * YM file metadata exposed to JavaScript.
  */
 export class YmMetadata {
 
@@ -397,7 +420,7 @@ export class YmMetadata {
         wasm.__wbg_ymmetadata_free(ptr, 0);
     }
     /**
-     * Get frame rate in Hz
+     * Get frame rate in Hz.
      * @returns {number}
      */
     get frame_rate() {
@@ -405,7 +428,7 @@ export class YmMetadata {
         return ret >>> 0;
     }
     /**
-     * Get frame count
+     * Get frame count.
      * @returns {number}
      */
     get frame_count() {
@@ -413,7 +436,7 @@ export class YmMetadata {
         return ret >>> 0;
     }
     /**
-     * Get duration in seconds
+     * Get duration in seconds.
      * @returns {number}
      */
     get duration_seconds() {
@@ -421,7 +444,7 @@ export class YmMetadata {
         return ret;
     }
     /**
-     * Get the song title
+     * Get the song title.
      * @returns {string}
      */
     get title() {
@@ -437,7 +460,7 @@ export class YmMetadata {
         }
     }
     /**
-     * Get the song author
+     * Get the song author.
      * @returns {string}
      */
     get author() {
@@ -453,7 +476,7 @@ export class YmMetadata {
         }
     }
     /**
-     * Get the YM format version
+     * Get the YM format version.
      * @returns {string}
      */
     get format() {
@@ -469,7 +492,7 @@ export class YmMetadata {
         }
     }
     /**
-     * Get the song comments
+     * Get the song comments.
      * @returns {string}
      */
     get comments() {
@@ -545,10 +568,26 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_log_8cec76766b8c0e33 = function(arg0) {
         console.log(arg0);
     };
+    imports.wbg.__wbg_new_1acc0b6eea89d040 = function() {
+        const ret = new Object();
+        return ret;
+    };
     imports.wbg.__wbg_new_8a6f238a6ece86ea = function() {
         const ret = new Error();
         return ret;
     };
+    imports.wbg.__wbg_new_e17d9f43105b08be = function() {
+        const ret = new Array();
+        return ret;
+    };
+    imports.wbg.__wbg_push_df81a39d04db858c = function(arg0, arg1) {
+        const ret = arg0.push(arg1);
+        return ret;
+    };
+    imports.wbg.__wbg_set_c2abbebe8b9ebee1 = function() { return handleError(function (arg0, arg1, arg2) {
+        const ret = Reflect.set(arg0, arg1, arg2);
+        return ret;
+    }, arguments) };
     imports.wbg.__wbg_stack_0ed75d68575b0f3c = function(arg0, arg1) {
         const ret = arg1.stack;
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -559,6 +598,11 @@ function __wbg_get_imports() {
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
+        return ret;
+    };
+    imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
+        // Cast intrinsic for `F64 -> Externref`.
+        const ret = arg0;
         return ret;
     };
     imports.wbg.__wbindgen_init_externref_table = function() {
