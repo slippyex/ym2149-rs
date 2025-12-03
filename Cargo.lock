@@ -6063,6 +6063,15 @@ name = "ym2149-common"
 version = "0.7.0"
 
 [[package]]
+name = "ym2149-gist-replayer"
+version = "0.7.0"
+dependencies = [
+ "cpal",
+ "parking_lot",
+ "ym2149",
+]
+
+[[package]]
 name = "ym2149-replayer-cli"
 version = "0.7.0"
 dependencies = [
@@ -6085,14 +6094,6 @@ dependencies = [
  "thiserror 1.0.69",
  "ym2149",
  "ym2149-common",
-]
-
-[[package]]
-name = "ym2149-gist-replayer"
-version = "0.6.1"
-dependencies = [
- "parking_lot",
- "ym2149",
 ]
 
 [[package]]

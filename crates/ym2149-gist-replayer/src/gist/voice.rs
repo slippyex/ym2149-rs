@@ -55,6 +55,7 @@ pub struct Voice {
 }
 
 impl Voice {
+    #[allow(clippy::wrong_self_convention)] // Naming matches original GIST driver semantics
     pub fn from_sound(&mut self, tpl: &GistSound, pitch: i16, priority: i16, volume: Option<i16>) {
         // Copy sound parameters
         self.freq = tpl.initial_freq;

@@ -9,12 +9,14 @@
 //! cargo run --example player -- <file.snd>
 //! ```
 
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use parking_lot::Mutex;
 use std::env;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use ym2149::{AudioDevice, RingBuffer, StreamConfig};
-use ym2149_gist_replayer::{GistPlayer, GistSound, TICK_RATE};
+use ym2149_gist_replayer::{GistPlayer, GistSound};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -42,125 +44,71 @@ fn main() {
     println!("\n╔══════════════════════════════════════════════════════════╗");
     println!("║            GIST PSG Sound Player (YM2149)                ║");
     println!("╚══════════════════════════════════════════════════════════╝\n");
-    println!("▶ Playing {}", sound_label);
+    println!("Playing: {}", sound_label);
     println!(
-        "   Duration: {} ticks = {:.2} seconds",
+        "Duration: {} ticks = {:.2} seconds",
         sound.duration,
         GistPlayer::sound_duration_seconds(&sound)
     );
-    println!(
-        "   Tone: {} ({})",
-        sound.initial_freq,
-        if sound.initial_freq >= 0 {
-            "enabled"
-        } else {
-            "disabled"
-        }
-    );
-    println!(
-        "   Noise: {} ({})",
-        sound.initial_noise_freq,
-        if sound.initial_noise_freq >= 0 {
-            "enabled"
-        } else {
-            "disabled"
-        }
-    );
-    println!(
-        "   Volume: {}, vol_phase: {}",
-        sound.initial_volume, sound.vol_phase
-    );
-    println!(
-        "   Vol envelope: attack={:08X}, decay={:08X}, sustain={:08X}, release={:08X}",
-        sound.vol_attack as u32,
-        sound.vol_decay as u32,
-        sound.vol_sustain as u32,
-        sound.vol_release as u32
-    );
-    println!(
-        "   Vol LFO: limit={:08X}, step={:08X}, delay={}",
-        sound.vol_lfo_limit as u32, sound.vol_lfo_step as u32, sound.vol_lfo_delay
-    );
-    println!("   Freq phase: {}", sound.freq_env_phase);
-    println!(
-        "   Freq envelope: attack={:08X}, attack_target={:08X}",
-        sound.freq_attack as u32, sound.freq_attack_target as u32
-    );
-    println!(
-        "   Freq LFO: limit={:08X}, step={:08X}, delay={}",
-        sound.freq_lfo_limit as u32, sound.freq_lfo_step as u32, sound.freq_lfo_delay
-    );
     println!();
-    println!("Setting up audio device...\n");
 
-    // Setup audio streaming
-    let config = StreamConfig::default();
-    let buffer: Arc<parking_lot::lock_api::Mutex<parking_lot::RawMutex, RingBuffer>> = Arc::new(
-        parking_lot::Mutex::new(RingBuffer::new(config.ring_buffer_size).unwrap()),
-    );
+    // Setup audio with cpal
+    let host = cpal::default_host();
+    let device = match host.default_output_device() {
+        Some(d) => d,
+        None => {
+            eprintln!("No audio output device available");
+            return;
+        }
+    };
 
-    let audio_device =
-        match AudioDevice::new(config.sample_rate, config.channels, Arc::clone(&buffer)) {
-            Ok(device) => device,
-            Err(e) => {
-                eprintln!("Failed to initialize audio device: {}", e);
-                eprintln!("Make sure your audio system is working.");
-                return;
-            }
-        };
+    let config = device.default_output_config().unwrap();
+    let sample_rate = config.sample_rate().0;
 
-    // Create player with matching sample rate
-    let mut player = GistPlayer::with_sample_rate(config.sample_rate as u32);
+    // Create player
+    let player = Arc::new(Mutex::new(GistPlayer::with_sample_rate(sample_rate)));
+    let player_clone = Arc::clone(&player);
+    let finished = Arc::new(AtomicBool::new(false));
+    let finished_clone = Arc::clone(&finished);
 
     // Start sound
-    if player.play_sound(&sound, None, None).is_none() {
-        eprintln!("Failed to start GIST sound");
-        return;
-    }
-
-    println!("Playing at {}Hz tick rate...\n", TICK_RATE);
-
-    let tail_samples = (config.sample_rate / 2) as usize; // 500ms tail after sound ends
-    let mut samples_buffer = vec![0.0f32; 512];
-
-    // Play sound
-    while player.is_playing() {
-        player.generate_samples_into(&mut samples_buffer);
-
-        // Write to ring buffer, waiting if buffer is full
-        loop {
-            let written = buffer.lock().write(&samples_buffer);
-            if written == samples_buffer.len() {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(5));
+    {
+        let mut p = player.lock();
+        if p.play_sound(&sound, None, None).is_none() {
+            eprintln!("Failed to start GIST sound");
+            return;
         }
     }
 
-    // Play tail silence so the sound fades out properly
-    let mut remaining_tail = tail_samples;
-    while remaining_tail > 0 {
-        let to_generate = remaining_tail.min(512);
-        player.generate_samples_into(&mut samples_buffer[..to_generate]);
+    // Build audio stream
+    let stream = device
+        .build_output_stream(
+            &config.into(),
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                let mut p = player_clone.lock();
+                if p.is_playing() {
+                    p.generate_samples_into(data);
+                } else {
+                    data.fill(0.0);
+                    finished_clone.store(true, Ordering::Relaxed);
+                }
+            },
+            |err| eprintln!("Audio error: {}", err),
+            None,
+        )
+        .unwrap();
 
-        loop {
-            let written = buffer.lock().write(&samples_buffer[..to_generate]);
-            if written == to_generate {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        remaining_tail -= to_generate;
+    stream.play().unwrap();
+
+    // Wait for playback to finish
+    while !finished.load(Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_millis(50));
     }
 
-    // Wait for audio buffer to drain completely
-    while !buffer.lock().is_empty() {
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    // Short tail for fade-out
+    std::thread::sleep(Duration::from_millis(100));
 
-    println!("✓ Done.\n");
-
-    drop(audio_device);
+    println!("Done.\n");
 }
 
 fn print_usage() {
@@ -170,8 +118,6 @@ fn print_usage() {
     println!();
     println!("Arguments:");
     println!("  file.snd  - Path to a GIST .snd sound effect file");
-    println!();
-    println!("GIST sounds are played at 200Hz (Atari ST Timer C rate).");
     println!();
     println!("Example sound files can be found in: examples/gist/");
 }

@@ -1,3 +1,9 @@
+// Allow clippy lints that conflict with the 68000 assembly port structure.
+// This code intentionally mirrors the original gistdrvr.s control flow.
+#![allow(clippy::collapsible_else_if)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::manual_clamp)]
+
 //! GIST Sound Driver - Cycle-accurate port from gistdrvr.s
 //!
 //! # Overview

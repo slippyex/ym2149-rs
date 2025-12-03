@@ -36,7 +36,7 @@ Explore how classic sound chips work. The codebase is documented, tested, and de
 |---------|-------------|
 | **Cycle-Accurate Core** | Precise emulation of all PSG features — envelopes, noise, mixer, SID voice, Sync Buzzer, and digi-drum effects |
 | **Multi-PSG Emulation** | Run multiple YM2149 chips in parallel — natively supported via Arkos Tracker format for authentic dual/triple-chip music |
-| **Six Format Replayers** | YM (1-6), YMT1/YMT2, GIST, Arkos Tracker (.aks), ZXAY/EMUL (.ay), and SNDH with full 68000 CPU emulation |
+| **Seven Format Replayers** | YM (1-6), YMT1/YMT2, GIST (.snd), Arkos Tracker (.aks), ZXAY/EMUL (.ay), and SNDH with full 68000 CPU emulation |
 | **Zero-Compromise Bevy Integration** | Not a wrapper around C code — pure Rust from chip to speaker |
 | **Runs Everywhere** | CLI, native apps, WASM browser player, Bevy games — same codebase |
 | **Production-Ready** | 165+ tests, documented APIs, real-world demoscene fixtures |
@@ -51,6 +51,7 @@ Explore how classic sound chips work. The codebase is documented, tested, and de
 | `ym2149-arkos-replayer` | [![ym2149-arkos-replayer](https://img.shields.io/crates/v/ym2149-arkos-replayer.svg?label=ym2149-arkos-replayer)](https://crates.io/crates/ym2149-arkos-replayer) | [![ym2149-arkos-replayer docs](https://docs.rs/ym2149-arkos-replayer/badge.svg)](https://docs.rs/ym2149-arkos-replayer) |
 | `ym2149-ay-replayer` | [![ym2149-ay-replayer](https://img.shields.io/crates/v/ym2149-ay-replayer.svg?label=ym2149-ay-replayer)](https://crates.io/crates/ym2149-ay-replayer) | [![ym2149-ay-replayer docs](https://docs.rs/ym2149-ay-replayer/badge.svg)](https://docs.rs/ym2149-ay-replayer) |
 | `ym2149-sndh-replayer` | [![ym2149-sndh-replayer](https://img.shields.io/crates/v/ym2149-sndh-replayer.svg?label=ym2149-sndh-replayer)](https://crates.io/crates/ym2149-sndh-replayer) | [![ym2149-sndh-replayer docs](https://docs.rs/ym2149-sndh-replayer/badge.svg)](https://docs.rs/ym2149-sndh-replayer) |
+| `ym2149-gist-replayer` | [![ym2149-gist-replayer](https://img.shields.io/crates/v/ym2149-gist-replayer.svg?label=ym2149-gist-replayer)](https://crates.io/crates/ym2149-gist-replayer) | [![ym2149-gist-replayer docs](https://docs.rs/ym2149-gist-replayer/badge.svg)](https://docs.rs/ym2149-gist-replayer) |
 | `bevy_ym2149` | [![bevy_ym2149](https://img.shields.io/crates/v/bevy_ym2149.svg?label=bevy_ym2149)](https://crates.io/crates/bevy_ym2149) | [![bevy_ym2149 docs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149) |
 | `bevy_ym2149_viz` | [![bevy_ym2149_viz](https://img.shields.io/crates/v/bevy_ym2149_viz.svg?label=bevy_ym2149_viz)](https://crates.io/crates/bevy_ym2149_viz) | [![bevy_ym2149_viz docs](https://docs.rs/bevy_ym2149_viz/badge.svg)](https://docs.rs/bevy_ym2149_viz) |
 | `ym2149-bevy` | [![ym2149-bevy](https://img.shields.io/crates/v/ym2149-bevy.svg?label=ym2149-bevy)](https://crates.io/crates/ym2149-bevy) | – |
@@ -105,6 +106,7 @@ Try it live: **[slippyex.github.io/ym2149-rs](https://slippyex.github.io/ym2149-
 | [`ym2149-arkos-replayer`](crates/ym2149-arkos-replayer) | Arkos Tracker 2/3 (.aks) parser and native multi-PSG player (pure Rust) | [crates.io/crates/ym2149-arkos-replayer](https://crates.io/crates/ym2149-arkos-replayer) | [docs.rs/ym2149-arkos-replayer](https://docs.rs/ym2149-arkos-replayer) |
 | [`ym2149-ay-replayer`](crates/ym2149-ay-replayer) | ZXAY/EMUL AY file parser with integrated Z80 replayer | [crates.io/crates/ym2149-ay-replayer](https://crates.io/crates/ym2149-ay-replayer) | [docs.rs/ym2149-ay-replayer](https://docs.rs/ym2149-ay-replayer) |
 | [`ym2149-sndh-replayer`](crates/ym2149-sndh-replayer) | SNDH (Atari ST) player with 68000 CPU + MFP timer + STE DAC emulation | [crates.io/crates/ym2149-sndh-replayer](https://crates.io/crates/ym2149-sndh-replayer) | [docs.rs/ym2149-sndh-replayer](https://docs.rs/ym2149-sndh-replayer) |
+| [`ym2149-gist-replayer`](crates/ym2149-gist-replayer) | GIST sound effect parser and multi-voice player (Atari ST) | [crates.io/crates/ym2149-gist-replayer](https://crates.io/crates/ym2149-gist-replayer) | [docs.rs/ym2149-gist-replayer](https://docs.rs/ym2149-gist-replayer) |
 | [`bevy_ym2149`](crates/bevy_ym2149) | Bevy audio plugin (playback, playlists, diagnostics, audio bridge) | [crates.io/crates/bevy_ym2149](https://crates.io/crates/bevy_ym2149) | [docs.rs/bevy_ym2149](https://docs.rs/bevy_ym2149) |
 | [`bevy_ym2149_viz`](crates/bevy_ym2149_viz) | Optional visualization systems & UI builders | [crates.io/crates/bevy_ym2149_viz](https://crates.io/crates/bevy_ym2149_viz) | [docs.rs/bevy_ym2149_viz](https://docs.rs/bevy_ym2149_viz) |
 | [`bevy_ym2149_examples`](crates/bevy_ym2149_examples) | Runnable Bevy demos (basic, advanced, crossfade, feature showcase, demoscene, playlist UI) | Workspace-only | [crates/bevy_ym2149_examples/README.md](crates/bevy_ym2149_examples/README.md) |
@@ -180,6 +182,9 @@ cargo run -p ym2149-replayer-cli -- examples/ym/ND-Toxygene.ym
 
 # Play SNDH files from the Atari ST demoscene
 cargo run -p ym2149-replayer-cli -- examples/sndh/Mad_Max/Buzzer.sndh
+
+# Play GIST sound effects (.snd)
+cargo run -p ym2149-gist-replayer --example player -- examples/gist/alien.snd
 
 # Interactive chip demo with audio output
 cargo run --example chip_demo -p ym2149 --features streaming
@@ -288,6 +293,7 @@ ym2149-rs/
 │   ├── ym2149-arkos-replayer/  # Arkos Tracker (.aks) parser/player
 │   ├── ym2149-ay-replayer/     # ZXAY/EMUL parser + Z80 runner (ZX-only; CPC AY rejected)
 │   ├── ym2149-sndh-replayer/   # SNDH player with 68000 CPU + MFP timer + STE DAC emulation
+│   ├── ym2149-gist-replayer/   # GIST sound effect parser and multi-voice player
 │   ├── ym2149-replayer-cli/    # Terminal streamer/exporter built on the replayers
 │   ├── ym2149-wasm/            # WASM bindings + browser demo
 │   ├── bevy_ym2149/            # Bevy plugin (playback, playlists, crossfade, diagnostics)

@@ -14,11 +14,11 @@ categories = ["multimedia::audio", "parsing"]
 
 [dependencies]
 # Core YM2149 emulation
-ym2149 = { path = "../ym2149-core", version = "0.6", default-features = false }
+ym2149 = { path = "../ym2149-core", version = "0.7", default-features = false }
 
 [dev-dependencies]
 # For the player example
-ym2149 = { path = "../ym2149-core", version = "0.6", features = ["streaming"] }
+cpal = "0.15"
 parking_lot = { workspace = true }
 
 [features]

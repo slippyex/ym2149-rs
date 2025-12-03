@@ -40,7 +40,7 @@
 use crate::gist::TICK_RATE;
 use crate::gist::driver::GistDriver;
 use crate::gist::gist_sound::GistSound;
-use ym2149::Ym2149;
+use ym2149::{Ym2149, Ym2149Backend};
 
 /// Default output sample rate in Hz.
 /// 44100 Hz is the standard CD-quality sample rate.
