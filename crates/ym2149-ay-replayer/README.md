@@ -36,9 +36,9 @@ runs the embedded Z80 player inside a pure Rust environment powered by
 
 ```toml
 [dependencies]
-ym2149-ay-replayer = "0.6.1"
+ym2149-ay-replayer = "0.7"
 # Optional but common when you plan to pipe the samples into the rest of the stack
-ym2149 = "0.6.1"
+ym2149 = "0.7"
 ```
 
 ```rust
@@ -71,7 +71,7 @@ rips should be played in a full emulator instead.
 ### When to use it
 
 - Integrate `.ay` playback into tooling alongside `.ym` and `.aks` files
-- Feed AY songs through the CLI (`ym2149-ym-replayer-cli`), Bevy plugin,
+- Feed AY songs through the CLI (`ym2149-replayer-cli`), Bevy plugin,
   or wasm demo without branching per format
 - Inspect AY headers / block layouts when writing conversion pipelines
 
@@ -91,7 +91,7 @@ playback position helpers.
 
 ## Relationship to the Workspace
 
-- **CLI (`ym2149-ym-replayer-cli`)**: file detection now routes `.ym`,
+- **CLI (`ym2149-replayer-cli`)**: file detection now routes `.ym`,
   `.aks`, and `.ay` to the correct player, reusing the same streaming
   + visualization stack.
 - **Bevy (`bevy_ym2149`)**: `YmSongPlayer` gained an `Ay` variant so

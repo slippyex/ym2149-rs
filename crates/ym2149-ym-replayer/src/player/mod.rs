@@ -3,6 +3,7 @@
 //! Handles playback of YM music files including frame sequencing,
 //! VBL synchronization, cycle counting, and timing control.
 
+mod chiptune_player;
 pub mod cycle_counter;
 pub mod effects_manager;
 /// High-level wrapper around [`EffectsManager`] that tracks active effect state.
@@ -20,13 +21,14 @@ pub mod vbl_sync;
 mod ym6;
 pub mod ym_player;
 
+pub use chiptune_player::Ym6Metadata;
 pub use cycle_counter::CycleCounter;
 pub use effects_manager::EffectsManager;
 pub use effects_pipeline::EffectsPipeline;
 pub use format_profile::{FormatMode, FormatProfile, create_profile};
 pub use frame_sequencer::{AdvanceResult, FrameSequencer};
 pub use vbl_sync::VblSync;
-pub use ym_player::{Player, Ym6Player, load_song};
+pub use ym_player::{Player, Ym6Player, YmPlayer, YmPlayerGeneric, load_song, load_song_with_rate};
 pub use ym6::{LoadSummary, Ym6Info, YmFileFormat};
 
 use crate::Result;
@@ -69,16 +71,8 @@ impl Default for TimingConfig {
     }
 }
 
-/// Playback state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlaybackState {
-    /// Stopped
-    Stopped,
-    /// Currently playing
-    Playing,
-    /// Paused
-    Paused,
-}
+// Re-export PlaybackState from ym2149-common to avoid duplication
+pub use ym2149_common::PlaybackState;
 
 /// Simple playback controller trait for future expansion
 pub trait PlaybackController {

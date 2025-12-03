@@ -1,3 +1,5 @@
+//! Bevy systems for updating YM2149 visualization UI elements.
+
 use crate::components::*;
 use crate::helpers::{
     format_freq_label, format_note_label, frequency_to_note, get_channel_period,
@@ -6,10 +8,11 @@ use crate::helpers::{
 use crate::uniforms::{OscilloscopeUniform, SpectrumUniform};
 use bevy::prelude::*;
 use bevy::ui::ComputedNode;
-use bevy_ym2149::OscilloscopeBuffer;
 use bevy_ym2149::playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+use bevy_ym2149::{ChipStateSnapshot, OscilloscopeBuffer};
 use std::array::from_fn;
 use std::f32::consts::PI;
+use ym2149::Ym2149Backend;
 
 // Oscilloscope rendering constants
 const OSC_MARGIN: f32 = 6.0;
@@ -21,7 +24,11 @@ const COLOR_DIM_HIGH: f32 = 0.65;
 const COLOR_FADE_LOW: f32 = 0.2;
 const COLOR_FADE_MID: f32 = 0.45;
 const COLOR_FADE_HIGH: f32 = 0.55;
+const SPECTRUM_ATTACK: f32 = 0.55;
+const SPECTRUM_DECAY: f32 = 0.75;
+const MAX_HEADROOM: f32 = 1.35;
 
+/// Update song title and artist text from the current playback.
 pub fn update_song_info(
     playbacks: Query<&Ym2149Playback>,
     mut song_display: Query<&mut Text, With<SongInfoDisplay>>,
@@ -46,6 +53,7 @@ pub fn update_song_info(
     }
 }
 
+/// Update playback status text (state, frame, volume, buffer fill).
 pub fn update_status_display(
     playbacks: Query<&Ym2149Playback>,
     mut status_display: Query<&mut Text, With<PlaybackStatusDisplay>>,
@@ -79,6 +87,7 @@ pub fn update_status_display(
     }
 }
 
+/// Update per-channel note and frequency labels from current PSG state.
 #[allow(clippy::type_complexity)]
 pub fn update_detailed_channel_display(
     playbacks: Query<&Ym2149Playback>,
@@ -92,7 +101,9 @@ pub fn update_detailed_channel_display(
         && let Some(player) = playback.player_handle()
     {
         let player_locked = player.read();
-        let chip = player_locked.get_chip();
+        let Some(chip) = player_locked.chip() else {
+            return;
+        };
         let regs = chip.dump_registers();
 
         let period_a = get_channel_period(regs[0], regs[1]);
@@ -150,6 +161,7 @@ pub fn update_detailed_channel_display(
     }
 }
 
+/// Update song progress bar and loop status labels.
 #[allow(clippy::type_complexity)]
 pub fn update_song_progress(
     playbacks: Query<&Ym2149Playback>,
@@ -190,9 +202,11 @@ pub fn update_song_progress(
     }
 }
 
+/// Update oscilloscope waveform points, heads, spectrum bars, and channel badges.
 #[allow(clippy::type_complexity)]
 pub fn update_oscilloscope(
     oscilloscope_buffer: Res<OscilloscopeBuffer>,
+    chip_state: Option<Res<ChipStateSnapshot>>,
     osc_nodes: Query<&ComputedNode, With<Oscilloscope>>,
     mut osc_uniform: ResMut<OscilloscopeUniform>,
     mut spectrum_uniform: ResMut<SpectrumUniform>,
@@ -209,6 +223,8 @@ pub fn update_oscilloscope(
         return;
     }
 
+    let chip_state = chip_state.map(|s| s.clone()).unwrap_or_default();
+    let channel_states = chip_state.channel_states;
     let display_points = OSCILLOSCOPE_RESOLUTION;
     let window_len = sample_len.min(display_points);
     if window_len == 0 {
@@ -265,8 +281,8 @@ pub fn update_oscilloscope(
     }
 
     let mut channel_span = [1.0f32; 3];
-    let mut channel_rms = [0.0f32; 3];
     let mut channel_latest = [0.0f32; 3];
+    let mut channel_rms = [0.0f32; 3];
     for ch in 0..3 {
         let mut max_val: f32 = 0.0;
         let mut sum_sq: f32 = 0.0;
@@ -276,8 +292,8 @@ pub fn update_oscilloscope(
             sum_sq += val * val;
         }
         channel_span[ch] = max_val.max(0.0001);
-        channel_rms[ch] = (sum_sq / sample_count_f32.max(1.0)).sqrt();
         channel_latest[ch] = smoothed_samples[ch].last().copied().unwrap_or_default();
+        channel_rms[ch] = (sum_sq / sample_count_f32.max(1.0)).sqrt();
     }
 
     let mut channel_scales = [half_height - margin; 3];
@@ -287,6 +303,14 @@ pub fn update_oscilloscope(
 
     let point_span = display_points.saturating_sub(1).max(1) as f32;
     let width_limit = (canvas_width - 2.0).max(0.0);
+
+    // Pull previous spectrum for decay-based animation.
+    let mut previous_spectrum = [[0.0f32; 16]; 3];
+    if spectrum_uniform.0.len() == 3 {
+        for (idx, prev) in spectrum_uniform.0.iter().take(3).enumerate() {
+            previous_spectrum[idx] = *prev;
+        }
+    }
 
     let mut spectrum = [[0.0f32; 16]; 3];
     for (ch, channel_spectrum) in spectrum.iter_mut().enumerate() {
@@ -301,7 +325,35 @@ pub fn update_oscilloscope(
             }
             let magnitude =
                 (sum_cos * sum_cos + sum_sin * sum_sin).sqrt() / sample_count_f32.max(1.0);
-            *magnitude_slot = magnitude;
+            let prev = previous_spectrum[ch][bin];
+            *magnitude_slot = prev * SPECTRUM_DECAY + magnitude * SPECTRUM_ATTACK;
+        }
+    }
+
+    // Highlight envelope/noise with a small lift on the dominant band.
+    for (ch, channel_state) in channel_states.channels.iter().enumerate() {
+        let level = channel_state
+            .amplitude_normalized
+            .max(channel_rms[ch].min(1.0) * 0.8);
+        if level > 0.0 {
+            if let Some(freq) = channel_state.frequency_hz {
+                let dominant_bin = ((freq.log2() - 5.3).clamp(0.0, 4.0) / 4.0 * 15.0)
+                    .round()
+                    .clamp(0.0, 15.0) as usize;
+                spectrum[ch][dominant_bin] = (spectrum[ch][dominant_bin] + level * 0.6).min(1.0);
+                if dominant_bin > 0 {
+                    spectrum[ch][dominant_bin - 1] =
+                        (spectrum[ch][dominant_bin - 1] + level * 0.35).min(1.0);
+                }
+                if dominant_bin < 15 {
+                    spectrum[ch][dominant_bin + 1] =
+                        (spectrum[ch][dominant_bin + 1] + level * 0.35).min(1.0);
+                }
+            } else if channel_state.noise_enabled {
+                spectrum[ch][4] = (spectrum[ch][4] + level * 0.4).min(1.0);
+                spectrum[ch][9] = (spectrum[ch][9] + level * 0.35).min(1.0);
+                spectrum[ch][13] = (spectrum[ch][13] + level * 0.25).min(1.0);
+            }
         }
     }
 
@@ -318,10 +370,9 @@ pub fn update_oscilloscope(
 
     let mut channel_max_mag = [1e-6f32; 3];
     for (ch, channel_spectrum) in spectrum.iter().enumerate() {
-        channel_max_mag[ch] = channel_spectrum
-            .iter()
-            .copied()
-            .fold(1e-6, |acc, val| acc.max(val));
+        let prev_max = previous_spectrum[ch].iter().copied().fold(1e-4, f32::max);
+        let current_max = channel_spectrum.iter().copied().fold(1e-4, f32::max);
+        channel_max_mag[ch] = (prev_max * 0.7 + current_max * 0.3).max(1e-3);
     }
 
     spectrum_uniform.0.clear();
@@ -385,7 +436,7 @@ pub fn update_oscilloscope(
         let base = BASE_COLORS[ch];
         let magnitude = spectrum[ch][bar.bin];
         let norm = if channel_max_mag[ch] > 1e-6 {
-            (magnitude / channel_max_mag[ch]).clamp(0.0, 1.0)
+            (magnitude / (channel_max_mag[ch] * MAX_HEADROOM)).clamp(0.0, 1.0)
         } else {
             0.0
         };
@@ -406,7 +457,10 @@ pub fn update_oscilloscope(
         let ch = badge.channel.min(2);
         match badge.kind {
             BadgeKind::Amplitude => {
-                let ratio = (channel_rms[ch] / channel_span[ch]).clamp(0.0, 1.0);
+                let level = channel_states.channels[ch]
+                    .amplitude_normalized
+                    .max((channel_rms[ch] / channel_span[ch]).clamp(0.0, 1.0) * 0.7);
+                let ratio = level.clamp(0.0, 1.0);
                 node.width = Val::Px(36.0 * ratio.max(0.05));
                 let base = BASE_COLORS[ch];
                 let brightness = 0.4 + ratio * 0.6;

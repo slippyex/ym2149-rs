@@ -48,8 +48,8 @@ pub struct PsgBank {
     chips: Vec<Ym2149>,
     /// Clock frequency for each PSG (in Hz)
     frequencies: Vec<u32>,
-    /// Number of PSGs in the bank
-    count: usize,
+    /// Scratch buffer reused between calls to avoid per-call allocations
+    scratch: Vec<f32>,
 }
 
 impl PsgBank {
@@ -85,7 +85,7 @@ impl PsgBank {
         Self {
             chips,
             frequencies,
-            count,
+            scratch: Vec::new(),
         }
     }
 
@@ -122,7 +122,6 @@ impl PsgBank {
             "PSG bank must have at least one chip"
         );
 
-        let count = frequencies.len();
         let chips = frequencies
             .iter()
             .map(|&freq| Ym2149::with_clocks(freq, DEFAULT_SAMPLE_RATE))
@@ -131,20 +130,20 @@ impl PsgBank {
         Self {
             chips,
             frequencies,
-            count,
+            scratch: Vec::new(),
         }
     }
 
     /// Returns the number of PSG chips in this bank.
     #[inline]
     pub fn psg_count(&self) -> usize {
-        self.count
+        self.chips.len()
     }
 
     /// Returns the total number of channels (PSG count × 3).
     #[inline]
     pub fn channel_count(&self) -> usize {
-        self.count * 3
+        self.psg_count() * 3
     }
 
     /// Gets the clock frequency for a specific PSG.
@@ -253,23 +252,22 @@ impl PsgBank {
     /// bank.generate_samples_interleaved(&mut buffer);
     /// ```
     pub fn generate_samples_interleaved(&mut self, buffer: &mut [f32]) {
-        // Clear buffer
-        for sample in buffer.iter_mut() {
-            *sample = 0.0;
+        buffer.fill(0.0);
+        if self.scratch.len() < buffer.len() {
+            self.scratch.resize(buffer.len(), 0.0);
         }
-
-        let mut temp = vec![0.0f32; buffer.len()];
+        let scratch = &mut self.scratch[..buffer.len()];
 
         // Mix all PSGs into the buffer
         for chip in &mut self.chips {
-            chip.generate_samples_into(&mut temp);
-            for (out, sample) in buffer.iter_mut().zip(&temp) {
+            chip.generate_samples_into(scratch);
+            for (out, sample) in buffer.iter_mut().zip(scratch.iter()) {
                 *out += *sample;
             }
         }
 
         // Normalize by PSG count to prevent clipping
-        let scale = 1.0 / self.count as f32;
+        let scale = 1.0 / self.psg_count() as f32;
         for sample in buffer.iter_mut() {
             *sample *= scale;
         }
@@ -304,7 +302,7 @@ impl PsgBank {
     pub fn generate_samples_separate(&mut self, buffers: &mut [&mut [f32]]) {
         assert_eq!(
             buffers.len(),
-            self.count,
+            self.psg_count(),
             "Buffer count must match PSG count"
         );
 

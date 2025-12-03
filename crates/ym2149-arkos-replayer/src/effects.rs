@@ -71,20 +71,6 @@ impl EffectType {
         }
     }
 
-    /// Check if this is a trailing effect (applied continuously)
-    pub fn is_trailing(self) -> bool {
-        matches!(
-            self,
-            Self::VolumeIn
-                | Self::VolumeOut
-                | Self::PitchUp
-                | Self::FastPitchUp
-                | Self::PitchDown
-                | Self::FastPitchDown
-                | Self::PitchGlide
-        )
-    }
-
     /// Number of hex digits used to encode this effect in legacy formats
     pub fn digit_count(self) -> u8 {
         match self {
@@ -267,24 +253,6 @@ impl GlideState {
         self.active = false;
         self.speed.reset();
     }
-
-    /// Check if glide reached goal
-    pub fn check_reached(&self, current_period: u16) -> bool {
-        if !self.active {
-            return false;
-        }
-
-        if current_period == self.goal_period {
-            return true;
-        }
-
-        // Check for overshoot
-        if self.period_increasing {
-            current_period > self.goal_period
-        } else {
-            current_period < self.goal_period
-        }
-    }
 }
 
 #[cfg(test)]
@@ -318,18 +286,5 @@ mod tests {
         pitch.pitch_up(0x0100); // -1 per tick
         pitch.apply_slide();
         assert_eq!(pitch.get(), -1);
-    }
-
-    #[test]
-    fn test_glide_check_reached() {
-        let mut glide = GlideState {
-            speed: FixedPoint::from_digits(0x10),
-            ..Default::default()
-        };
-        glide.start(100, 200, 0);
-
-        assert!(!glide.check_reached(150));
-        assert!(glide.check_reached(200));
-        assert!(glide.check_reached(201)); // Overshoot
     }
 }

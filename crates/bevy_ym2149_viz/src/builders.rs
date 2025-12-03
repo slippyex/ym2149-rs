@@ -1,3 +1,8 @@
+//! Builder functions for creating YM2149 visualization UI widgets.
+//!
+//! Use these helpers to spawn pre-configured UI hierarchies for displaying
+//! playback status, oscilloscope waveforms, and channel information.
+
 use crate::components::*;
 use crate::helpers::{format_freq_label, format_note_label};
 use bevy::prelude::*;
@@ -21,6 +26,9 @@ const GRID_COLOR_MID: Color = Color::srgba(0.12, 0.18, 0.2, 0.6);
 const GRID_COLOR_DIM: Color = Color::srgba(0.12, 0.18, 0.2, 0.32);
 const CHANNEL_LABEL_COLOR: Color = Color::srgb(0.74, 0.82, 0.9);
 
+/// Create a combined status bar with song info on the left and playback status on the right.
+///
+/// Returns the root entity of the status display.
 pub fn create_status_display(commands: &mut Commands) -> Entity {
     commands
         .spawn((
@@ -58,6 +66,9 @@ pub fn create_status_display(commands: &mut Commands) -> Entity {
         .id()
 }
 
+/// Create a standalone song info display showing title and artist.
+///
+/// Returns the text entity.
 pub fn create_song_info_display(commands: &mut Commands) -> Entity {
     commands
         .spawn((
@@ -73,6 +84,9 @@ pub fn create_song_info_display(commands: &mut Commands) -> Entity {
         .id()
 }
 
+/// Create a multi-line text display showing detailed channel state (registers, volumes, etc).
+///
+/// Returns the text entity.
 pub fn create_detailed_channel_display(commands: &mut Commands) -> Entity {
     commands
         .spawn((
@@ -89,6 +103,10 @@ pub fn create_detailed_channel_display(commands: &mut Commands) -> Entity {
         .id()
 }
 
+/// Create an oscilloscope widget showing real-time waveforms for all three channels.
+///
+/// Includes a grid background, per-channel waveform layers, and amplitude badges.
+/// Returns the root panel entity.
 pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
     const CHANNEL_COLOR_RGB: [Vec3; 3] = [
         Vec3::new(1.0, 0.4, 0.4),
@@ -338,6 +356,9 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
         .id()
 }
 
+/// Create a channel visualization panel with progress bar, note labels, and spectrum bars.
+///
+/// Returns the entity IDs of the individual channel column containers.
 pub fn create_channel_visualization(commands: &mut Commands, num_channels: usize) -> Vec<Entity> {
     let container_id = commands
         .spawn((

@@ -190,18 +190,18 @@ fn load_metadata(path: &str) -> (String, String) {
     static EMBEDDED: OnceLock<EmbeddedAssetReader> = OnceLock::new();
     let reader = EMBEDDED.get_or_init(EmbeddedAssetReader::preloaded);
 
-    if let Ok(data) = reader.load_path_sync(Path::new(path)) {
-        if let Some(info) = decode_metadata(data.0) {
-            return info;
-        }
+    if let Ok(data) = reader.load_path_sync(Path::new(path))
+        && let Some(info) = decode_metadata(data.0)
+    {
+        return info;
     }
 
     // Fallback to reading from disk (useful during development with hot assets)
     let disk_path = format!("{}/{}", ASSET_BASE, path);
-    if let Ok(bytes) = std::fs::read(disk_path) {
-        if let Some(info) = decode_metadata(&bytes) {
-            return info;
-        }
+    if let Ok(bytes) = std::fs::read(disk_path)
+        && let Some(info) = decode_metadata(&bytes)
+    {
+        return info;
     }
 
     ("Unknown title".to_string(), "Unknown author".to_string())

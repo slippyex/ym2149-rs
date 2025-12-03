@@ -15,13 +15,14 @@ graph TB
         BEVY_VIZ["bevy_ym2149_viz<br/>Visualization Components"]
         BEVY["bevy_ym2149<br/>Bevy Audio Plugin"]
         WASM["ym2149-wasm<br/>WASM/Browser"]
-        CLI["ym2149-ym-replayer-cli<br/>CLI / Export"]
+        CLI["ym2149-replayer-cli<br/>CLI / Export"]
     end
 
     subgraph "Layer 3: Playback Engines"
         REPLAYER["ym2149-ym-replayer<br/>YM Parser & Player"]
         ARKOS["ym2149-arkos-replayer<br/>AKS Parser & Player"]
         AY["ym2149-ay-replayer<br/>ZXAY/EMUL Parser & Player"]
+        SNDH["ym2149-sndh-replayer<br/>SNDH + 68000 Emulation"]
     end
 
     subgraph "Layer 2: Chip Backends"
@@ -39,12 +40,16 @@ graph TB
     BEVY --> REPLAYER
     BEVY --> ARKOS
     BEVY --> AY
+    BEVY --> SNDH
     WASM --> REPLAYER
     WASM --> ARKOS
     WASM --> AY
+    WASM --> SNDH
     CLI --> REPLAYER
     CLI --> ARKOS
     CLI --> AY
+    CLI --> SNDH
+    SNDH --> YM2149
     REPLAYER --> YM2149
     REPLAYER -.optional.-> SOFTSYNTH
     ARKOS --> YM2149
@@ -59,14 +64,15 @@ graph TB
 |-------|-------|---------|------------|-------|
 | **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation (clk/8, 32-step vols/env) | `Ym2149`, `Ym2149Backend`, streaming helpers | Used by every higher layer |
 | **ym2149-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` | Optional backend prototype |
-| **ym2149-ym-replayer** | 3 | YM file parsing and playback | `Ym6Player`, `load_song()` | Powers CLI/Bevy/WASM YM playback |
+| **ym2149-ym-replayer** | 3 | YM file parsing and playback | `YmPlayer`, `load_song()` | Powers CLI/Bevy/WASM YM playback |
 | **ym2149-arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Supports multi-chip Arkos rips |
 | **ym2149-ay-replayer** | 3 | Project AY ZXAY/EMUL parsing + Z80 replayer | `AyPlayer`, `load_ay()` | ZX-only; CPC AY files rejected (firmware unsupported) |
-| **bevy_ym2149** | 4 | Bevy audio plugin with YM/AKS/AY players | `Ym2149Plugin`, `YmSongPlayer` | Handles streaming & hot-reload |
+| **ym2149-sndh-replayer** | 3 | SNDH (Atari ST) parser + 68000/MFP/STE-DAC emulation | `SndhPlayer`, `load_sndh()` | Native 68000 code execution via m68000 crate |
+| **bevy_ym2149** | 4 | Bevy audio plugin with YM/AKS/AY/SNDH players | `Ym2149Plugin`, `YmSongPlayer` | Handles streaming & hot-reload |
 | **bevy_ym2149_viz** | 4 | Visualization systems (scope, spectrum, UI) | Visualization ECS systems | Consumed by example scenes |
 | **bevy_ym2149_examples** | 4 | Runnable Bevy demos | Example scenes | Demonstrates plugin usage |
-| **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | Auto-detects YM/AKS/AY (CPC AY disabled) |
-| **ym2149-ym-replayer-cli** | 4 | Terminal streaming/export CLI | `main.rs` | Streams YM/AKS/ZX-AY (CPC AY rejected with warning) |
+| **ym2149-wasm** | 4 | WebAssembly bindings & browser player | `Ym2149Player` (wasm-bindgen API) | Auto-detects YM/AKS/AY/SNDH (CPC AY disabled) |
+| **ym2149-replayer-cli** | 4 | Terminal streaming/export CLI | `main.rs` | Streams YM/AKS/ZX-AY/SNDH (CPC AY rejected with warning) |
 
 ---
 
@@ -77,7 +83,7 @@ sequenceDiagram
     participant File as YM/AKS File
     participant Loader as loader (YM/AKS)
     participant Parser as parser (YM/AKS)
-    participant Player as Ym6/Arkos Player
+    participant Player as YM/Arkos Player
     participant Chip as Backend (Ym2149/SoftSynth)
     participant Audio as Audio Device
 
@@ -134,14 +140,55 @@ sequenceDiagram
 > tables are treated as unsupported and playback stops (no ROMs are
 > bundled or emulated).
 
+### SNDH (Atari ST) Flow
+
+```mermaid
+sequenceDiagram
+    participant File as SNDH File
+    participant Parser as SNDH Parser
+    participant Machine as AtariMachine
+    participant CPU as M68000 (m68000)
+    participant MFP as MFP68901
+    participant DAC as STE DAC
+    participant PSG as YM2149
+    participant Audio as Audio Device
+
+    File->>Parser: parse header/metadata
+    Parser->>Parser: ICE! decompress if packed
+    Parser-->>Machine: upload binary to RAM
+
+    Machine->>CPU: JSR init (D0 = subsong)
+    CPU->>PSG: init registers
+    CPU->>MFP: setup timers
+
+    loop Every player tick (~50Hz)
+        Machine->>CPU: JSR play routine
+        CPU->>PSG: write YM registers
+        CPU->>MFP: timer handling
+        CPU->>DAC: DMA audio (STe only)
+    end
+
+    loop Per audio sample
+        Machine->>MFP: tick timers (IRQ dispatch)
+        Machine->>PSG: compute_next_sample()
+        Machine->>DAC: mix DMA sample (if active)
+        Machine-->>Audio: i16/f32 sample
+    end
+```
+
+> **Architecture:** SNDH files contain native 68000 machine code that must be
+> executed on an emulated Atari ST. The `ym2149-sndh-replayer` provides complete
+> machine emulation including MFP 68901 timers (for SID voice effects) and
+> STE DAC (for DMA audio). The YM2149 emulation is shared with other replayers.
+
 ---
 
-## Layer 1: Backend Trait
+## Layer 1: Backend Trait & Player Traits
 
-### Purpose
+### Chip Backend Trait
+
 Defines a common interface for all YM2149 chip implementations, enabling alternative backends.
 
-### Trait Definition
 ```rust
 pub trait Ym2149Backend: Send {
     fn new() -> Self where Self: Sized;
@@ -161,11 +208,49 @@ pub trait Ym2149Backend: Send {
 }
 ```
 
+### Player Trait Hierarchy (ym2149-common)
+
+The player traits provide a unified interface across all replayers:
+
+```rust
+// Object-safe base trait for dynamic dispatch
+pub trait ChiptunePlayerBase: Send {
+    fn play(&mut self);
+    fn pause(&mut self);
+    fn stop(&mut self);
+    fn state(&self) -> PlaybackState;
+    fn is_playing(&self) -> bool;
+    fn generate_samples_into(&mut self, buffer: &mut [f32]);
+    fn generate_samples(&mut self, count: usize) -> Vec<f32>;
+    fn sample_rate(&self) -> u32;
+    fn set_channel_mute(&mut self, channel: usize, mute: bool);
+    fn is_channel_muted(&self, channel: usize) -> bool;
+    fn playback_position(&self) -> f32;
+    fn subsong_count(&self) -> usize;
+    fn current_subsong(&self) -> usize;
+    fn set_subsong(&mut self, index: usize) -> bool;
+    fn has_subsongs(&self) -> bool;
+    fn psg_count(&self) -> usize;
+    fn channel_count(&self) -> usize;
+}
+
+// Full trait with associated Metadata type
+pub trait ChiptunePlayer: ChiptunePlayerBase {
+    type Metadata: PlaybackMetadata;
+    fn metadata(&self) -> &Self::Metadata;
+}
+```
+
+**Usage:**
+- Use `ChiptunePlayerBase` when you need trait objects (`Box<dyn ChiptunePlayerBase>`)
+- Use `ChiptunePlayer` when you need access to the specific metadata type
+
 ### Design Rationale
 - **Send bound**: Enables multi-threaded audio pipelines
-- **Associated types avoided**: Simple generic parameter for flexibility
+- **Associated types avoided in base**: Keeps `ChiptunePlayerBase` object-safe for dynamic dispatch
 - **Register-level API**: Matches hardware interface for accuracy
 - **Sample-level control**: Allows precise timing control
+- **Trait hierarchy**: Separates object-safe operations from metadata access
 
 ---
 
@@ -212,7 +297,7 @@ pub trait Ym2149Backend: Send {
 - Low-resource environments
 - Simple PSG experimentation
 
-**Note:** `SoftPlayer` has been disabled due to circular dependencies. Use `Ym6Player` with `SoftSynth` backend once generic backend support is implemented in ym2149-ym-replayer.
+**Note:** `SoftPlayer` has been disabled due to circular dependencies. Use `YmPlayer` with `SoftSynth` backend once generic backend support is implemented in ym2149-ym-replayer.
 
 ---
 
@@ -244,7 +329,6 @@ pub trait Ym2149Backend: Send {
 
 **Supported Formats:**
 - **WAV** - Uncompressed PCM audio (feature: `export-wav`)
-- **MP3** - LAME-encoded compressed audio (feature: `export-mp3`)
 
 **Features:**
 - Configurable sample rate (default: 44,100 Hz)
@@ -255,11 +339,9 @@ pub trait Ym2149Backend: Send {
 
 **Usage:**
 
-Enable export features in `Cargo.toml`:
+Enable export feature in `Cargo.toml`:
 ```toml
-ym2149-ym-replayer = { version = "0.6", features = ["export-wav"] }
-# or
-ym2149-ym-replayer = { version = "0.6", features = ["export-mp3"] }
+ym2149-ym-replayer = { version = "0.7", features = ["export-wav"] }
 ```
 
 Example code:
@@ -271,21 +353,8 @@ let (mut player, info) = load_song(&data)?;
 export_to_wav_default(&mut player, info, "output.wav")?;
 ```
 
-**Advanced Configuration:**
-```rust
-use ym2149_ym_replayer::export::{export_to_mp3_with_config, ExportConfig};
-
-let config = ExportConfig::stereo()
-    .normalize(true)
-    .fade_out(2.0); // 2-second fade out
-
-export_to_mp3_with_config(&mut player, "output.mp3", info, 192, config)?;
-```
-
 **Implementation Notes:**
 - WAV export uses pure Rust `hound` crate
-- MP3 export uses `mp3lame-encoder` (requires LAME library)
-- Both formats support custom `ExportConfig` for fine-grained control
 - Export is synchronous - blocks until rendering completes
 
 ---
@@ -347,7 +416,7 @@ ym2149-ym-replayer/src/
 ├── loader/
 │   └── mod.rs             # High-level file loading API
 ├── player/
-│   ├── ym_player.rs       # Ym6PlayerGeneric<B> implementation
+│   ├── ym_player.rs       # YmPlayerGeneric<B> implementation
 │   ├── effects_manager.rs # Effect state management
 │   ├── effects_pipeline.rs# High-level effect wrapper (SID/DigiDrum state)
 │   ├── format_profile.rs  # FormatMode trait & adapters (YM2/YM5/YM6)
@@ -360,7 +429,6 @@ ym2149-ym-replayer/src/
 │   └── tracker_player.rs  # YMT tracker support
 ├── export/                # Audio export (feature-gated)
 │   ├── wav.rs             # WAV export (feature: export-wav)
-│   ├── mp3.rs             # MP3 export (feature: export-mp3)
 │   └── mod.rs             # ExportConfig, normalize_samples, apply_fade_out
 └── lib.rs                 # Public exports
 ```
@@ -398,12 +466,15 @@ generate_samples(count):
 
 ### Generic Backend with Hardware-Specific Effects (ym2149-ym-replayer)
 
-**Implementation:** `Ym6Player` is implemented as a generic struct `Ym6PlayerGeneric<B: Ym2149Backend>`, allowing it to work with any backend that implements the `Ym2149Backend` trait.
+**Implementation:** `YmPlayer` is implemented as a generic struct `YmPlayerGeneric<B: Ym2149Backend>`, allowing it to work with any backend that implements the `Ym2149Backend` trait.
 
-**Type Alias:** The commonly-used `Ym6Player` is a type alias for the concrete hardware-accurate implementation:
+**Type Aliases:** The commonly-used `YmPlayer` is the concrete hardware-accurate implementation. `Ym6Player` remains as a legacy alias for downstream crates:
 ```rust
-pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
+pub type YmPlayer = YmPlayerGeneric<Ym2149>;
+pub type Ym6Player = YmPlayer;
 ```
+
+**Timing configuration:** `YmPlayer` defaults to 44.1 kHz @ 2 MHz master clock, but you can override the host rate via `YmPlayer::with_sample_rate` or `set_sample_rate`. YM5/YM6 headers update the master clock automatically via `apply_master_clock`, so non-2MHz rips (or downsampled hosts) stay accurate.
 
 **Hardware Effects Support:** YM6 format includes special Atari ST hardware effects that require methods beyond the standard `Ym2149Backend` trait:
 - `set_mixer_overrides()` - Used by SID voice and Sync Buzzer effects
@@ -500,7 +571,7 @@ AudioSink requests samples
     ↓
 Ym2149Decoder::next() (Iterator trait)
     ↓
-Ym6Player::generate_samples(882) [batch for efficiency]
+YmPlayer::generate_samples(882) [batch for efficiency]
     ↓
 Ym2149::clock() × 882 [one VBL frame @ 50Hz]
     ↓
@@ -551,21 +622,22 @@ Ym2149VizPlugin
 
 ### CLI / Streaming
 
-`ym2149-ym-replayer-cli` wraps `ym2149-ym-replayer` + `ym2149-arkos-replayer` under a single
-`RealtimeChip` trait. It wires streaming audio (`ym2149::streaming`),
-terminal visualization, and hotkeys for muting, color filter toggles,
-and tracker metadata.
+`ym2149-replayer-cli` wraps `ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`,
+and `ym2149-sndh-replayer` under a single `RealtimeChip` trait. It wires streaming audio
+(`ym2149::streaming`), terminal visualization, and hotkeys for muting, color filter toggles,
+and tracker metadata. File format is auto-detected based on extension and header magic.
 
 ### WebAssembly Player
 
 `ym2149-wasm` exposes `Ym2149Player` to JavaScript via wasm-bindgen. A
 `BrowserSongPlayer` enum automatically decides whether the loaded bytes
-should be handled by `ym2149-ym-replayer` (YM dumps) or `ym2149-arkos-replayer`
-(`.aks`), ensuring the same API works for both ecosystems. The `pkg/`
+should be handled by `ym2149-ym-replayer` (YM dumps), `ym2149-arkos-replayer`
+(`.aks`), `ym2149-ay-replayer` (`.ay`), or `ym2149-sndh-replayer` (`.sndh`),
+ensuring the same API works for all format ecosystems. The `pkg/`
 artifacts live next to `crates/ym2149-wasm/examples`, and
 `scripts/build-wasm-examples.sh` rebuilds/copies them so `simple-player.html`
-always serves the latest bundle. Sample AKS/YM files used in wasm demos
-and tests live in [`examples/arkos`](examples/arkos).
+always serves the latest bundle. Sample AKS/YM/SNDH files used in wasm demos
+and tests live in [`examples/`](examples/).
 
 ---
 
@@ -584,7 +656,7 @@ Read file bytes
     ↓
 Ym2149AudioSource::new(data)
     ├─ ym2149_ym_replayer::load_song(&data)
-    ├─ Create Ym6Player with Ym2149 chip
+    ├─ Create YmPlayer with Ym2149 chip
     ├─ Call player.play() to start
     └─ Return Asset
     ↓
@@ -616,7 +688,7 @@ Calls Ym2149Decoder::next() (Iterator trait)
     ↓
 Decoder checks if buffer needs refill
     ↓
-Ym6Player::generate_samples(882) [one VBL frame]
+YmPlayer::generate_samples(882) [one VBL frame]
     ├─ For current frame:
     │   ├─ Load frame registers
     │   ├─ Decode effects
@@ -634,7 +706,7 @@ Repeat until track ends or stopped
 ### Pattern 4: Effect Application (Replayer → Core)
 
 ```
-Ym6Player decodes effect commands
+YmPlayer decodes effect commands
     ↓
 EffectsManager::update()
     ↓
@@ -662,12 +734,13 @@ bevy_ym2149_examples
         │
         └──────────────────────────────────────────────┐
                                                        ↓
-ym2149-ym-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
+ym2149-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer }
 
-ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer }
+ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer }
 
 ym2149-arkos-replayer ──→ ym2149-core
 ym2149-ay-replayer ─────→ ym2149-core + iz80
+ym2149-sndh-replayer ───→ ym2149-core + m68000
 ym2149-ym-replayer ────→ ym2149-core
 ym2149-softsynth (opt) ─→ ym2149-core (implements Ym2149Backend)
 ```
@@ -689,7 +762,7 @@ When `streaming` feature is enabled in CLI tools:
 ```mermaid
 graph LR
     subgraph "Producer Thread"
-        GEN["Sample Generator<br/>Ym6Player"]
+        GEN["Sample Generator<br/>YmPlayer"]
     end
 
     subgraph "Lock-Free Channel"
@@ -728,7 +801,7 @@ graph LR
     end
 
     subgraph "Shared State"
-        PLAYER["Shared Player<br/>Ym6Player / ArkosPlayer"]
+        PLAYER["Shared Player<br/>YmPlayer / ArkosPlayer"]
         CF["Crossfade Player<br/>optional"]
     end
 
@@ -743,13 +816,13 @@ graph LR
 - **Pull-based:** Audio thread requests samples on-demand (no ring buffer needed)
 - **Bevy-managed:** Audio device lifecycle handled by Bevy
 - **Asset integration:** YM/AKS files loaded via Bevy's asset system (auto-detected)
-- **Shared player:** `Arc<RwLock<Ym6Player>>` or `ArkosBevyPlayer` (using `parking_lot::RwLock`) allows concurrent read access for audio thread and visualization systems with reduced lock contention
+- **Shared player:** `Arc<RwLock<YmPlayer>>` or `ArkosBevyPlayer` (using `parking_lot::RwLock`) allows concurrent read access for audio thread and visualization systems with reduced lock contention
 - **Lower latency:** No intermediate buffer, direct sample generation
 - **Crossfade deck:** Secondary decoder/player spun up during crossfades and mixed with the primary deck
 
 ### Why RwLock Instead of Mutex?
 
-**Decision:** Use `parking_lot::RwLock<Ym6Player>` instead of `Mutex<Ym6Player>`
+**Decision:** Use `parking_lot::RwLock<YmPlayer>` instead of `Mutex<YmPlayer>`
 
 **Rationale:**
 - **Multiple readers:** RwLock allows many concurrent readers (diagnostics, visualization, UI systems)
@@ -785,7 +858,6 @@ let samples = player.generate_samples(882);
 | `digidrums` | - | ✓ (default) | - | Mad Max digi-drums |
 | `softsynth` | - | ✓ (optional) | - | Experimental synthesizer backend |
 | `export-wav` | - | ✓ (optional) | - | WAV file export (uses `hound`) |
-| `export-mp3` | - | ✓ (optional) | - | MP3 file export (requires LAME) |
 
 ---
 
@@ -796,7 +868,7 @@ let samples = player.generate_samples(882);
 | Component | Memory Usage |
 |-----------|--------------|
 | Ym2149 chip instance | ~1 KB |
-| Ym6Player (3-minute song) | ~1-2 MB (frames) |
+| YmPlayer (3-minute song) | ~1-2 MB (frames) |
 | RingBuffer (16KB) | 16 KB |
 | Bevy playback component | ~2 KB + player |
 
@@ -821,8 +893,8 @@ Code using deprecated modules must update imports:
 use ym2149::replayer::Ym6Player;
 use ym2149::ym_loader;
 
-// v0.6 (recommended)
-use ym2149_ym_replayer::Ym6Player;
+// v0.7 (recommended)
+use ym2149_ym_replayer::YmPlayer;
 use ym2149_ym_replayer::loader;
 ```
 

@@ -3,11 +3,11 @@
 //! This module handles frame position tracking, loop point management,
 //! and state transitions during YM file playback.
 
-use super::{AdvanceResult, PlaybackController, PlaybackState, ym_player::Ym6PlayerGeneric};
+use super::{AdvanceResult, PlaybackController, PlaybackState, ym_player::YmPlayerGeneric};
 use crate::Result;
 use ym2149::Ym2149Backend;
 
-impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> YmPlayerGeneric<B> {
     /// Set loop frame for looping playback
     pub fn set_loop_frame(&mut self, frame: usize) {
         if let Some(tracker) = self.tracker.as_mut() {
@@ -97,8 +97,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         }
     }
 
-    /// Get playback position as a percentage (0.0 to 1.0)
-    pub fn get_playback_position(&self) -> f32 {
+    /// Get playback position as a percentage (0.0 to 1.0).
+    pub fn playback_position(&self) -> f32 {
         if self.is_tracker_mode {
             if let Some(tracker) = &self.tracker {
                 if tracker.total_frames == 0 {
@@ -135,7 +135,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     }
 }
 
-impl<B: Ym2149Backend> PlaybackController for Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> PlaybackController for YmPlayerGeneric<B> {
     fn play(&mut self) -> Result<()> {
         if self.is_tracker_mode {
             if let Some(tracker) = self.tracker.as_mut() {

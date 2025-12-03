@@ -51,3 +51,15 @@ pub enum AyError {
         msg: String,
     },
 }
+
+impl From<String> for AyError {
+    fn from(s: String) -> Self {
+        AyError::InvalidData { msg: s }
+    }
+}
+
+impl From<&str> for AyError {
+    fn from(s: &str) -> Self {
+        AyError::InvalidData { msg: s.to_string() }
+    }
+}

@@ -1,7 +1,13 @@
+//! Software synthesizer using the YM2149 chip emulator.
+//!
+//! This module provides direct register-level access to the YM2149 for creating
+//! custom sound effects and programmatic audio.
+
 use crate::audio_source::Ym2149Metadata;
 use crate::playback::{PlaybackMetrics, YM2149_SAMPLE_RATE};
 use parking_lot::RwLock;
 use std::sync::Arc;
+use ym2149::Ym2149Backend;
 use ym2149::ym2149::Ym2149;
 use ym2149_ym_replayer::PlaybackState as YmPlaybackState;
 
@@ -14,22 +20,27 @@ struct SynthState {
 }
 
 /// Thread-safe controller that allows direct writes to the PSG registers.
+///
+/// Use this to create custom sound effects by writing directly to YM2149 registers.
 #[derive(Clone, Default)]
 pub struct YmSynthController {
     inner: Arc<RwLock<SynthState>>,
 }
 
 impl YmSynthController {
+    /// Create a new synth controller with default (silent) state.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Reset all registers to zero (silence).
     pub fn reset(&self) {
         let mut state = self.inner.write();
         state.registers = [0; 16];
         state.dirty_mask = u16::MAX;
     }
 
+    /// Write a value to a YM2149 register (0x00-0x0F).
     pub fn write_register(&self, addr: u8, value: u8) {
         let index = (addr & 0x0F) as usize;
         let mut state = self.inner.write();
@@ -39,6 +50,7 @@ impl YmSynthController {
         }
     }
 
+    /// Set the tone period for a channel (0-2). Lower values = higher pitch.
     pub fn set_tone_period(&self, channel: usize, period: u16) {
         if channel > 2 {
             return;
@@ -49,14 +61,19 @@ impl YmSynthController {
         self.write_register((channel * 2 + 1) as u8, hi);
     }
 
+    /// Set the noise generator period (0-31). Lower values = higher pitch noise.
     pub fn set_noise_period(&self, period: u8) {
         self.write_register(0x06, period & 0x1F);
     }
 
+    /// Set the mixer control register.
+    ///
+    /// Bits: `xxNNNTTT` where N=noise enable (inverted), T=tone enable (inverted).
     pub fn set_mixer(&self, mask: u8) {
         self.write_register(0x07, mask & 0x3F);
     }
 
+    /// Set volume for a channel (0-15, or 16+ for envelope mode).
     pub fn set_volume(&self, channel: usize, volume: u8) {
         if channel > 2 {
             return;
@@ -65,11 +82,13 @@ impl YmSynthController {
         self.write_register(reg, volume & 0x1F);
     }
 
+    /// Set the envelope period. Lower values = faster envelope.
     pub fn set_envelope_period(&self, period: u16) {
         self.write_register(0x0B, (period & 0xFF) as u8);
         self.write_register(0x0C, ((period >> 8) & 0xFF) as u8);
     }
 
+    /// Trigger an envelope with the specified shape (0-15).
     pub fn trigger_envelope(&self, shape: u8) {
         self.write_register(0x0D, shape & 0x0F);
     }
@@ -118,6 +137,7 @@ pub struct YmSynthPlayer {
 }
 
 impl YmSynthPlayer {
+    /// Create a new synth player driven by the given controller.
     pub fn new(controller: YmSynthController) -> Self {
         let metadata = Ym2149Metadata {
             title: "Live PSG Synth".into(),
@@ -142,50 +162,62 @@ impl YmSynthPlayer {
         }
     }
 
+    /// Returns a clone of the controller for external register writes.
     pub fn controller(&self) -> YmSynthController {
         self.shared.controller.clone()
     }
 
+    /// Returns metadata describing this synth source.
     pub fn metadata(&self) -> &Ym2149Metadata {
         &self.metadata
     }
 
+    /// Returns playback metrics (frame count and samples per frame).
     pub fn metrics(&self) -> PlaybackMetrics {
         self.metrics
     }
 
+    /// Start or resume audio generation.
     pub fn play(&mut self) {
         self.state = YmPlaybackState::Playing;
     }
 
+    /// Pause audio generation (outputs silence).
     pub fn pause(&mut self) {
         self.state = YmPlaybackState::Paused;
     }
 
+    /// Stop audio generation and reset state.
     pub fn stop(&mut self) {
         self.state = YmPlaybackState::Stopped;
     }
 
+    /// Returns the current playback state.
     pub fn state(&self) -> YmPlaybackState {
         self.state
     }
 
+    /// Returns the current frame index (increments every samples_per_frame samples).
     pub fn current_frame(&self) -> usize {
         self.frame_index
     }
 
-    pub fn samples_per_frame_value(&self) -> u32 {
+    /// Returns the number of samples generated per frame.
+    pub fn samples_per_frame(&self) -> u32 {
         self.samples_per_frame
     }
 
+    /// Returns an immutable reference to the underlying YM2149 chip.
     pub fn chip(&self) -> &Ym2149 {
         &self.chip
     }
 
+    /// Returns a mutable reference to the underlying YM2149 chip.
     pub fn chip_mut(&mut self) -> &mut Ym2149 {
         &mut self.chip
     }
 
+    /// Generate a single audio sample, advancing the emulator state.
     pub fn generate_sample(&mut self) -> f32 {
         if self.state != YmPlaybackState::Playing {
             return 0.0;
@@ -196,6 +228,7 @@ impl YmSynthPlayer {
         self.chip.get_sample()
     }
 
+    /// Fill a buffer with audio samples, advancing the emulator state.
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         if self.state != YmPlaybackState::Playing {
             buffer.fill(0.0);

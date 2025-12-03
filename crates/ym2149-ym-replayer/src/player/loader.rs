@@ -3,12 +3,14 @@
 //! This module handles loading of all YM file formats (YM2-YM6, YMT1/YMT2),
 //! format detection, decompression, and initialization of playback state.
 
+use std::sync::Arc;
+
 use super::format_profile::{FormatMode, create_profile};
 use super::madmax_digidrums::MADMAX_SAMPLES;
 use super::tracker_player::{
     TrackerFormat, TrackerLine, TrackerSample, TrackerState, deinterleave_tracker_bytes,
 };
-use super::ym_player::Ym6PlayerGeneric;
+use super::ym_player::YmPlayerGeneric;
 use super::ym6::{LoadSummary, PlaybackStateInit, Ym6Info, YmFileFormat};
 use super::ym6::{read_be_u16, read_be_u32, read_c_string};
 use crate::parser::FormatParser;
@@ -16,7 +18,7 @@ use crate::parser::{ATTR_LOOP_MODE, ATTR_STREAM_INTERLEAVED, Ym6Parser, YmParser
 use crate::{Result, compression};
 use ym2149::Ym2149Backend;
 
-impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> YmPlayerGeneric<B> {
     /// Load YM data (compressed or raw) and initialize playback state.
     pub fn load_data(&mut self, data: &[u8]) -> Result<LoadSummary> {
         let decompressed = compression::decompress_if_needed(data)?;
@@ -89,6 +91,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             master_clock: header.master_clock,
         };
 
+        self.apply_master_clock(info.master_clock);
         let loop_point = self.normalize_loop_point(header.loop_frame, frames.len(), false);
 
         self.initialize_playback_state(PlaybackStateInit {
@@ -123,6 +126,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             master_clock: header.master_clock.unwrap_or(2_000_000),
         };
 
+        self.apply_master_clock(info.master_clock);
         let loop_point = self.normalize_loop_point(header.loop_frame, frames.len(), false);
 
         self.initialize_playback_state(PlaybackStateInit {
@@ -159,6 +163,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             master_clock: 2_000_000,
         };
 
+        self.apply_master_clock(info.master_clock);
         self.initialize_playback_state(PlaybackStateInit {
             frames,
             loop_frame: loop_point,
@@ -206,6 +211,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             master_clock: 2_000_000,
         };
 
+        self.apply_master_clock(info.master_clock);
         self.initialize_playback_state(PlaybackStateInit {
             frames,
             loop_frame: loop_point,
@@ -245,9 +251,9 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             frames.push(frame);
         }
 
-        let digidrums: Vec<Vec<u8>> = MADMAX_SAMPLES
+        let digidrums: Vec<Arc<[u8]>> = MADMAX_SAMPLES
             .iter()
-            .map(|sample| sample.to_vec())
+            .map(|sample| Arc::from(sample.to_vec()))
             .collect();
 
         let info = Ym6Info {
@@ -260,6 +266,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             master_clock: 2_000_000,
         };
 
+        self.apply_master_clock(info.master_clock);
         self.initialize_playback_state(PlaybackStateInit {
             frames,
             loop_frame: None,
@@ -279,6 +286,9 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         data: &[u8],
         format: TrackerFormat,
     ) -> Result<()> {
+        // Tracker files do not encode master clock; assume ST default.
+        self.apply_master_clock(2_000_000);
+
         if data.len() < 12 {
             return Err("Tracker file too small".into());
         }
@@ -388,7 +398,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             freq_shift,
             samples,
             lines,
-            44_100,
+            self.sample_rate,
         );
         tracker_state.reset();
 
@@ -399,7 +409,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         self.digidrums.clear();
         self.sequencer.set_loop_point(None);
         let tracker_samples_per_frame = if player_rate > 0 {
-            (44_100 / u32::from(player_rate)).max(1)
+            (self.sample_rate / u32::from(player_rate)).max(1)
         } else {
             1
         };
@@ -407,7 +417,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             .set_samples_per_frame(tracker_samples_per_frame);
         self.attributes = attributes;
         self.effects.reset();
-        self.effects.set_sample_rate(44_100);
+        self.effects.set_sample_rate(self.sample_rate);
 
         let info = Ym6Info {
             song_name,
@@ -418,6 +428,11 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             loop_frame: loop_frame_raw as u32,
             master_clock: 2_000_000,
         };
+
+        // Update cached metadata for ChiptunePlayer trait
+        let loop_point = if loop_enabled { Some(loop_frame) } else { None };
+        self.cached_metadata = super::chiptune_player::Ym6Metadata::from_info(&info, loop_point);
+
         self.info = Some(info);
 
         Ok(())
@@ -427,7 +442,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     ///
     /// # Frame Rate Assumptions
     /// This method assumes **50Hz PAL frame rate** and calculates timing for 44.1kHz output:
-    /// - Samples per frame: 882 (44100 / 50)
+    /// - Samples per frame: sample_rate / frame_rate
     /// - Duration calculation: uses 50Hz as default
     /// - No metadata is set
     ///
@@ -439,7 +454,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     ///
     /// # For Custom Frame Rates
     /// If your frames use a different frame rate, call `set_samples_per_frame()` after loading
-    /// with the correct value (e.g., 735 for 60Hz NTSC: `44100 / 60`).
+    /// with the correct value (e.g., 735 for 60Hz NTSC at 44.1kHz: `44100 / 60`).
     ///
     /// # Example
     /// ```ignore
@@ -477,6 +492,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             info,
         } = params;
 
+        let frame_count = frames.len();
+
         // Set frame data and reset playback position
         self.sequencer.load_frames(frames);
         self.format_profile = create_profile(format_mode);
@@ -490,6 +507,13 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         self.digidrums = digidrums;
         self.attributes = attributes;
 
+        // Update cached metadata for ChiptunePlayer trait
+        self.cached_metadata = if let Some(ref info) = info {
+            super::chiptune_player::Ym6Metadata::from_info(info, loop_frame)
+        } else {
+            super::chiptune_player::Ym6Metadata::from_frames(frame_count, loop_frame)
+        };
+
         // Set metadata
         self.info = info;
 
@@ -499,8 +523,8 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
         // Enable ST-style color filter for authentic tone
         self.chip.set_color_filter(true);
 
-        // Reset effects manager with correct sample rate (44.1kHz)
-        self.effects.set_sample_rate(44_100);
+        // Reset effects manager with correct sample rate
+        self.effects.set_sample_rate(self.sample_rate);
 
         // Reset first frame pre-load flag
         self.first_frame_pre_loaded = false;
@@ -563,18 +587,18 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     /// Calculate samples per frame based on frame rate and sample rate
     ///
     /// # Assumptions
-    /// - Output sample rate: 44.1kHz (industry standard for audio)
+    /// - Output sample rate: configurable (defaults to 44.1kHz)
     /// - Frame synchronization: uses integer division (frame-quantized timing)
     ///
     /// # Timing Precision
     /// This method uses integer division, which matches the original YM2149 hardware's
     /// frame-based timing model. The result is precise for standard frame rates:
-    /// - 50Hz (PAL):   44100 / 50 = 882.0 samples/frame (exact)
-    /// - 60Hz (NTSC):  44100 / 60 = 735.0 samples/frame (exact)
-    /// - 100Hz:        44100 / 100 = 441.0 samples/frame (exact)
+    /// - 50Hz (PAL):   sample_rate / 50 samples/frame (exact for 44.1kHz)
+    /// - 60Hz (NTSC):  sample_rate / 60 samples/frame (exact for 44.1kHz)
+    /// - 100Hz:        sample_rate / 100 samples/frame (exact for 44.1kHz)
     ///
     /// For non-standard rates (e.g., 59Hz), the fractional part is discarded:
-    /// - 59Hz: 44100 / 59 = 747 samples/frame (loses 0.457 samples/frame ≈ 36ms over 1 hour)
+    /// - 59Hz @44.1kHz: 44100 / 59 = 747 samples/frame (loses 0.457 samples/frame ≈ 36ms over 1 hour)
     ///
     /// For authentic YM2149 emulation, this frame-quantized behavior is correct,
     /// as the original hardware synchronized output to VBL interrupts, not sample clocks.
@@ -582,12 +606,11 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     /// # Panics
     /// Returns 0 if frame_rate is 0 (guard against division by zero).
     pub(in crate::player) fn calculate_samples_per_frame(&self, frame_rate: u16) -> u32 {
-        const SAMPLE_RATE: u32 = 44100;
         let rate = if frame_rate > 0 {
             frame_rate as u32
         } else {
             50
         };
-        SAMPLE_RATE / rate
+        self.sample_rate / rate
     }
 }

@@ -88,6 +88,7 @@ pub trait Ym2149Backend: Send {
     fn clock(&mut self);
     fn get_sample(&self) -> f32;
     fn generate_samples(&mut self, count: usize) -> Vec<f32>;
+    fn generate_samples_with_channels(&mut self, buffer: &mut [f32], channels: &mut [[f32; 3]]);
     fn get_channel_outputs(&self) -> (f32, f32, f32);
     fn set_channel_mute(&mut self, channel: usize, mute: bool);
     fn is_channel_muted(&self, channel: usize) -> bool;
@@ -105,7 +106,7 @@ pub trait Ym2149Backend: Send {
 - `SoftSynth` (ym2149-softsynth crate): Experimental synthesizer (effects ignored via default trait methods)
 
 **Generic Player:**
-The `Ym6PlayerGeneric<B: Ym2149Backend>` in ym2149-ym-replayer uses this trait, allowing any backend. The type alias `Ym6Player = Ym6PlayerGeneric<Ym2149>` provides the common hardware-accurate default.
+The `YmPlayerGeneric<B: Ym2149Backend>` in ym2149-ym-replayer uses this trait, allowing any backend. The type alias `YmPlayer = YmPlayerGeneric<Ym2149>` provides the common hardware-accurate default (with `Ym6Player` kept as a legacy alias).
 
 ---
 
@@ -131,7 +132,7 @@ pub fn trigger_envelope(&mut self, shape: u8)
 ```
 Immediate envelope restart, used by Sync Buzzer effect.
 
-**Note**: These methods are hardware-specific and provided as trait default methods (no-ops) in the `Ym2149Backend` trait. The `Ym6PlayerGeneric<B: Ym2149Backend>` player is generic over backends, but YM6 hardware effects are only available when using the concrete `Ym2149` implementation (via the `Ym6Player` type alias or explicitly as `Ym6PlayerGeneric<Ym2149>`). Alternative backends like `SoftSynth` will compile but ignore these hardware-specific features.
+**Note**: These methods are hardware-specific and provided as trait default methods (no-ops) in the `Ym2149Backend` trait. The `YmPlayerGeneric<B: Ym2149Backend>` player is generic over backends, but YM6 hardware effects are only available when using the concrete `Ym2149` implementation (via the `Ym6Player` type alias or explicitly as `YmPlayerGeneric<Ym2149>`). Alternative backends like `SoftSynth` will compile but ignore these hardware-specific features.
 
 ---
 
@@ -164,19 +165,46 @@ Low CPU overhead enables playback on modest systems.
 ym2149-core/src/
 ├── ym2149/
 │   ├── chip.rs           # Main Ym2149 implementation (clk/8, envelopes, noise, mixer)
-│   ├── constants.rs      # Volume table, helpers
+│   ├── tables.rs         # Hardware lookup tables (ENV_DATA, SHAPE_TO_ENV, YM2149_LOG_LEVELS)
 │   └── psg_bank.rs       # Multi-PSG bank (Arkos/PlayCity)
 ├── backend.rs            # Ym2149Backend trait
-├── streaming/            # Optional audio output (feature: streaming)
-├── visualization/        # Terminal UI helpers (feature: visualization)
+├── channel_state.rs      # ChannelStates for extracting visualization data from registers
+├── util.rs               # Register math helpers (period/frequency conversion)
 └── lib.rs                # Public API exports
 ```
 
+### Key Data Structures (tables.rs)
+
+- **ENV_DATA**: 10 envelope shapes × 128 steps - hardware-accurate envelope amplitude tables
+- **SHAPE_TO_ENV**: Maps R13 (4-bit shape) to one of 10 hardware envelope patterns
+- **MASKS**: Mixer bit masks for tone/noise enable per channel
+- **REG_MASK**: Valid bit masks per register (for masking writes)
+- **YM2149_LOG_LEVELS**: 32-step logarithmic DAC levels matching real hardware
+
 ---
 
-## Deprecated Modules (v0.6.0)
+## Changes in v0.7.0
 
-The following modules are deprecated and maintained only for backward compatibility. Use the new crates instead:
+### YM2149 Emulation Rewrite
+
+The YM2149 chip emulation has been completely rewritten:
+
+- **chip.rs**: New implementation with cycle-accurate 250kHz (2MHz/8) emulation
+- **tables.rs**: New file containing hardware-accurate lookup tables (replaces old constants.rs)
+- **Removed**: `empiric_dac.rs` - replaced by accurate logarithmic DAC tables
+
+### Separation of Concerns
+
+The following modules have been moved to `ym2149-replayer-cli`:
+
+- `streaming/` → Audio output now in CLI
+- `visualization/` → Terminal UI helpers now in CLI
+
+The `ym2149` crate now focuses exclusively on pure chip emulation.
+
+### Deprecated Modules (since v0.6.0)
+
+The following modules were deprecated and have been removed. Use the dedicated crates instead:
 
 - `compression/` → Use `ym2149-ym-replayer` crate
 - `ym_parser/` → Use `ym2149-ym-replayer` crate
@@ -188,5 +216,8 @@ The following modules are deprecated and maintained only for backward compatibil
 ## Related Documentation
 
 - [Workspace Architecture](../../ARCHITECTURE.md) - Overall system design
-- [Streaming Guide](../../STREAMING_GUIDE.md) - Real-time audio output details
 - [API Documentation](https://docs.rs/ym2149) - Full API reference
+
+## Credits
+
+The YM2149 emulation is based on [AtariAudio](https://github.com/arnaud-carre/sndh-player) by Arnaud Carré (Leonard/Oxygene), the reference implementation used by psgplay and other accurate Atari ST emulators.

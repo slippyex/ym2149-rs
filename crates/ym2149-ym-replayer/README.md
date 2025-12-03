@@ -8,7 +8,7 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
 
 - **YM Format Support**: YM2, YM3, YM5, YM6 file formats with LHA decompression
 - **Tracker Modes**: YMT1 and YMT2 tracker format support
-- **Format Profiles**: `FormatProfile` trait encapsulates format quirks (YM2 drum mixing, YM5 effect encoding, YM6 sentinel handling) so new formats plug in without bloating `Ym6PlayerGeneric`
+- **Format Profiles**: `FormatProfile` trait encapsulates format quirks (YM2 drum mixing, YM5 effect encoding, YM6 sentinel handling) so new formats plug in without bloating `YmPlayerGeneric`
 - **Frame Sequencer**: Dedicated `FrameSequencer` stores frames + timing and exposes seek/loop APIs
 - **Effects Pipeline**: `EffectsPipeline` wraps the low-level `EffectsManager`, tracking SID/digidrum state for visualization/metadata
 - **Hardware Effects**:
@@ -16,6 +16,7 @@ This crate provides comprehensive support for parsing and playing back YM chiptu
   - YM6 SID voice effects
   - Sync buzzer effects
 - **Backend Agnostic**: Works with any `Ym2149Backend` implementation
+- **Timing control**: Defaults to 44.1 kHz / 2 MHz but supports custom host sample rates; YM5/6 master clocks are applied automatically
 - **Optional Features**: Streaming audio output
 
 ## Install
@@ -24,7 +25,7 @@ Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ym2149-ym-replayer = "0.6.1"
+ym2149-ym-replayer = "0.7"
 ```
 
 ## Usage
@@ -32,14 +33,17 @@ ym2149-ym-replayer = "0.6.1"
 ### Basic Playback
 
 ```rust
-use ym2149_ym_replayer::{load_song, PlaybackController};
+use ym2149_ym_replayer::{load_song, ChiptunePlayer, PlaybackMetadata};
 
 let data = std::fs::read("song.ym")?;
 let (mut player, summary) = load_song(&data)?;
-player.play()?;
 
-// Generate audio samples
+// Use the unified ChiptunePlayer interface
+player.play();
 let samples = player.generate_samples(summary.samples_per_frame as usize);
+
+// Access metadata
+println!("{} by {}", player.metadata().title(), player.metadata().author());
 ```
 
 ### Loading from Files
@@ -67,7 +71,7 @@ Internally the player is split into three layers:
 
 ## Architecture
 
-This crate was extracted from `ym2149-core` v0.6.1 to provide better separation of concerns:
+This crate was extracted from `ym2149-core` to provide better separation of concerns:
 
 - **ym2149-core**: Pure YM2149 chip emulation
 - **ym2149-ym-replayer**: YM file parsing and playback (this crate)
@@ -82,8 +86,8 @@ If you were using the deprecated modules from `ym2149-core`:
 use ym2149::replayer::Ym6Player;
 use ym2149::ym_loader;
 
-// New
-use ym2149_ym_replayer::Ym6Player;
+// New (recommended)
+use ym2149_ym_replayer::YmPlayer;
 use ym2149_ym_replayer::loader;
 ```
 
@@ -95,8 +99,9 @@ use ym2149_ym_replayer::loader;
 - `digidrums`: Enable Mad Max digi-drums
 - `streaming`: Enable real-time audio output (requires `rodio`) - for CLI/standalone use; Bevy integration uses native audio
 - `export-wav`: Enable WAV file export (requires `hound`)
-- `export-mp3`: Enable MP3 file export (requires `mp3lame-encoder`)
 - `softsynth`: Workspace-only hook for experimental software synthesizer backends (requires providing your own `ym2149-softsynth` via `[patch]`)
+
+> MP3 export was removed because the LAME/Autotools toolchain is fragile across environments. Export WAV and transcode externally (e.g., `ffmpeg`).
 
 ## License
 

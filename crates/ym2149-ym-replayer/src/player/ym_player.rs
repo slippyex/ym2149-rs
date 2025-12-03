@@ -1,23 +1,26 @@
-//! YM6 File Player
+//! YM File Player
 //!
 //! Plays back YM2-YM6 format chiptune files with proper VBL synchronization.
 
+use std::sync::Arc;
+
+use super::chiptune_player::Ym6Metadata;
 use super::effects_pipeline::EffectsPipeline;
 use super::format_profile::{FormatMode, FormatProfile, create_profile};
 use super::frame_sequencer::FrameSequencer;
 use super::tracker_player::TrackerState;
 use super::ym6::{LoadSummary, Ym6Info};
-use super::{PlaybackState, VblSync};
+use super::{PlaybackState, TimingConfig, VblSync};
 use crate::Result;
 use ym2149::{Ym2149, Ym2149Backend};
 
-/// Generic YM6 File Player
+/// Generic YM File Player
 ///
 /// This player is generic over any YM2149 backend implementation, allowing flexibility
 /// in choosing between hardware-accurate emulation and experimental synthesizers.
 ///
-/// Type alias [`Ym6Player`] provides the default concrete type using hardware-accurate Ym2149.
-pub struct Ym6PlayerGeneric<B: Ym2149Backend> {
+/// Type alias [`YmPlayer`] provides the default concrete type using hardware-accurate Ym2149.
+pub struct YmPlayerGeneric<B: Ym2149Backend> {
     /// PSG chip backend
     pub(in crate::player) chip: B,
     /// VBL synchronization
@@ -28,8 +31,10 @@ pub struct Ym6PlayerGeneric<B: Ym2149Backend> {
     pub(in crate::player) sequencer: FrameSequencer,
     /// Song metadata
     pub(in crate::player) info: Option<Ym6Info>,
-    /// Digidrum sample bank (raw bytes from file)
-    pub(in crate::player) digidrums: Vec<Vec<u8>>,
+    /// Cached metadata for ChiptunePlayer trait
+    pub(in crate::player) cached_metadata: Ym6Metadata,
+    /// Digidrum sample bank (shared to avoid cloning in hot path)
+    pub(in crate::player) digidrums: Vec<Arc<[u8]>>,
     /// YM6 attributes bitfield (A_* flags)
     pub(in crate::player) attributes: u32,
     /// Format-specific behavior adapter
@@ -40,36 +45,80 @@ pub struct Ym6PlayerGeneric<B: Ym2149Backend> {
     pub(in crate::player) tracker: Option<TrackerState>,
     /// Indicates if current song uses tracker mixing path
     pub(in crate::player) is_tracker_mode: bool,
+    /// Output sample rate for playback
+    pub(in crate::player) sample_rate: u32,
+    /// PSG master clock to use for the current song
+    pub(in crate::player) master_clock: u32,
     /// Flag to track if first frame's registers have been pre-loaded
     pub(in crate::player) first_frame_pre_loaded: bool,
     /// Cache previous R13 (envelope shape) to avoid redundant resets
     pub(in crate::player) prev_r13: Option<u8>,
 }
 
-/// Concrete YM6 player using hardware-accurate Ym2149 emulation
+/// Concrete YM player using hardware-accurate Ym2149 emulation
 ///
 /// This is the default player type that provides full YM6 compatibility
 /// including special effects (SID, Sync Buzzer, DigiDrums).
-pub type Ym6Player = Ym6PlayerGeneric<Ym2149>;
+pub type YmPlayer = YmPlayerGeneric<Ym2149>;
 
-impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
-    /// Create a new YM6 player with empty song
+/// Legacy alias for backwards compatibility.
+pub type Ym6Player = YmPlayer;
+
+impl<B: Ym2149Backend> YmPlayerGeneric<B> {
+    /// Create a new YM player with empty song
     pub fn new() -> Self {
-        Ym6PlayerGeneric {
-            chip: B::new(),
-            vbl: VblSync::default(),
+        Self::with_sample_rate(44_100)
+    }
+
+    /// Create a player with a custom output sample rate.
+    pub fn with_sample_rate(sample_rate: u32) -> Self {
+        let sample_rate = sample_rate.max(1);
+        let master_clock = 2_000_000;
+        YmPlayerGeneric {
+            chip: B::with_clocks(master_clock, sample_rate),
+            vbl: VblSync::new(TimingConfig {
+                sample_rate,
+                ..TimingConfig::default()
+            }),
             state: PlaybackState::Stopped,
             sequencer: FrameSequencer::new(),
             info: None,
+            cached_metadata: Ym6Metadata::default(),
             digidrums: Vec::new(),
             attributes: 0,
             format_profile: create_profile(FormatMode::Basic),
-            effects: EffectsPipeline::new(44_100),
+            effects: EffectsPipeline::new(sample_rate),
             tracker: None,
             is_tracker_mode: false,
+            sample_rate,
+            master_clock,
             first_frame_pre_loaded: false,
             prev_r13: None,
         }
+    }
+
+    /// Update the output sample rate after construction.
+    pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        let sample_rate = sample_rate.max(1);
+        self.sample_rate = sample_rate;
+        self.chip = B::with_clocks(self.master_clock, sample_rate);
+        self.effects.set_sample_rate(sample_rate);
+        self.vbl.set_config(TimingConfig {
+            sample_rate,
+            vbl_frequency: 50.0,
+            psg_clock_frequency: self.master_clock,
+        });
+    }
+
+    /// Recreate the backend with a new master clock while preserving the current sample rate.
+    pub(in crate::player) fn apply_master_clock(&mut self, master_clock: u32) {
+        self.master_clock = master_clock;
+        self.chip = B::with_clocks(master_clock, self.sample_rate);
+        self.vbl.set_config(TimingConfig {
+            sample_rate: self.sample_rate,
+            vbl_frequency: 50.0,
+            psg_clock_frequency: master_clock,
+        });
     }
 
     /// Mute or unmute a channel (0=A,1=B,2=C)
@@ -93,7 +142,7 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
     }
 }
 
-impl<B: Ym2149Backend> Default for Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> Default for YmPlayerGeneric<B> {
     fn default() -> Self {
         Self::new()
     }
@@ -102,17 +151,24 @@ impl<B: Ym2149Backend> Default for Ym6PlayerGeneric<B> {
 /// Convenience helper to create and load a player from YM data.
 ///
 /// Uses the default hardware-accurate Ym2149 backend.
-pub fn load_song(data: &[u8]) -> Result<(Ym6Player, LoadSummary)> {
-    let mut player = Ym6Player::new();
+pub fn load_song(data: &[u8]) -> Result<(YmPlayer, LoadSummary)> {
+    let mut player = YmPlayer::new();
+    let summary = player.load_data(data)?;
+    Ok((player, summary))
+}
+
+/// Convenience helper that loads a YM song with a custom sample rate.
+pub fn load_song_with_rate(data: &[u8], sample_rate: u32) -> Result<(YmPlayer, LoadSummary)> {
+    let mut player = YmPlayer::with_sample_rate(sample_rate);
     let summary = player.load_data(data)?;
     Ok((player, summary))
 }
 
 /// Type alias preserving the legacy `Player` name.
-pub type Player = Ym6Player;
+pub type Player = YmPlayer;
 
 // Hardware-specific methods only available for the concrete Ym2149 backend
-impl Ym6Player {
+impl YmPlayer {
     /// Get mutable access to the underlying Ym2149 chip
     ///
     /// This allows direct manipulation of chip registers for advanced use cases.
@@ -269,7 +325,7 @@ mod tests {
         player.load_frames(frames);
         player.play().unwrap();
 
-        let pos = player.get_playback_position();
+        let pos = player.playback_position();
         assert!((0.0..=1.0).contains(&pos));
     }
 

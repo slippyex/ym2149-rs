@@ -3,14 +3,16 @@
 //! This module contains the performance-critical audio rendering logic,
 //! including frame register loading, effect application, and sample generation.
 
+use std::sync::Arc;
+
 use super::PlaybackState;
 use super::format_profile::FormatMode;
 use super::madmax_digidrums::MADMAX_SAMPLE_RATE_BASE;
-use super::ym_player::Ym6PlayerGeneric;
+use super::ym_player::YmPlayerGeneric;
 use crate::parser::effects::EffectCommand;
 use ym2149::Ym2149Backend;
 
-impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
+impl<B: Ym2149Backend> YmPlayerGeneric<B> {
     /// Generate the next sample and advance playback
     pub fn generate_sample(&mut self) -> f32 {
         if self.state != PlaybackState::Playing {
@@ -93,13 +95,17 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
             self.chip.write_register(0x07, mixer);
 
             let sample_idx = (regs[10] & 0x7F) as usize;
-            if let Some(sample) = self.digidrums.get(sample_idx).cloned() {
+            if let Some(sample) = self.digidrums.get(sample_idx) {
                 let timer = regs[12] as u32;
                 if timer > 0 {
                     let freq = (MADMAX_SAMPLE_RATE_BASE / 4) / timer;
                     if freq > 0 {
-                        self.effects
-                            .digidrum_start(2, Some(sample_idx as u8), freq, sample);
+                        self.effects.digidrum_start(
+                            2,
+                            Some(sample_idx as u8),
+                            freq,
+                            Arc::clone(sample),
+                        );
                     }
                 }
             }
@@ -220,8 +226,12 @@ impl<B: Ym2149Backend> Ym6PlayerGeneric<B> {
                         .map(|(idx, f)| idx != drum_idx || f != freq)
                         .unwrap_or(true);
                     if should_restart {
-                        self.effects
-                            .digidrum_start(voice, Some(drum_idx), freq, sample.clone());
+                        self.effects.digidrum_start(
+                            voice,
+                            Some(drum_idx),
+                            freq,
+                            Arc::clone(sample),
+                        );
                     }
                 }
             } else if self.effects.is_drum_active(voice) {

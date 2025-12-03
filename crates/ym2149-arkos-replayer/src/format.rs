@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use ym2149_common::MetadataFields;
 
 /// AKS song metadata
 #[derive(Debug, Clone)]
@@ -22,19 +23,43 @@ pub struct SongMetadata {
     pub modification_date: String,
 }
 
+impl MetadataFields for SongMetadata {
+    fn title(&self) -> &str {
+        &self.title
+    }
+
+    fn author(&self) -> &str {
+        if self.author.is_empty() {
+            &self.composer
+        } else {
+            &self.author
+        }
+    }
+
+    fn comments(&self) -> &str {
+        &self.comments
+    }
+
+    fn format(&self) -> &str {
+        "AKS"
+    }
+}
+
 /// PSG type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PsgType {
     /// AY-3-8910/8912
     AY,
     /// YM2149
+    #[default]
     YM,
 }
 
 /// PSG mixing output configuration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MixingOutput {
     /// ABC (normal)
+    #[default]
     ABC,
     /// ACB
     ACB,
@@ -67,18 +92,20 @@ pub struct PsgConfig {
 pub type Note = u8;
 
 /// Instrument type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InstrumentType {
     /// PSG instrument (tone/noise)
+    #[default]
     Psg,
     /// Digi-drum sample
     Digi,
 }
 
 /// Song file format (legacy Arkos Tracker 2 vs modern Arkos Tracker 3)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SongFormat {
     /// Arkos Tracker 3.x song
+    #[default]
     Modern,
     /// Arkos Tracker 2.x (legacy) song
     Legacy,
@@ -90,11 +117,12 @@ pub enum SongFormat {
 /// - Software: tone period is calculated from note + arpeggio + pitch
 /// - Hardware: hardware envelope period is used for buzzer sounds
 /// - SoftToHard/HardToSoft: one is derived from the other using ratio
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChannelLink {
     /// No software, no hardware envelope (silent or noise only)
     NoSoftwareNoHardware,
     /// Software envelope only (normal tone)
+    #[default]
     SoftwareOnly,
     /// Hardware envelope only (buzzer)
     HardwareOnly,
@@ -107,7 +135,7 @@ pub enum ChannelLink {
 }
 
 /// Instrument cell (FM synthesis parameters)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct InstrumentCell {
     /// Volume (0-15)
     pub volume: u8,
@@ -140,7 +168,7 @@ pub struct InstrumentCell {
 }
 
 /// Instrument definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Instrument {
     /// Instrument name
     pub name: String,
@@ -188,7 +216,7 @@ pub struct SampleInstrument {
 }
 
 /// Effect in a cell
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Effect {
     /// Effect index in cell
     pub index: usize,
@@ -199,7 +227,7 @@ pub struct Effect {
 }
 
 /// Cell in a track (one row)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Cell {
     /// Cell index in track
     pub index: usize,
@@ -214,7 +242,7 @@ pub struct Cell {
 }
 
 /// Track (one channel's data)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Track {
     /// Track index
     pub index: usize,
@@ -223,7 +251,7 @@ pub struct Track {
 }
 
 /// Pattern cell (maps channel to track with transposition)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PatternCell {
     /// Track number to use for this channel
     pub track_number: usize,
@@ -232,7 +260,7 @@ pub struct PatternCell {
 }
 
 /// Pattern (maps channels to tracks)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Pattern {
     /// Pattern index
     pub index: usize,
@@ -247,7 +275,7 @@ pub struct Pattern {
 }
 
 /// Position (references a pattern with height and transpositions)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Position {
     /// Pattern index to use
     pub pattern_index: usize,
@@ -262,7 +290,7 @@ pub struct Position {
 }
 
 /// A subsong within an AKS file
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Subsong {
     /// Subsong name
     pub title: String,
@@ -295,7 +323,7 @@ pub struct Subsong {
 }
 
 /// Special track cell (speed/event)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SpecialCell {
     /// Cell index (line)
     pub index: usize,
@@ -304,7 +332,7 @@ pub struct SpecialCell {
 }
 
 /// Special track definition
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SpecialTrack {
     /// Track index/number
     pub index: usize,
@@ -330,7 +358,7 @@ impl SpecialTrack {
 }
 
 /// Arpeggio table entry
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Arpeggio {
     /// Arpeggio index
     pub index: usize,
@@ -349,7 +377,7 @@ pub struct Arpeggio {
 }
 
 /// Pitch table entry
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PitchTable {
     /// Pitch table index
     pub index: usize,
@@ -368,7 +396,7 @@ pub struct PitchTable {
 }
 
 /// Complete AKS song
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AksSong {
     /// Original source format
     pub format: SongFormat,

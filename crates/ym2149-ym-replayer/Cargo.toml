@@ -14,7 +14,11 @@ categories = ["multimedia::audio", "parser-implementations"]
 
 [dependencies]
 # Core YM2149 chip emulation (backend trait only - no streaming/visualization for library)
-ym2149 = { path = "../ym2149-core", version = "0.6.1" }
+ym2149 = { path = "../ym2149-core", version = "0.7" }
+ym2149-softsynth = { path = "../ym2149-softsynth", version = "0.7", optional = true }
+
+# Common traits (PlaybackMetadata, ChiptunePlayer)
+ym2149-common = { path = "../ym2149-common", version = "0.7" }
 
 # Error handling
 thiserror.workspace = true
@@ -31,7 +35,6 @@ bitflags.workspace = true
 
 # Export dependencies (optional)
 hound = { version = "3.5", optional = true }
-mp3lame-encoder = { version = "0.2", optional = true }
 
 [dev-dependencies]
 approx.workspace = true
@@ -53,8 +56,7 @@ tracker = []
 digidrums = []
 
 # Softsynth backend hook (workspace-only; no crates.io dependency)
-softsynth = []
+softsynth = ["dep:ym2149-softsynth"]
 
 # Export functionality
 export-wav = ["dep:hound"]
-export-mp3 = ["dep:mp3lame-encoder"]

@@ -9,11 +9,14 @@
 //!
 //! Most YM files are LHA-compressed, but these parsers handle uncompressed data.
 
+use std::sync::Arc;
+
 use super::{ATTR_DRUM_4BIT, FormatParser, decode_4bit_digidrum};
 use crate::Result;
+use ym2149_common::MetadataFields;
 
 /// Type alias for full YM parse result: frames, header, metadata, digidrums
-pub type YmParseResult = (Vec<[u8; 16]>, YmHeader, YmMetadata, Vec<Vec<u8>>);
+pub type YmParseResult = (Vec<[u8; 16]>, YmHeader, YmMetadata, Vec<Arc<[u8]>>);
 
 /// Common metadata extracted from YM4/YM5 files
 #[derive(Debug, Clone)]
@@ -32,6 +35,36 @@ pub struct YmMetadata {
     /// Player/VBL frequency in Hz (YM5 only, None for YM4)
     /// Typical values: 50 Hz (PAL), 60 Hz (NTSC)
     pub player_freq: Option<u16>,
+}
+
+impl MetadataFields for YmMetadata {
+    fn title(&self) -> &str {
+        &self.song_name
+    }
+
+    fn author(&self) -> &str {
+        &self.author
+    }
+
+    fn comments(&self) -> &str {
+        &self.comment
+    }
+
+    fn format(&self) -> &str {
+        "YM"
+    }
+
+    fn frame_rate(&self) -> u32 {
+        self.player_freq.map(|f| f as u32).unwrap_or(50)
+    }
+
+    fn loop_frame(&self) -> Option<usize> {
+        if self.loop_frame > 0 {
+            Some(self.loop_frame as usize)
+        } else {
+            None
+        }
+    }
 }
 
 /// Header information for YM4/YM5 formats
@@ -78,8 +111,8 @@ impl YmParser {
             return Err("YM5 truncated in extra data section".into());
         }
 
-        // Collect digidrum samples
-        let mut digidrums: Vec<Vec<u8>> = Vec::new();
+        // Collect digidrum samples (wrap in Arc for zero-copy sharing)
+        let mut digidrums: Vec<Arc<[u8]>> = Vec::new();
         for _ in 0..header.digidrum_count {
             if offset + 4 > data.len() {
                 return Err("Incomplete YM5 digidrum size field".into());
@@ -96,11 +129,12 @@ impl YmParser {
             if offset.checked_add(sample_size).is_none() || offset + sample_size > data.len() {
                 return Err("Incomplete YM5 digidrum data".into());
             }
-            let mut sample = data[offset..offset + sample_size].to_vec();
-            if (header.attributes & ATTR_DRUM_4BIT) != 0 {
-                sample = decode_4bit_digidrum(&sample);
-            }
-            digidrums.push(sample);
+            let sample: Vec<u8> = if (header.attributes & ATTR_DRUM_4BIT) != 0 {
+                decode_4bit_digidrum(&data[offset..offset + sample_size])
+            } else {
+                data[offset..offset + sample_size].to_vec()
+            };
+            digidrums.push(Arc::from(sample));
             offset += sample_size;
         }
 

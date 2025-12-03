@@ -43,10 +43,10 @@ pub(super) fn process_pending_crossfade(
         SourceLoadResult::Ready(bytes) => bytes,
     };
 
-    let data_for_audio = Arc::new(loaded.data.clone());
-    let data_for_crossfade_source = loaded.data.clone();
+    let bytes = loaded.data;
+    let data_for_state = Arc::new(bytes.clone());
 
-    let mut load = match load_player_from_bytes(loaded.data, loaded.metadata.as_ref()) {
+    let mut load = match load_player_from_bytes(&bytes, loaded.metadata.as_ref()) {
         Ok(load) => load,
         Err(err) => {
             error!("Failed to prepare crossfade deck: {}", err);
@@ -55,17 +55,13 @@ pub(super) fn process_pending_crossfade(
         }
     };
 
-    if let Err(err) = load.player.play() {
-        error!("Failed to start crossfade playback: {}", err);
-        playback.clear_crossfade_request();
-        return;
-    }
+    load.player.play();
 
     let duration = request.duration.max(0.001);
     let player_arc = Arc::new(RwLock::new(load.player));
 
     let crossfade_audio_source = match Ym2149AudioSource::new_with_shared(
-        data_for_crossfade_source,
+        bytes,
         playback.stereo_gain.clone(),
         playback.tone_settings.clone(),
     ) {
@@ -94,7 +90,7 @@ pub(super) fn process_pending_crossfade(
         duration,
         target_index: request.target_index,
         audio_handle: crossfade_handle,
-        data: data_for_audio,
+        data: data_for_state,
         crossfade_entity: Some(crossfade_entity),
     });
     playback.clear_crossfade_request();
@@ -130,10 +126,8 @@ pub(super) fn finalize_crossfade(
         commands.entity(cf_entity).despawn();
     }
 
-    if let Some(old_player) = playback.player.take()
-        && let Err(err) = old_player.write().stop()
-    {
-        error!("Failed to stop outgoing deck: {}", err);
+    if let Some(old_player) = playback.player.take() {
+        old_player.write().stop();
     }
 
     let new_player = crossfade.player.clone();

@@ -1,84 +1,52 @@
-//! Error types for Arkos Tracker parsing and playback
+//! Error types for Arkos Tracker parsing and playback.
 
-use std::fmt;
+use thiserror::Error;
 
-/// Result type for Arkos operations
+/// Result type for Arkos operations.
 pub type Result<T> = std::result::Result<T, ArkosError>;
 
-/// Errors that can occur when loading or playing Arkos Tracker files
-#[derive(Debug)]
+/// Errors that can occur when loading or playing Arkos Tracker files.
+#[derive(Error, Debug)]
 pub enum ArkosError {
-    /// XML parsing error
+    /// XML parsing error.
+    #[error("XML parsing error: {0}")]
     XmlError(String),
 
-    /// Invalid file format
+    /// Invalid file format.
+    #[error("Invalid AKS format: {0}")]
     InvalidFormat(String),
 
-    /// Missing required element or attribute
+    /// Missing required element or attribute.
+    #[error("Missing required element: {0}")]
     MissingElement(String),
 
-    /// Invalid value for a field
+    /// Invalid value for a field.
+    #[error("Invalid value for '{field}': got '{value}', expected {expected}")]
     InvalidValue {
-        /// Field name
+        /// Field name.
         field: String,
-        /// Invalid value
+        /// Invalid value.
         value: String,
-        /// Expected format
+        /// Expected format.
         expected: String,
     },
 
-    /// Subsong index out of range
+    /// Subsong index out of range.
+    #[error("Subsong {index} out of range (0..{available})")]
     InvalidSubsong {
-        /// Requested index
+        /// Requested index.
         index: usize,
-        /// Available subsongs
+        /// Available subsongs.
         available: usize,
     },
 
-    /// PSG configuration error
+    /// PSG configuration error.
+    #[error("PSG error: {0}")]
     PsgError(String),
 
-    /// I/O error
-    IoError(std::io::Error),
-}
-
-impl fmt::Display for ArkosError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ArkosError::XmlError(msg) => write!(f, "XML parsing error: {}", msg),
-            ArkosError::InvalidFormat(msg) => write!(f, "Invalid AKS format: {}", msg),
-            ArkosError::MissingElement(elem) => write!(f, "Missing required element: {}", elem),
-            ArkosError::InvalidValue {
-                field,
-                value,
-                expected,
-            } => write!(
-                f,
-                "Invalid value for '{}': got '{}', expected {}",
-                field, value, expected
-            ),
-            ArkosError::InvalidSubsong { index, available } => {
-                write!(f, "Subsong {} out of range (0..{})", index, available)
-            }
-            ArkosError::PsgError(msg) => write!(f, "PSG error: {}", msg),
-            ArkosError::IoError(err) => write!(f, "I/O error: {}", err),
-        }
-    }
-}
-
-impl std::error::Error for ArkosError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            ArkosError::IoError(err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-impl From<std::io::Error> for ArkosError {
-    fn from(err: std::io::Error) -> Self {
-        ArkosError::IoError(err)
-    }
+    /// I/O error.
+    #[error("I/O error: {0}")]
+    IoError(#[from] std::io::Error),
 }
 
 impl From<quick_xml::Error> for ArkosError {
@@ -104,5 +72,17 @@ impl From<std::num::ParseFloatError> for ArkosError {
             value: err.to_string(),
             expected: "valid float".to_string(),
         }
+    }
+}
+
+impl From<String> for ArkosError {
+    fn from(s: String) -> Self {
+        ArkosError::InvalidFormat(s)
+    }
+}
+
+impl From<&str> for ArkosError {
+    fn from(s: &str) -> Self {
+        ArkosError::InvalidFormat(s.to_string())
     }
 }

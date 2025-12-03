@@ -1,6 +1,7 @@
 //! Z80 machine implementation with AY-3-8910 bridge.
 
 use iz80::Machine;
+use ym2149::Ym2149Backend;
 use ym2149::ym2149::Ym2149;
 
 use crate::format::AyBlock;

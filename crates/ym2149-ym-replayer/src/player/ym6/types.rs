@@ -1,6 +1,7 @@
 //! YM6 file format types
 
 use std::fmt;
+use std::sync::Arc;
 
 use super::super::format_profile::FormatMode;
 
@@ -84,7 +85,7 @@ pub(in crate::player) struct PlaybackStateInit {
     pub frames: Vec<[u8; 16]>,
     pub loop_frame: Option<usize>,
     pub samples_per_frame: u32,
-    pub digidrums: Vec<Vec<u8>>,
+    pub digidrums: Vec<Arc<[u8]>>,
     pub attributes: u32,
     pub format_mode: FormatMode,
     pub info: Option<Ym6Info>,

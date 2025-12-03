@@ -13,7 +13,12 @@ use thiserror::Error;
 pub enum BevyYm2149Error {
     /// Error reading a file from disk
     #[error("Failed to read file '{path}': {reason}")]
-    FileRead { path: String, reason: String },
+    FileRead {
+        /// Path to the file that failed to read.
+        path: String,
+        /// Reason for the failure.
+        reason: String,
+    },
 
     /// File not found
     #[error("File not found: {0}")]
@@ -115,3 +120,15 @@ impl BevyYm2149Error {
 
 /// Type alias for Result using BevyYm2149Error
 pub type Result<T> = std::result::Result<T, BevyYm2149Error>;
+
+impl From<String> for BevyYm2149Error {
+    fn from(s: String) -> Self {
+        BevyYm2149Error::Other(s)
+    }
+}
+
+impl From<&str> for BevyYm2149Error {
+    fn from(s: &str) -> Self {
+        BevyYm2149Error::Other(s.to_string())
+    }
+}

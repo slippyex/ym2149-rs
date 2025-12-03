@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use bevy::prelude::error;
 use parking_lot::RwLock;
-use ym2149_arkos_replayer::{parser::load_aks, player::ArkosPlayer};
-use ym2149_ay_replayer::{
-    AyMetadata as AyFileMetadata, AyPlaybackState as AyState, AyPlayer, CPC_UNSUPPORTED_MSG,
-};
-use ym2149_ym_replayer::{self, LoadSummary, PlaybackController, Ym6Player};
+use ym2149::Ym2149Backend;
+use ym2149_arkos_replayer::{AksSong, parser::load_aks, player::ArkosPlayer};
+use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG};
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields, SampleCache};
+use ym2149_sndh_replayer::{SndhPlayer, is_sndh_data, load_sndh};
+use ym2149_ym_replayer::{self, LoadSummary, YmPlayer};
 
 use crate::audio_source::Ym2149Metadata;
 use crate::error::BevyYm2149Error;
@@ -16,29 +17,78 @@ use crate::synth::{YmSynthController, YmSynthPlayer};
 /// Shared song player handle used throughout the plugin.
 pub type SharedSongPlayer = Arc<RwLock<YmSongPlayer>>;
 
-/// Unified song player that can handle YM or Arkos Tracker sources.
+// ============================================================================
+// BevyPlayerTrait - Common interface for all player wrappers
+// ============================================================================
+
+/// Common interface for all Bevy player wrappers.
+///
+/// This trait defines the methods that `YmSongPlayer` delegates to its variants.
+pub(crate) trait BevyPlayerTrait {
+    fn play(&mut self);
+    fn pause(&mut self);
+    fn stop(&mut self);
+    fn state(&self) -> ym2149_common::PlaybackState;
+    fn current_frame(&self) -> usize;
+    fn samples_per_frame(&self) -> u32;
+    fn generate_sample(&mut self) -> f32;
+    fn generate_samples_into(&mut self, buffer: &mut [f32]);
+    fn generate_sample_with_channels(&mut self) -> (f32, [f32; 3]);
+    fn metadata(&self) -> &Ym2149Metadata;
+    fn metrics(&self) -> Option<PlaybackMetrics>;
+    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149>;
+    fn frame_count(&self) -> usize;
+    fn subsong_count(&self) -> usize;
+    fn current_subsong(&self) -> usize;
+    fn set_subsong(&mut self, index: usize) -> bool;
+}
+
+/// Macro for delegating `YmSongPlayer` methods (with &self) to the inner player via `BevyPlayerTrait`.
+macro_rules! delegate_to_inner {
+    ($self:ident, $method:ident $(, $arg:expr)*) => {
+        match $self {
+            Self::Ym(p) => BevyPlayerTrait::$method(p.as_ref() $(, $arg)*),
+            Self::Arkos(p) => BevyPlayerTrait::$method(p.as_ref() $(, $arg)*),
+            Self::Ay(p) => BevyPlayerTrait::$method(p.as_ref() $(, $arg)*),
+            Self::Sndh(p) => BevyPlayerTrait::$method(p.as_ref() $(, $arg)*),
+            Self::Synth(p) => BevyPlayerTrait::$method(p.as_ref() $(, $arg)*),
+        }
+    };
+}
+
+/// Macro for delegating `YmSongPlayer` methods (with &mut self) to the inner player via `BevyPlayerTrait`.
+macro_rules! delegate_to_inner_mut {
+    ($self:ident, $method:ident $(, $arg:expr)*) => {
+        match $self {
+            Self::Ym(p) => BevyPlayerTrait::$method(p.as_mut() $(, $arg)*),
+            Self::Arkos(p) => BevyPlayerTrait::$method(p.as_mut() $(, $arg)*),
+            Self::Ay(p) => BevyPlayerTrait::$method(p.as_mut() $(, $arg)*),
+            Self::Sndh(p) => BevyPlayerTrait::$method(p.as_mut() $(, $arg)*),
+            Self::Synth(p) => BevyPlayerTrait::$method(p.as_mut() $(, $arg)*),
+        }
+    };
+}
+
+// ============================================================================
+// YmSongPlayer - Unified player enum
+// ============================================================================
+
+/// Unified song player that can handle YM, Arkos, AY, SNDH, or Synth sources.
 pub enum YmSongPlayer {
-    Ym {
-        player: Box<Ym6Player>,
-        metrics: PlaybackMetrics,
-        metadata: Ym2149Metadata,
-    },
+    Ym(Box<YmBevyPlayer>),
     Arkos(Box<ArkosBevyPlayer>),
     Ay(Box<AyBevyPlayer>),
+    Sndh(Box<SndhBevyPlayer>),
     Synth(Box<YmSynthPlayer>),
 }
 
 impl YmSongPlayer {
     pub(crate) fn new_ym(
-        player: Ym6Player,
+        player: YmPlayer,
         summary: &LoadSummary,
         metadata: Ym2149Metadata,
     ) -> Self {
-        Self::Ym {
-            metrics: PlaybackMetrics::from(summary),
-            player: Box::new(player),
-            metadata,
-        }
+        Self::Ym(Box::new(YmBevyPlayer::new(player, summary, metadata)))
     }
 
     pub(crate) fn new_arkos(song_data: &[u8]) -> Result<Self, BevyYm2149Error> {
@@ -51,10 +101,11 @@ impl YmSongPlayer {
             frame_count: 0,
             duration_seconds: 0.0,
         };
-        let player = ArkosPlayer::new(song, 0)
+        let song = Arc::new(song);
+        let player = ArkosPlayer::new_from_arc(Arc::clone(&song), 0)
             .map_err(|e| BevyYm2149Error::Other(format!("AKS player init failed: {e}")))?;
         Ok(Self::Arkos(Box::new(ArkosBevyPlayer::new(
-            player, metadata,
+            player, song, metadata,
         ))))
     }
 
@@ -68,151 +119,246 @@ impl YmSongPlayer {
         Ok(Self::Ay(Box::new(AyBevyPlayer::new(player, ym_meta))))
     }
 
+    pub(crate) fn new_sndh(song_data: &[u8]) -> Result<Self, BevyYm2149Error> {
+        let mut player = load_sndh(song_data, YM2149_SAMPLE_RATE)
+            .map_err(|e| BevyYm2149Error::Other(format!("SNDH load failed: {e}")))?;
+
+        // Initialize default subsong
+        let default_subsong = player.default_subsong();
+        player
+            .init_subsong(default_subsong)
+            .map_err(|e| BevyYm2149Error::Other(format!("SNDH init failed: {e}")))?;
+
+        let meta = ChiptunePlayer::metadata(&player);
+        let metadata = Ym2149Metadata {
+            title: meta.title().to_string(),
+            author: meta.author().to_string(),
+            comment: meta.comments().to_string(),
+            frame_count: 0, // SNDH doesn't track frames like YM
+            duration_seconds: 0.0,
+        };
+
+        Ok(Self::Sndh(Box::new(SndhBevyPlayer::new(player, metadata))))
+    }
+
     pub(crate) fn new_synth(controller: YmSynthController) -> Self {
         Self::Synth(Box::new(YmSynthPlayer::new(controller)))
     }
 
-    pub(crate) fn play(&mut self) -> Result<(), BevyYm2149Error> {
-        match self {
-            Self::Ym { player, .. } => player
-                .play()
-                .map_err(|e| BevyYm2149Error::Other(format!("YM play failed: {e}"))),
-            Self::Arkos(p) => p.play(),
-            Self::Ay(p) => p.play(),
-            Self::Synth(p) => {
-                p.play();
-                Ok(())
-            }
-        }
+    // Delegated methods using the macro
+    pub(crate) fn play(&mut self) {
+        delegate_to_inner_mut!(self, play);
     }
 
-    pub(crate) fn pause(&mut self) -> Result<(), BevyYm2149Error> {
-        match self {
-            Self::Ym { player, .. } => player
-                .pause()
-                .map_err(|e| BevyYm2149Error::Other(format!("YM pause failed: {e}"))),
-            Self::Arkos(p) => p.pause(),
-            Self::Ay(p) => p.pause(),
-            Self::Synth(p) => {
-                p.pause();
-                Ok(())
-            }
-        }
+    pub(crate) fn pause(&mut self) {
+        delegate_to_inner_mut!(self, pause);
     }
 
-    pub(crate) fn stop(&mut self) -> Result<(), BevyYm2149Error> {
-        match self {
-            Self::Ym { player, .. } => player
-                .stop()
-                .map_err(|e| BevyYm2149Error::Other(format!("YM stop failed: {e}"))),
-            Self::Arkos(p) => p.stop(),
-            Self::Ay(p) => p.stop(),
-            Self::Synth(p) => {
-                p.stop();
-                Ok(())
-            }
-        }
+    pub(crate) fn stop(&mut self) {
+        delegate_to_inner_mut!(self, stop);
     }
 
-    pub(crate) fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        match self {
-            Self::Ym { player, .. } => player.state(),
-            Self::Arkos(p) => p.state(),
-            Self::Ay(p) => p.state(),
-            Self::Synth(p) => p.state(),
-        }
+    pub(crate) fn state(&self) -> ym2149_common::PlaybackState {
+        delegate_to_inner!(self, state)
     }
 
-    pub(crate) fn get_current_frame(&self) -> usize {
-        match self {
-            Self::Ym { player, .. } => player.get_current_frame(),
-            Self::Arkos(p) => p.current_frame(),
-            Self::Ay(p) => p.current_frame(),
-            Self::Synth(p) => p.current_frame(),
-        }
+    pub(crate) fn current_frame(&self) -> usize {
+        delegate_to_inner!(self, current_frame)
     }
 
-    pub(crate) fn samples_per_frame_value(&self) -> u32 {
-        match self {
-            Self::Ym { player, .. } => player.samples_per_frame_value(),
-            Self::Arkos(p) => p.samples_per_frame(),
-            Self::Ay(p) => p.samples_per_frame(),
-            Self::Synth(p) => p.samples_per_frame_value(),
-        }
+    pub(crate) fn samples_per_frame(&self) -> u32 {
+        delegate_to_inner!(self, samples_per_frame)
     }
 
     pub(crate) fn generate_sample(&mut self) -> f32 {
-        match self {
-            Self::Ym { player, .. } => player.generate_sample(),
-            Self::Arkos(p) => p.generate_sample(),
-            Self::Ay(p) => p.generate_sample(),
-            Self::Synth(p) => p.generate_sample(),
-        }
+        delegate_to_inner_mut!(self, generate_sample)
     }
 
     pub(crate) fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        match self {
-            Self::Ym { player, .. } => player.generate_samples_into(buffer),
-            Self::Arkos(p) => p.generate_samples_into(buffer),
-            Self::Ay(p) => p.generate_samples_into(buffer),
-            Self::Synth(p) => p.generate_samples_into(buffer),
+        delegate_to_inner_mut!(self, generate_samples_into, buffer);
+    }
+
+    /// Generate samples and capture per-sample channel outputs for visualization.
+    ///
+    /// This method generates mono samples into `buffer` and simultaneously captures
+    /// the individual channel outputs (A, B, C) into `channel_outputs` for oscilloscope
+    /// and spectrum visualization.
+    pub(crate) fn generate_samples_with_channels(
+        &mut self,
+        buffer: &mut [f32],
+        channel_outputs: &mut [[f32; 3]],
+    ) {
+        debug_assert_eq!(buffer.len(), channel_outputs.len());
+        for (sample, channels) in buffer.iter_mut().zip(channel_outputs.iter_mut()) {
+            let (s, c) = delegate_to_inner_mut!(self, generate_sample_with_channels);
+            *sample = s;
+            *channels = c;
         }
     }
 
     pub(crate) fn metadata(&self) -> &Ym2149Metadata {
-        match self {
-            Self::Ym { metadata, .. } => metadata,
-            Self::Arkos(p) => p.metadata(),
-            Self::Ay(p) => p.metadata(),
-            Self::Synth(p) => p.metadata(),
-        }
+        delegate_to_inner!(self, metadata)
     }
 
     pub(crate) fn metrics(&self) -> Option<PlaybackMetrics> {
-        match self {
-            Self::Ym { metrics, .. } => Some(*metrics),
-            Self::Arkos(p) => p.metrics(),
-            Self::Ay(p) => Some(p.metrics()),
-            Self::Synth(p) => Some(p.metrics()),
-        }
+        delegate_to_inner!(self, metrics)
     }
 
-    pub(crate) fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
-        match self {
-            Self::Ym { player, .. } => Some(player.get_chip()),
-            Self::Arkos(p) => p.primary_chip(),
-            Self::Ay(p) => Some(p.chip()),
-            Self::Synth(p) => Some(p.chip()),
-        }
+    /// Returns a reference to the underlying YM2149 chip, if available.
+    pub fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+        delegate_to_inner!(self, chip)
     }
 
-    /// Backwards-compat helper for visualization crates (exposes current PSG chip)
+    /// Returns a reference to the underlying YM2149 chip.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the player doesn't have an associated chip (should not happen
+    /// for normal playback).
+    #[deprecated(since = "0.8.0", note = "Use chip() which returns Option instead")]
     pub fn get_chip(&self) -> &ym2149::ym2149::Ym2149 {
-        match self {
-            Self::Ym { player, .. } => player.get_chip(),
-            Self::Arkos(p) => p
-                .primary_chip()
-                .expect("Arkos player should always expose at least one PSG"),
-            Self::Ay(p) => p.chip(),
-            Self::Synth(p) => p.chip(),
-        }
+        self.chip()
+            .expect("Player should always expose at least one PSG")
     }
 
     /// Total frame count if known (falls back to metrics/estimates)
     pub fn frame_count(&self) -> usize {
-        match self {
-            Self::Ym { metrics, .. } => metrics.frame_count,
-            Self::Arkos(p) => p.frame_count(),
-            Self::Ay(p) => p.frame_count(),
-            Self::Synth(p) => p.metrics().frame_count,
+        delegate_to_inner!(self, frame_count)
+    }
+
+    /// Get the number of subsongs/tracks available.
+    pub fn subsong_count(&self) -> usize {
+        delegate_to_inner!(self, subsong_count)
+    }
+
+    /// Get the current subsong index (1-based).
+    pub fn current_subsong(&self) -> usize {
+        delegate_to_inner!(self, current_subsong)
+    }
+
+    /// Switch to a different subsong. Returns true if successful.
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        delegate_to_inner_mut!(self, set_subsong, index)
+    }
+
+    /// Check if this player supports multiple subsongs.
+    pub fn has_subsongs(&self) -> bool {
+        self.subsong_count() > 1
+    }
+}
+
+// ============================================================================
+// YmBevyPlayer - Wrapper for YM format
+// ============================================================================
+
+/// Wrapper for YM player that implements `BevyPlayerTrait`.
+pub struct YmBevyPlayer {
+    player: YmPlayer,
+    metrics: PlaybackMetrics,
+    metadata: Ym2149Metadata,
+}
+
+impl YmBevyPlayer {
+    fn new(player: YmPlayer, summary: &LoadSummary, metadata: Ym2149Metadata) -> Self {
+        Self {
+            player,
+            metrics: PlaybackMetrics::from(summary),
+            metadata,
         }
     }
 }
 
-/// Load a song (YM or AKS) from raw bytes.
+impl BevyPlayerTrait for YmBevyPlayer {
+    fn play(&mut self) {
+        self.player.play();
+    }
+
+    fn pause(&mut self) {
+        self.player.pause();
+    }
+
+    fn stop(&mut self) {
+        self.player.stop();
+    }
+
+    fn state(&self) -> ym2149_common::PlaybackState {
+        self.player.state()
+    }
+
+    fn current_frame(&self) -> usize {
+        self.player.get_current_frame()
+    }
+
+    fn samples_per_frame(&self) -> u32 {
+        self.player.samples_per_frame_value()
+    }
+
+    fn generate_sample(&mut self) -> f32 {
+        self.player.generate_sample()
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        self.player.generate_samples_into(buffer);
+    }
+
+    fn generate_sample_with_channels(&mut self) -> (f32, [f32; 3]) {
+        let sample = self.player.generate_sample();
+        let (a, b, c) = self.player.get_chip().get_channel_outputs();
+        (sample, [a, b, c])
+    }
+
+    fn metadata(&self) -> &Ym2149Metadata {
+        &self.metadata
+    }
+
+    fn metrics(&self) -> Option<PlaybackMetrics> {
+        Some(self.metrics)
+    }
+
+    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+        Some(self.player.get_chip())
+    }
+
+    fn frame_count(&self) -> usize {
+        self.metrics.frame_count
+    }
+
+    fn subsong_count(&self) -> usize {
+        1
+    }
+
+    fn current_subsong(&self) -> usize {
+        1
+    }
+
+    fn set_subsong(&mut self, _index: usize) -> bool {
+        false
+    }
+}
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Load a song (YM, AKS, AY, or SNDH) from raw bytes.
 pub(crate) fn load_song_from_bytes(
     data: &[u8],
 ) -> std::result::Result<(YmSongPlayer, PlaybackMetrics, Ym2149Metadata), String> {
+    // Check if this looks like SNDH data first (to avoid wrong format fallback)
+    if is_sndh_data(data) {
+        return YmSongPlayer::new_sndh(data)
+            .map(|player| {
+                let metadata = player.metadata().clone();
+                let metrics = player.metrics().unwrap_or(PlaybackMetrics {
+                    frame_count: 0,
+                    samples_per_frame: YM2149_SAMPLE_RATE,
+                });
+                (player, metrics, metadata)
+            })
+            .map_err(|e| format!("Failed to load SNDH: {}", e));
+    }
+
+    // Try other formats in order
     if let Ok((player, summary)) = ym2149_ym_replayer::load_song(data) {
         let metadata = metadata_from_player(&player, &summary);
         let metrics = PlaybackMetrics::from(&summary);
@@ -228,6 +374,13 @@ pub(crate) fn load_song_from_bytes(
             samples_per_frame: YM2149_SAMPLE_RATE,
         });
         Ok((player, metrics, metadata))
+    } else if let Ok(player) = YmSongPlayer::new_sndh(data) {
+        let metadata = player.metadata().clone();
+        let metrics = player.metrics().unwrap_or(PlaybackMetrics {
+            frame_count: 0,
+            samples_per_frame: YM2149_SAMPLE_RATE,
+        });
+        Ok((player, metrics, metadata))
     } else {
         let player =
             YmSongPlayer::new_ay(data).map_err(|e| format!("Failed to load AY song: {}", e))?;
@@ -240,7 +393,7 @@ pub(crate) fn load_song_from_bytes(
     }
 }
 
-fn metadata_from_player(player: &Ym6Player, summary: &LoadSummary) -> Ym2149Metadata {
+fn metadata_from_player(player: &YmPlayer, summary: &LoadSummary) -> Ym2149Metadata {
     let frame_count = summary.frame_count;
     let (title, author, comment) = if let Some(info) = player.info() {
         (
@@ -279,19 +432,25 @@ fn metadata_from_ay(meta: &AyFileMetadata) -> Ym2149Metadata {
     }
 }
 
-/// Adapter that exposes [`ArkosPlayer`] through the same interface used by YM playback.
+// ============================================================================
+// ArkosBevyPlayer
+// ============================================================================
+
+const ARKOS_CACHE_SIZE: usize = 1024;
+
+/// Adapter that exposes [`ArkosPlayer`] through the `BevyPlayerTrait` interface.
 pub struct ArkosBevyPlayer {
     player: ArkosPlayer,
+    song: Arc<AksSong>,
     metadata: Ym2149Metadata,
     samples_per_frame: u32,
     estimated_frames: usize,
-    cache: Vec<f32>,
-    cache_pos: usize,
-    cache_len: usize,
+    cache: SampleCache,
+    current_subsong: usize,
 }
 
 impl ArkosBevyPlayer {
-    fn new(player: ArkosPlayer, mut metadata: Ym2149Metadata) -> Self {
+    fn new(player: ArkosPlayer, song: Arc<AksSong>, mut metadata: Ym2149Metadata) -> Self {
         let samples_per_frame = (YM2149_SAMPLE_RATE_F32 / player.replay_frequency_hz())
             .round()
             .max(1.0) as u32;
@@ -302,102 +461,124 @@ impl ArkosBevyPlayer {
 
         Self {
             player,
+            song,
             metadata,
             samples_per_frame,
             estimated_frames,
-            cache: vec![0.0; 1024],
-            cache_pos: 0,
-            cache_len: 0,
+            cache: SampleCache::new(ARKOS_CACHE_SIZE),
+            current_subsong: 0,
         }
     }
 
-    pub(crate) fn play(&mut self) -> Result<(), BevyYm2149Error> {
+    fn refill_cache(&mut self) {
         self.player
-            .play()
-            .map_err(|e| BevyYm2149Error::Other(format!("AKS play failed: {e}")))
+            .generate_samples_into(self.cache.sample_buffer_mut());
+        let outputs = self
+            .player
+            .chip(0)
+            .map(|chip| {
+                let (a, b, c) = chip.get_channel_outputs();
+                [a, b, c]
+            })
+            .unwrap_or([0.0; 3]);
+        self.cache.fill_channel_outputs(outputs);
+        self.cache.mark_filled();
+    }
+}
+
+impl BevyPlayerTrait for ArkosBevyPlayer {
+    fn play(&mut self) {
+        ChiptunePlayerBase::play(&mut self.player);
     }
 
-    pub(crate) fn pause(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player
-            .pause()
-            .map_err(|e| BevyYm2149Error::Other(format!("AKS pause failed: {e}")))
+    fn pause(&mut self) {
+        ChiptunePlayerBase::pause(&mut self.player);
     }
 
-    pub(crate) fn stop(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player
-            .stop()
-            .map_err(|e| BevyYm2149Error::Other(format!("AKS stop failed: {e}")))
+    fn stop(&mut self) {
+        ChiptunePlayerBase::stop(&mut self.player);
     }
 
-    pub(crate) fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        if self.player.is_playing() {
-            ym2149_ym_replayer::PlaybackState::Playing
-        } else {
-            ym2149_ym_replayer::PlaybackState::Stopped
-        }
+    fn state(&self) -> ym2149_common::PlaybackState {
+        ChiptunePlayerBase::state(&self.player)
     }
 
-    pub(crate) fn current_frame(&self) -> usize {
+    fn current_frame(&self) -> usize {
         self.player.current_tick_index()
     }
 
-    pub(crate) fn samples_per_frame(&self) -> u32 {
+    fn samples_per_frame(&self) -> u32 {
         self.samples_per_frame
     }
 
-    pub(crate) fn metadata(&self) -> &Ym2149Metadata {
+    fn generate_sample(&mut self) -> f32 {
+        if self.cache.needs_refill() {
+            self.refill_cache();
+        }
+        self.cache.next_sample()
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
+    }
+
+    fn generate_sample_with_channels(&mut self) -> (f32, [f32; 3]) {
+        let sample = self.generate_sample();
+        (sample, self.cache.channel_outputs())
+    }
+
+    fn metadata(&self) -> &Ym2149Metadata {
         &self.metadata
     }
 
-    pub(crate) fn metrics(&self) -> Option<PlaybackMetrics> {
+    fn metrics(&self) -> Option<PlaybackMetrics> {
         Some(PlaybackMetrics {
             frame_count: self.estimated_frames,
             samples_per_frame: self.samples_per_frame,
         })
     }
 
-    pub(crate) fn primary_chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
         self.player.chip(0)
     }
 
-    pub fn frame_count(&self) -> usize {
+    fn frame_count(&self) -> usize {
         self.estimated_frames
     }
 
-    pub(crate) fn generate_sample(&mut self) -> f32 {
-        if self.cache_pos >= self.cache_len {
-            self.refill_cache();
-        }
-        if self.cache_len == 0 {
-            return 0.0;
-        }
-        let sample = self.cache[self.cache_pos];
-        self.cache_pos += 1;
-        sample
+    fn subsong_count(&self) -> usize {
+        self.song.subsongs.len()
     }
 
-    pub(crate) fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        self.player.generate_samples_into(buffer);
+    fn current_subsong(&self) -> usize {
+        self.current_subsong + 1
     }
 
-    fn refill_cache(&mut self) {
-        if self.cache.is_empty() {
-            self.cache.resize(1024, 0.0);
+    fn set_subsong(&mut self, index: usize) -> bool {
+        let zero_based = index.saturating_sub(1);
+        if zero_based < self.song.subsongs.len()
+            && let Ok(new_player) = ArkosPlayer::new_from_arc(Arc::clone(&self.song), zero_based)
+        {
+            self.player = new_player;
+            self.current_subsong = zero_based;
+            let _ = self.player.play();
+            self.cache.reset();
+            return true;
         }
-        self.player.generate_samples_into(&mut self.cache);
-        self.cache_len = self.cache.len();
-        self.cache_pos = 0;
+        false
     }
 }
 
-const AY_CACHE_SAMPLES: usize = 512;
+// ============================================================================
+// AyBevyPlayer
+// ============================================================================
+
+const AY_CACHE_SIZE: usize = 512;
 
 pub struct AyBevyPlayer {
     player: AyPlayer,
     metadata: Ym2149Metadata,
-    cache: Vec<f32>,
-    cache_pos: usize,
-    cache_len: usize,
+    cache: SampleCache,
     unsupported: bool,
     warned: bool,
 }
@@ -407,112 +588,22 @@ impl AyBevyPlayer {
         Self {
             player,
             metadata,
-            cache: vec![0.0; AY_CACHE_SAMPLES],
-            cache_pos: 0,
-            cache_len: 0,
+            cache: SampleCache::new(AY_CACHE_SIZE),
             unsupported: false,
             warned: false,
         }
     }
 
-    fn play(&mut self) -> Result<(), BevyYm2149Error> {
-        if self.unsupported {
-            return Err(BevyYm2149Error::Other(CPC_UNSUPPORTED_MSG.to_string()));
-        }
-        self.player
-            .play()
-            .map_err(|e| BevyYm2149Error::Other(format!("AY play failed: {e}")))?;
-        self.ensure_supported()
-    }
-
-    fn pause(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player.pause();
-        Ok(())
-    }
-
-    fn stop(&mut self) -> Result<(), BevyYm2149Error> {
-        self.player
-            .stop()
-            .map_err(|e| BevyYm2149Error::Other(format!("AY stop failed: {e}")))
-    }
-
-    fn state(&self) -> ym2149_ym_replayer::PlaybackState {
-        match self.player.state() {
-            AyState::Playing => ym2149_ym_replayer::PlaybackState::Playing,
-            AyState::Paused => ym2149_ym_replayer::PlaybackState::Paused,
-            AyState::Stopped => ym2149_ym_replayer::PlaybackState::Stopped,
-        }
-    }
-
-    fn current_frame(&self) -> usize {
-        self.player.current_frame()
-    }
-
-    fn samples_per_frame(&self) -> u32 {
-        YM2149_SAMPLE_RATE
-    }
-
-    fn generate_sample(&mut self) -> f32 {
-        if self.cache_pos >= self.cache_len {
-            self.fill_cache();
-            if self.cache_len == 0 {
-                return 0.0;
-            }
-        }
-        if self.unsupported {
-            return 0.0;
-        }
-        let sample = self.cache[self.cache_pos];
-        self.cache_pos += 1;
-        sample
-    }
-
-    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        if self.unsupported {
-            buffer.fill(0.0);
-            return;
-        }
-        self.player.generate_samples_into(buffer);
-        if self.check_and_mark_unsupported() {
-            buffer.fill(0.0);
-        }
-    }
-
     fn fill_cache(&mut self) {
-        self.player
-            .generate_samples_into(&mut self.cache[..AY_CACHE_SAMPLES]);
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, self.cache.sample_buffer_mut());
         if self.check_and_mark_unsupported() {
-            self.cache.fill(0.0);
-        }
-        self.cache_pos = 0;
-        self.cache_len = AY_CACHE_SAMPLES;
-    }
-
-    fn metadata(&self) -> &Ym2149Metadata {
-        &self.metadata
-    }
-
-    fn metrics(&self) -> PlaybackMetrics {
-        PlaybackMetrics {
-            frame_count: self.metadata.frame_count,
-            samples_per_frame: self.samples_per_frame(),
-        }
-    }
-
-    fn chip(&self) -> &ym2149::ym2149::Ym2149 {
-        self.player.chip()
-    }
-
-    fn frame_count(&self) -> usize {
-        self.metadata.frame_count
-    }
-
-    fn ensure_supported(&mut self) -> Result<(), BevyYm2149Error> {
-        if self.check_and_mark_unsupported() {
-            Err(BevyYm2149Error::Other(CPC_UNSUPPORTED_MSG.to_string()))
+            self.cache.sample_buffer_mut().fill(0.0);
+            self.cache.fill_channel_outputs([0.0; 3]);
         } else {
-            Ok(())
+            let (a, b, c) = self.player.chip().get_channel_outputs();
+            self.cache.fill_channel_outputs([a, b, c]);
         }
+        self.cache.mark_filled();
     }
 
     fn check_and_mark_unsupported(&mut self) -> bool {
@@ -526,5 +617,278 @@ impl AyBevyPlayer {
         } else {
             false
         }
+    }
+}
+
+impl BevyPlayerTrait for AyBevyPlayer {
+    fn play(&mut self) {
+        if self.unsupported {
+            return;
+        }
+        ChiptunePlayerBase::play(&mut self.player);
+        self.check_and_mark_unsupported();
+    }
+
+    fn pause(&mut self) {
+        ChiptunePlayerBase::pause(&mut self.player);
+    }
+
+    fn stop(&mut self) {
+        ChiptunePlayerBase::stop(&mut self.player);
+    }
+
+    fn state(&self) -> ym2149_common::PlaybackState {
+        ChiptunePlayerBase::state(&self.player)
+    }
+
+    fn current_frame(&self) -> usize {
+        self.player.current_frame()
+    }
+
+    fn samples_per_frame(&self) -> u32 {
+        YM2149_SAMPLE_RATE
+    }
+
+    fn generate_sample(&mut self) -> f32 {
+        if self.unsupported {
+            return 0.0;
+        }
+        if self.cache.needs_refill() {
+            self.fill_cache();
+        }
+        self.cache.next_sample()
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        if self.unsupported {
+            buffer.fill(0.0);
+            return;
+        }
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
+        if self.check_and_mark_unsupported() {
+            buffer.fill(0.0);
+        }
+    }
+
+    fn generate_sample_with_channels(&mut self) -> (f32, [f32; 3]) {
+        let sample = self.generate_sample();
+        (sample, self.cache.channel_outputs())
+    }
+
+    fn metadata(&self) -> &Ym2149Metadata {
+        &self.metadata
+    }
+
+    fn metrics(&self) -> Option<PlaybackMetrics> {
+        Some(PlaybackMetrics {
+            frame_count: self.metadata.frame_count,
+            samples_per_frame: YM2149_SAMPLE_RATE,
+        })
+    }
+
+    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+        Some(self.player.chip())
+    }
+
+    fn frame_count(&self) -> usize {
+        self.metadata.frame_count
+    }
+
+    fn subsong_count(&self) -> usize {
+        self.player.metadata().song_count
+    }
+
+    fn current_subsong(&self) -> usize {
+        self.player.metadata().song_index + 1
+    }
+
+    fn set_subsong(&mut self, _index: usize) -> bool {
+        false
+    }
+}
+
+// ============================================================================
+// SndhBevyPlayer
+// ============================================================================
+
+const SNDH_CACHE_SIZE: usize = 512;
+
+/// Adapter that exposes [`SndhPlayer`] through the `BevyPlayerTrait` interface.
+pub struct SndhBevyPlayer {
+    player: SndhPlayer,
+    metadata: Ym2149Metadata,
+    samples_per_frame: u32,
+    cache: SampleCache,
+}
+
+impl SndhBevyPlayer {
+    fn new(player: SndhPlayer, metadata: Ym2149Metadata) -> Self {
+        let samples_per_frame = (YM2149_SAMPLE_RATE_F32 / player.player_rate() as f32)
+            .round()
+            .max(1.0) as u32;
+
+        Self {
+            player,
+            metadata,
+            samples_per_frame,
+            cache: SampleCache::new(SNDH_CACHE_SIZE),
+        }
+    }
+
+    fn fill_cache(&mut self) {
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, self.cache.sample_buffer_mut());
+        let (a, b, c) = self.player.ym2149().get_channel_outputs();
+        self.cache.fill_channel_outputs([a, b, c]);
+        self.cache.mark_filled();
+    }
+}
+
+impl BevyPlayerTrait for SndhBevyPlayer {
+    fn play(&mut self) {
+        ChiptunePlayerBase::play(&mut self.player);
+    }
+
+    fn pause(&mut self) {
+        ChiptunePlayerBase::pause(&mut self.player);
+    }
+
+    fn stop(&mut self) {
+        ChiptunePlayerBase::stop(&mut self.player);
+    }
+
+    fn state(&self) -> ym2149_common::PlaybackState {
+        ChiptunePlayerBase::state(&self.player)
+    }
+
+    fn current_frame(&self) -> usize {
+        0
+    }
+
+    fn samples_per_frame(&self) -> u32 {
+        self.samples_per_frame
+    }
+
+    fn generate_sample(&mut self) -> f32 {
+        if self.cache.needs_refill() {
+            self.fill_cache();
+        }
+        self.cache.next_sample()
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
+    }
+
+    fn generate_sample_with_channels(&mut self) -> (f32, [f32; 3]) {
+        let sample = self.generate_sample();
+        (sample, self.cache.channel_outputs())
+    }
+
+    fn metadata(&self) -> &Ym2149Metadata {
+        &self.metadata
+    }
+
+    fn metrics(&self) -> Option<PlaybackMetrics> {
+        Some(PlaybackMetrics {
+            frame_count: 0,
+            samples_per_frame: self.samples_per_frame,
+        })
+    }
+
+    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+        Some(self.player.ym2149())
+    }
+
+    fn frame_count(&self) -> usize {
+        0
+    }
+
+    fn subsong_count(&self) -> usize {
+        ChiptunePlayerBase::subsong_count(&self.player)
+    }
+
+    fn current_subsong(&self) -> usize {
+        ChiptunePlayerBase::current_subsong(&self.player)
+    }
+
+    fn set_subsong(&mut self, index: usize) -> bool {
+        if ChiptunePlayerBase::set_subsong(&mut self.player, index) {
+            self.cache.reset();
+            true
+        } else {
+            false
+        }
+    }
+}
+
+// ============================================================================
+// YmSynthPlayer trait impl
+// ============================================================================
+
+impl BevyPlayerTrait for YmSynthPlayer {
+    fn play(&mut self) {
+        YmSynthPlayer::play(self);
+    }
+
+    fn pause(&mut self) {
+        YmSynthPlayer::pause(self);
+    }
+
+    fn stop(&mut self) {
+        YmSynthPlayer::stop(self);
+    }
+
+    fn state(&self) -> ym2149_common::PlaybackState {
+        YmSynthPlayer::state(self)
+    }
+
+    fn current_frame(&self) -> usize {
+        YmSynthPlayer::current_frame(self)
+    }
+
+    fn samples_per_frame(&self) -> u32 {
+        YmSynthPlayer::samples_per_frame(self)
+    }
+
+    fn generate_sample(&mut self) -> f32 {
+        YmSynthPlayer::generate_sample(self)
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        YmSynthPlayer::generate_samples_into(self, buffer);
+    }
+
+    fn generate_sample_with_channels(&mut self) -> (f32, [f32; 3]) {
+        let sample = YmSynthPlayer::generate_sample(self);
+        let (a, b, c) = self.chip().get_channel_outputs();
+        (sample, [a, b, c])
+    }
+
+    fn metadata(&self) -> &Ym2149Metadata {
+        YmSynthPlayer::metadata(self)
+    }
+
+    fn metrics(&self) -> Option<PlaybackMetrics> {
+        Some(YmSynthPlayer::metrics(self))
+    }
+
+    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+        Some(YmSynthPlayer::chip(self))
+    }
+
+    fn frame_count(&self) -> usize {
+        YmSynthPlayer::metrics(self).frame_count
+    }
+
+    fn subsong_count(&self) -> usize {
+        1
+    }
+
+    fn current_subsong(&self) -> usize {
+        1
+    }
+
+    fn set_subsong(&mut self, _index: usize) -> bool {
+        false
     }
 }

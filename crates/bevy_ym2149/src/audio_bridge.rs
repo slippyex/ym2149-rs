@@ -1,3 +1,8 @@
+//! Audio bridge for routing YM2149 audio to custom destinations.
+//!
+//! This module provides infrastructure for capturing audio output from playback
+//! entities and making it available for visualization, analysis, or custom routing.
+
 use crate::events::AudioBridgeRequest;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -154,6 +159,9 @@ impl AudioBridgeMixes {
     }
 }
 
+/// System that processes audio bridge buffers, applying mixing and panning.
+///
+/// This system is automatically added by the plugin when `bevy_audio_bridge` is enabled.
 pub fn drive_bridge_audio_buffers(
     config: Res<crate::plugin::Ym2149PluginConfig>,
     targets: Res<AudioBridgeTargets>,

@@ -8,10 +8,14 @@ Hardware-accurate emulation of the Yamaha YM2149 Programmable Sound Generator (P
 
 ## Overview
 
-This crate provides the core YM2149 chip emulation with cycle-accurate behavior. For YM file parsing and playback, see the companion crates:
+This crate provides **pure chip emulation only** with cycle-accurate behavior. For file playback and audio output, see the companion crates:
 
 - **ym2149** (this crate): Pure chip emulation
+- **[ym2149-replayer-cli](../ym2149-replayer-cli)**: Command-line player with real-time audio
 - **[ym2149-ym-replayer](../ym2149-ym-replayer)**: YM file parsing and music playback
+- **[ym2149-sndh-replayer](../ym2149-sndh-replayer)**: SNDH (Atari ST) playback with 68000 emulation
+- **[ym2149-arkos-replayer](../ym2149-arkos-replayer)**: Arkos Tracker playback
+- **[ym2149-ay-replayer](../ym2149-ay-replayer)**: AY file playback with Z80 emulation
 - **[ym2149-softsynth](../ym2149-softsynth)**: Experimental synthesizer backend
 - **[bevy_ym2149](../bevy_ym2149)**: Bevy game engine integration
 
@@ -23,20 +27,19 @@ This crate provides the core YM2149 chip emulation with cycle-accurate behavior.
 | **Effects** | SID voice, Sync Buzzer, Mad Max digi-drums, DC filter |
 | **Control** | Per-channel mute, color filter, register dump/load |
 | **Backend Trait** | `Ym2149Backend` for interchangeable implementations |
-| **Audio Output** | Optional real-time streaming via rodio/cpal (feature: `streaming`) |
-| **Visualization** | Optional terminal UI helpers (feature: `visualization`) |
+| **Utilities** | Register math helpers for frequency/period conversion |
 
 ## Install
 
 ```toml
 [dependencies]
-ym2149 = { version = "0.6.1", features = ["emulator"] }
+ym2149 = "0.7"
 ```
 
-For YM file playback, add:
+For YM file playback with real-time audio, add the CLI:
 
 ```toml
-ym2149-ym-replayer = "0.6.1"
+ym2149-replayer-cli = "0.7"
 ```
 
 ## Quick Start
@@ -44,7 +47,7 @@ ym2149-ym-replayer = "0.6.1"
 ### Core Emulation Only
 
 ```rust
-use ym2149::Ym2149;
+use ym2149::{Ym2149, Ym2149Backend};
 
 let mut chip = Ym2149::new();
 chip.write_register(0x00, 0xF0); // Channel A period low
@@ -70,23 +73,13 @@ player.play()?;
 let samples = player.generate_samples(summary.samples_per_frame as usize);
 ```
 
-### Interactive Chip Demo
+### Real-Time Audio Playback
 
-Try the interactive chip demo with real-time audio output:
+For real-time audio output, use the CLI:
 
 ```bash
-cargo run --example chip_demo -p ym2149 --features streaming
+cargo run -p ym2149-replayer-cli -- path/to/song.ym
 ```
-
-The demo showcases 7 different sound demonstrations:
-- Simple tone (440 Hz A4)
-- Musical scale (C4-C5)
-- Three-channel chord (C Major)
-- Envelope generators (Attack-Decay, Sawtooth)
-- Noise generator
-- Tone + Noise (snare-like sound)
-
-Press **SPACE** to advance between demos, **Q** to quit.
 
 ### Backend Trait
 
@@ -102,30 +95,33 @@ fn play_note<B: Ym2149Backend>(chip: &mut B) {
 }
 ```
 
-## Feature Flags
+## Modules
 
-| Feature | Description |
-|---------|-------------|
-| `emulator` (default) | Core chip implementation |
-| `streaming` | Real-time audio output (rodio) |
-| `visualization` | Terminal UI helpers |
+| Module | Description |
+|--------|-------------|
+| `ym2149` | Core chip implementation |
+| `backend` | `Ym2149Backend` trait for alternative implementations |
+| `channel_state` | `ChannelStates` for extracting visualization data from registers |
+| `util` | Register math helpers (period/frequency conversion) |
 
-## Migration from < 0.6.1
+## Migration from < 0.7
 
-Version 0.6.1 reorganized the crate structure for better separation of concerns.
-All YM file parsing and playback functionality has been moved to the `ym2149-ym-replayer` crate:
+Version 0.7 reorganized the crate structure for better separation of concerns:
+
+- **Streaming audio** moved to `ym2149-replayer-cli`
+- **Visualization** moved to `ym2149-replayer-cli`
+- YM file parsing in `ym2149-ym-replayer` (since 0.6)
+
+The `ym2149` crate now focuses exclusively on pure chip emulation.
 
 ```rust
-// Old (< 0.6)
-use ym2149::replayer::Ym6Player;
-use ym2149::ym_loader;
+// Old (< 0.7)
+use ym2149::streaming::AudioDevice;
+use ym2149::visualization::create_volume_bar;
 
-// New (>= 0.6)
-use ym2149_ym_replayer::Ym6Player;
-use ym2149_ym_replayer::loader;
+// New (>= 0.7)
+// Use ym2149-replayer-cli for audio output and visualization
 ```
-
-The `ym2149` crate now focuses exclusively on chip emulation, streaming, and visualization.
 
 ## Architecture
 
@@ -133,12 +129,12 @@ The YM2149 emulator implements:
 
 - **3 tone generators**: 12-bit period counters
 - **1 noise generator**: 17-bit LFSR
-- **1 envelope generator**: Hardware-accurate ADSR
+- **1 envelope generator**: Hardware-accurate shapes (10 patterns)
 - **Mixer**: Configurable tone/noise routing
-- **Volume control**: 16-level logarithmic + envelope
-- **Effects support**: Special registers for Mad Max effects
+- **Volume control**: 32-step logarithmic + envelope
+- **Effects support**: DigiDrum, SID voice, Sync Buzzer
 
-See [ARCHITECTURE.md](../../ARCHITECTURE.md) for implementation details.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for implementation details.
 
 ## Performance
 
@@ -149,18 +145,21 @@ See [ARCHITECTURE.md](../../ARCHITECTURE.md) for implementation details.
 ## Documentation
 
 - API reference: [docs.rs/ym2149](https://docs.rs/ym2149)
-- Emulator internals: [`ARCHITECTURE.md`](../../ARCHITECTURE.md)
-- Streaming guide: [`STREAMING_GUIDE.md`](STREAMING_GUIDE.md)
+- Emulator internals: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ## Related Crates
 
+- **[ym2149-replayer-cli](../ym2149-replayer-cli)**: Command-line player with streaming audio
 - **[ym2149-ym-replayer](../ym2149-ym-replayer)**: YM file parsing and playback
+- **[ym2149-sndh-replayer](../ym2149-sndh-replayer)**: SNDH (Atari ST) playback with 68000 emulation
+- **[ym2149-arkos-replayer](../ym2149-arkos-replayer)**: Arkos Tracker playback
+- **[ym2149-ay-replayer](../ym2149-ay-replayer)**: AY file playback with Z80 emulation
 - **[ym2149-softsynth](../ym2149-softsynth)**: Experimental synthesizer backend
 - **[bevy_ym2149](../bevy_ym2149)**: Bevy game engine plugin
 
 ## Contributing
 
-Run `cargo fmt`, `cargo clippy`, and `cargo test -p ym2149 --all-features` before submitting changes.
+Run `cargo fmt`, `cargo clippy`, and `cargo test -p ym2149` before submitting changes.
 
 ## License
 

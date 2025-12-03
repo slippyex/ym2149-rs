@@ -46,16 +46,20 @@ pub const YM2149_SAMPLE_RATE_F32: f32 = YM2149_SAMPLE_RATE as f32;
 /// Summary of a loaded track used for progress/duration calculations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlaybackMetrics {
+    /// Total number of frames in the track.
     pub frame_count: usize,
+    /// Number of audio samples generated per frame (depends on frame rate).
     pub samples_per_frame: u32,
 }
 
 impl PlaybackMetrics {
+    /// Returns the total number of audio samples in the track.
     pub fn total_samples(&self) -> usize {
         self.frame_count
             .saturating_mul(self.samples_per_frame as usize)
     }
 
+    /// Returns the track duration in seconds.
     pub fn duration_seconds(&self) -> f32 {
         self.total_samples() as f32 / YM2149_SAMPLE_RATE_F32
     }
@@ -215,6 +219,12 @@ pub struct Ym2149Playback {
     pub(crate) inline_player: bool,
     pub(crate) inline_audio_ready: bool,
     pub(crate) inline_metadata: Option<Ym2149Metadata>,
+    /// Pending subsong index to set after reload (1-based, None means default)
+    pub(crate) pending_subsong: Option<usize>,
+    /// Cached subsong count (preserved during reload)
+    pub(crate) cached_subsong_count: usize,
+    /// Cached current subsong index (preserved during reload, 1-based)
+    pub(crate) cached_current_subsong: usize,
 }
 
 /// The current state of YM2149 playback
@@ -241,10 +251,20 @@ impl Ym2149Playback {
     ///
     /// # Arguments
     ///
-    /// * `source_path` - Path to a YM file (YM2-YM6 formats supported)
+    /// * `source_path` - Path to a YM file (YM2-YM6 formats supported).
+    ///   Should not be empty; an empty path will cause a load error.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use bevy_ym2149::Ym2149Playback;
+    /// let playback = Ym2149Playback::new("assets/music/song.ym");
+    /// ```
     pub fn new(source_path: impl Into<String>) -> Self {
+        let path = source_path.into();
+        debug_assert!(!path.is_empty(), "source_path should not be empty");
         Self {
-            source_path: Some(source_path.into()),
+            source_path: Some(path),
             source_bytes: None,
             source_asset: None,
             state: PlaybackState::Idle,
@@ -264,6 +284,9 @@ impl Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            pending_subsong: None,
+            cached_subsong_count: 1,
+            cached_current_subsong: 1,
             tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
@@ -291,15 +314,25 @@ impl Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            pending_subsong: None,
+            cached_subsong_count: 1,
+            cached_current_subsong: 1,
             tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
 
     /// Create a new playback component backed by an in-memory YM buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - Raw YM file data. Should not be empty; empty data will cause
+    ///   a load error.
     pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
+        let data = bytes.into();
+        debug_assert!(!data.is_empty(), "bytes should not be empty");
         Self {
             source_path: None,
-            source_bytes: Some(Arc::new(bytes.into())),
+            source_bytes: Some(Arc::new(data)),
             source_asset: None,
             state: PlaybackState::Idle,
             frame_position: 0,
@@ -318,6 +351,9 @@ impl Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            pending_subsong: None,
+            cached_subsong_count: 1,
+            cached_current_subsong: 1,
             tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
@@ -352,6 +388,9 @@ impl Ym2149Playback {
             inline_player: true,
             inline_audio_ready: false,
             inline_metadata: Some(metadata),
+            pending_subsong: None,
+            cached_subsong_count: 1,
+            cached_current_subsong: 1,
             tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }
@@ -529,7 +568,7 @@ impl Ym2149Playback {
     /// ```ignore
     /// if let Some(player_arc) = playback.player_handle() {
     ///     let player = player_arc.read();  // Concurrent reads allowed
-    ///     let frame = player.get_current_frame();
+    ///     let frame = player.current_frame();
     /// }
     /// ```
     pub fn player_handle(&self) -> Option<SharedSongPlayer> {
@@ -576,6 +615,96 @@ impl Ym2149Playback {
     pub(crate) fn has_pending_playlist_index(&self) -> bool {
         self.pending_playlist_index.is_some()
     }
+
+    /// Get the number of subsongs/tracks available in the current file.
+    /// Returns 1 for formats that don't support multiple subsongs.
+    pub fn subsong_count(&self) -> usize {
+        // Use cached value if player is not available (during reload)
+        self.player
+            .as_ref()
+            .map(|p| p.read().subsong_count())
+            .unwrap_or(self.cached_subsong_count)
+    }
+
+    /// Get the current subsong index (1-based).
+    /// Returns 1 for formats that don't support multiple subsongs.
+    pub fn current_subsong(&self) -> usize {
+        // If we have a pending subsong, report that as current
+        if let Some(pending) = self.pending_subsong {
+            return pending;
+        }
+        // Use cached value if player is not available (during reload)
+        self.player
+            .as_ref()
+            .map(|p| p.read().current_subsong())
+            .unwrap_or(self.cached_current_subsong)
+    }
+
+    /// Update the cached subsong info from the player.
+    /// Called by the playback system after loading.
+    pub(crate) fn update_subsong_cache(&mut self) {
+        if let Some(player) = &self.player {
+            let player_guard = player.read();
+            self.cached_subsong_count = player_guard.subsong_count();
+            self.cached_current_subsong = player_guard.current_subsong();
+        }
+    }
+
+    /// Switch to a different subsong. Returns true if successful.
+    /// The index is 1-based (first subsong is 1).
+    /// This triggers a full reload to ensure audio output is in sync.
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        let count = self.cached_subsong_count;
+        if index < 1 || index > count {
+            return false;
+        }
+        // Update cached current subsong immediately
+        self.cached_current_subsong = index;
+        // Store the desired subsong and trigger a full reload
+        // Clear the player to force a complete reload path
+        self.pending_subsong = Some(index);
+        self.player = None;
+        self.metrics = None;
+        self.needs_reload = true;
+        true
+    }
+
+    /// Switch to the next subsong (wraps around).
+    /// Returns the new subsong index, or None if not supported.
+    pub fn next_subsong(&mut self) -> Option<usize> {
+        let count = self.cached_subsong_count;
+        if count <= 1 {
+            return None;
+        }
+        let current = self.current_subsong();
+        let next = if current >= count { 1 } else { current + 1 };
+        if self.set_subsong(next) {
+            Some(next)
+        } else {
+            None
+        }
+    }
+
+    /// Switch to the previous subsong (wraps around).
+    /// Returns the new subsong index, or None if not supported.
+    pub fn prev_subsong(&mut self) -> Option<usize> {
+        let count = self.cached_subsong_count;
+        if count <= 1 {
+            return None;
+        }
+        let current = self.current_subsong();
+        let prev = if current <= 1 { count } else { current - 1 };
+        if self.set_subsong(prev) {
+            Some(prev)
+        } else {
+            None
+        }
+    }
+
+    /// Check if this playback supports multiple subsongs.
+    pub fn has_subsongs(&self) -> bool {
+        self.cached_subsong_count > 1
+    }
 }
 
 impl Default for Ym2149Playback {
@@ -601,6 +730,9 @@ impl Default for Ym2149Playback {
             inline_player: false,
             inline_audio_ready: false,
             inline_metadata: None,
+            pending_subsong: None,
+            cached_subsong_count: 1,
+            cached_current_subsong: 1,
             tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
         }
     }

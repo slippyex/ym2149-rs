@@ -253,9 +253,9 @@
         <div class="subtitle">Atari ST Chiptune Player in your Browser</div>
 
         <div class="file-input">
-            <input type="file" id="fileInput" accept=".ym,.aks">
+            <input type="file" id="fileInput" accept=".ym,.aks,.sndh,.ay">
             <label for="fileInput" class="file-label">
-                📁 Load YM / AKS File
+                📁 Load YM / AKS / SNDH / AY File
             </label>
         </div>
 
@@ -456,7 +456,31 @@
             }
         }
 
-        function play() {
+        async function ensureAudioContext() {
+            // Create AudioContext on first user interaction (required for mobile)
+            if (!audioContext) {
+                audioContext = new AudioContext({ sampleRate: 44100 });
+                // Listen for state changes
+                audioContext.onstatechange = () => {
+                    log(`🔊 AudioContext state: ${audioContext.state}`);
+                };
+                log(`🔊 AudioContext created (state: ${audioContext.state})`);
+            }
+
+            // Resume if suspended (mobile browsers start in suspended state)
+            if (audioContext.state === 'suspended') {
+                try {
+                    await audioContext.resume();
+                    log(`🔊 AudioContext resumed (state: ${audioContext.state})`);
+                } catch (e) {
+                    log(`⚠️ Failed to resume AudioContext: ${e}`);
+                }
+            }
+
+            return audioContext.state === 'running';
+        }
+
+        async function play() {
             if (!wasmPlayer) return;
 
             // Don't start multiple times
@@ -465,8 +489,11 @@
                 return;
             }
 
-            if (!audioContext) {
-                audioContext = new AudioContext({ sampleRate: 44100 });
+            // Ensure AudioContext is created and running (critical for mobile)
+            const audioReady = await ensureAudioContext();
+            if (!audioReady) {
+                log('⚠️ AudioContext not ready - tap Play again');
+                return;
             }
 
             wasmPlayer.play();
@@ -637,6 +664,21 @@
                 }
             }
         }
+
+        // Handle visibility change (for mobile when app goes to background)
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible' && isPlaying && audioContext) {
+                // Resume audio when tab becomes visible again
+                if (audioContext.state === 'suspended') {
+                    try {
+                        await audioContext.resume();
+                        log('🔊 AudioContext resumed after visibility change');
+                    } catch (e) {
+                        log(`⚠️ Failed to resume: ${e}`);
+                    }
+                }
+            }
+        });
 
         // Initialize
         initWasm().then(() => autoLoadFile());

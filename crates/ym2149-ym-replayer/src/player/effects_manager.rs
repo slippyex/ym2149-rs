@@ -6,6 +6,7 @@
 //! Effects are managed separately from the core PSG emulation to maintain clean separation
 //! of concerns: the chip is pure hardware emulation, effects are format-specific playback tricks.
 
+use std::sync::Arc;
 use ym2149::Ym2149Backend;
 
 const DRUM_PREC: u32 = 15;
@@ -47,16 +48,27 @@ impl Default for SidState {
 }
 
 /// Per-voice DigiDrum state for sample playback
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct DrumState {
     /// Whether this DigiDrum is currently playing
     active: bool,
-    /// Sample data (8-bit unsigned)
-    data: Vec<u8>,
+    /// Sample data (8-bit unsigned, shared to avoid cloning)
+    data: Arc<[u8]>,
     /// Playback position (fixed-point, DRUM_PREC bits of precision)
     pos: u32,
     /// Playback speed (position increment per sample)
     step: u32,
+}
+
+impl Default for DrumState {
+    fn default() -> Self {
+        Self {
+            active: false,
+            data: Arc::from([]),
+            pos: 0,
+            step: 0,
+        }
+    }
 }
 
 impl DrumState {
@@ -245,7 +257,9 @@ impl EffectsManager {
     // ================================================================================
 
     /// Start DigiDrum sample playback on a voice
-    pub fn digidrum_start(&mut self, voice: usize, sample: Vec<u8>, freq: u32) {
+    ///
+    /// Takes an `Arc<[u8]>` to avoid cloning sample data in the hot path.
+    pub fn digidrum_start(&mut self, voice: usize, sample: Arc<[u8]>, freq: u32) {
         if voice >= 3 {
             return;
         }

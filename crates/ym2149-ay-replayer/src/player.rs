@@ -6,6 +6,8 @@ use std::mem;
 use crate::error::{AyError, Result};
 use crate::format::{AyFile, AyPoints, AySong};
 use crate::machine::AyMachine;
+use ym2149::Ym2149Backend;
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields, PlaybackState};
 
 const SAMPLE_RATE: u32 = 44_100;
 const FRAME_RATE_HZ: f32 = 50.0;
@@ -17,19 +19,15 @@ const CPC_CPU_CLOCK_HZ: f64 = 4_000_000.0;
 pub const CPC_UNSUPPORTED_MSG: &str =
     "CPC AY songs currently require full CPC firmware emulation, which is not supported";
 
-/// Playback state for the AY player.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AyPlaybackState {
-    /// Not started or fully stopped.
-    Stopped,
-    /// Currently playing.
-    Playing,
-    /// Temporarily paused.
-    Paused,
-}
+/// Backwards compatibility alias for `PlaybackState`.
+#[deprecated(
+    since = "0.7.0",
+    note = "Use `PlaybackState` from `ym2149_common` instead"
+)]
+pub type AyPlaybackState = PlaybackState;
 
 /// Runtime metadata about the currently loaded song.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AyMetadata {
     /// Human-readable name extracted from the song entry.
     pub song_name: String,
@@ -49,6 +47,36 @@ pub struct AyMetadata {
     pub file_version: u16,
     /// Requested player version.
     pub player_version: u8,
+}
+
+impl MetadataFields for AyMetadata {
+    fn title(&self) -> &str {
+        &self.song_name
+    }
+
+    fn author(&self) -> &str {
+        &self.author
+    }
+
+    fn comments(&self) -> &str {
+        &self.misc
+    }
+
+    fn format(&self) -> &str {
+        "AY"
+    }
+
+    fn frame_count(&self) -> Option<usize> {
+        self.frame_count
+    }
+
+    fn frame_rate(&self) -> u32 {
+        50
+    }
+
+    fn duration_seconds(&self) -> Option<f32> {
+        self.duration_seconds
+    }
 }
 
 impl AyMetadata {
@@ -79,7 +107,7 @@ pub struct AyPlayer {
     cache_len: usize,
     frame_counter: usize,
     max_frames: Option<usize>,
-    state: AyPlaybackState,
+    state: PlaybackState,
     init_executed: bool,
     sample_period: f64,
 }
@@ -128,7 +156,7 @@ impl AyPlayer {
             cache_len: 0,
             frame_counter: 0,
             max_frames: frame_limit(&file.songs[song_index]),
-            state: AyPlaybackState::Stopped,
+            state: PlaybackState::Stopped,
             init_executed: false,
             sample_period: 1.0 / SAMPLE_RATE as f64,
         };
@@ -164,18 +192,18 @@ impl AyPlayer {
     }
 
     /// Return playback state.
-    pub fn state(&self) -> AyPlaybackState {
+    pub fn playback_state(&self) -> PlaybackState {
         self.state
     }
 
     /// Begin playback or resume from pause.
     pub fn play(&mut self) -> Result<()> {
         match self.state {
-            AyPlaybackState::Playing => {}
-            AyPlaybackState::Paused => self.state = AyPlaybackState::Playing,
-            AyPlaybackState::Stopped => {
+            PlaybackState::Playing => {}
+            PlaybackState::Paused => self.state = PlaybackState::Playing,
+            PlaybackState::Stopped => {
                 self.reset_runtime()?;
-                self.state = AyPlaybackState::Playing;
+                self.state = PlaybackState::Playing;
             }
         }
         Ok(())
@@ -183,15 +211,15 @@ impl AyPlayer {
 
     /// Pause playback (keep current state).
     pub fn pause(&mut self) {
-        if self.state == AyPlaybackState::Playing {
-            self.state = AyPlaybackState::Paused;
+        if self.state == PlaybackState::Playing {
+            self.state = PlaybackState::Paused;
         }
     }
 
     /// Stop playback and reset to the beginning.
     pub fn stop(&mut self) -> Result<()> {
-        if self.state != AyPlaybackState::Stopped {
-            self.state = AyPlaybackState::Stopped;
+        if self.state != PlaybackState::Stopped {
+            self.state = PlaybackState::Stopped;
             self.reset_runtime()?;
         }
         Ok(())
@@ -209,14 +237,14 @@ impl AyPlayer {
         let mut written = 0;
         while written < buffer.len() {
             if self.cache_pos >= self.cache_len {
-                if self.state != AyPlaybackState::Playing {
+                if self.state != PlaybackState::Playing {
                     buffer[written..].fill(0.0);
                     return;
                 }
                 if let Err(err) = self.render_frame() {
                     eprintln!("AY frame rendering error: {err}");
                     buffer[written..].fill(0.0);
-                    self.state = AyPlaybackState::Stopped;
+                    self.state = PlaybackState::Stopped;
                     return;
                 }
                 if self.cache_len == 0 {
@@ -338,7 +366,7 @@ impl AyPlayer {
         if let Some(limit) = self.max_frames
             && self.frame_counter >= limit
         {
-            self.state = AyPlaybackState::Stopped;
+            self.state = PlaybackState::Stopped;
         }
         Ok(())
     }
@@ -492,5 +520,68 @@ fn build_metadata(
         duration_seconds,
         file_version: header.file_version,
         player_version: header.player_version,
+    }
+}
+
+// ============================================================================
+// ChiptunePlayer trait implementation
+// ============================================================================
+
+impl ChiptunePlayerBase for AyPlayer {
+    fn play(&mut self) {
+        let _ = AyPlayer::play(self);
+    }
+
+    fn pause(&mut self) {
+        AyPlayer::pause(self);
+    }
+
+    fn stop(&mut self) {
+        let _ = AyPlayer::stop(self);
+    }
+
+    fn state(&self) -> PlaybackState {
+        self.state
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        AyPlayer::generate_samples_into(self, buffer);
+    }
+
+    fn sample_rate(&self) -> u32 {
+        SAMPLE_RATE
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        AyPlayer::set_channel_mute(self, channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        AyPlayer::is_channel_muted(self, channel)
+    }
+
+    fn playback_position(&self) -> f32 {
+        AyPlayer::playback_position(self)
+    }
+
+    fn subsong_count(&self) -> usize {
+        self.metadata.song_count
+    }
+
+    fn current_subsong(&self) -> usize {
+        self.metadata.song_index + 1
+    }
+
+    fn set_subsong(&mut self, _index: usize) -> bool {
+        // AY requires reloading from raw data to switch songs
+        false
+    }
+}
+
+impl ChiptunePlayer for AyPlayer {
+    type Metadata = AyMetadata;
+
+    fn metadata(&self) -> &Self::Metadata {
+        &self.metadata
     }
 }

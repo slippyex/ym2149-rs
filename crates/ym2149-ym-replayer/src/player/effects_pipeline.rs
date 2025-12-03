@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::effects_manager::EffectsManager;
 use ym2149::Ym2149Backend;
 
@@ -92,12 +94,14 @@ impl EffectsPipeline {
     }
 
     /// Start a DigiDrum on a voice, tracking the drum index/frequency.
+    ///
+    /// Takes an `Arc<[u8]>` to avoid cloning sample data in the hot path.
     pub fn digidrum_start(
         &mut self,
         voice: usize,
         drum_index: Option<u8>,
         freq: u32,
-        sample: Vec<u8>,
+        sample: Arc<[u8]>,
     ) {
         self.manager.digidrum_start(voice, sample, freq);
         if voice < self.drum_active.len() {

@@ -1,6 +1,45 @@
+//! Core playback systems for YM2149 audio.
+//!
+//! This module contains the main ECS systems that drive YM2149 playback:
+//!
+//! # Playback Lifecycle
+//!
+//! ```text
+//! ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+//! │ Ym2149Playback  │────▶│ initialize_      │────▶│ PlaybackRuntime │
+//! │ (Component)     │     │ playback         │     │ State           │
+//! └─────────────────┘     └──────────────────┘     └─────────────────┘
+//!                                │
+//!                                ▼
+//!                         ┌──────────────────┐
+//!                         │ drive_playback_  │
+//!                         │ state            │
+//!                         └──────────────────┘
+//!                                │
+//!                                ▼
+//!                         ┌──────────────────┐
+//!                         │ process_playback │────▶ FrameAudioData
+//!                         │ _frames          │      (message event)
+//!                         └──────────────────┘
+//!                                │
+//!                 ┌──────────────┼──────────────┐
+//!                 ▼              ▼              ▼
+//!          ┌───────────┐  ┌───────────┐  ┌───────────┐
+//!          │Diagnostics│  │ Pattern   │  │ Audio     │
+//!          │ Events    │  │ Triggers  │  │ Bridge    │
+//!          └───────────┘  └───────────┘  └───────────┘
+//! ```
+//!
+//! # Key Types
+//!
+//! - [`PlaybackRuntimeState`]: Internal per-entity state (frame timing, SFX layer)
+//! - [`FrameAudioData`]: Per-frame audio samples and channel metrics
+//! - [`SfxLayer`]: Overlay synth for one-shot sound effects
+
 use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
 use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
+use crate::chip_state::ChipStateSnapshot;
 use crate::events::{
     BeatHit, ChannelSnapshot, PatternTriggered, PlaybackFrameMarker, TrackFinished, TrackStarted,
     YmSfxRequest,
@@ -18,15 +57,24 @@ use bevy::prelude::*;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use ym2149::Ym2149Backend;
 use ym2149::util::PSG_MASTER_CLOCK_HZ;
+use ym2149::util::channel_frequencies;
 
 // Import from sibling modules
 use super::crossfade::{finalize_crossfade, process_pending_crossfade};
 use super::loader::{
     PendingFileRead, PendingSlot, SourceLoadResult, current_track_source, load_track_source,
 };
-use ym2149::util::channel_frequencies;
 
+// ============================================================================
+// Runtime State
+// ============================================================================
+
+/// Internal runtime state for a playback entity.
+///
+/// Tracks frame timing, volume changes, and manages the optional SFX overlay.
+/// This component is automatically added by [`initialize_playback`].
 #[derive(Component)]
 pub(in crate::plugin) struct PlaybackRuntimeState {
     time_since_last_frame: f32,
@@ -95,14 +143,20 @@ pub(in crate::plugin) fn emit_playback_diagnostics(
     mut frames: MessageReader<FrameAudioData>,
     mut snapshot_events: MessageWriter<ChannelSnapshot>,
     mut oscilloscope_buffer: Option<ResMut<OscilloscopeBuffer>>,
+    mut chip_state: Option<ResMut<ChipStateSnapshot>>,
 ) {
     let emit_snapshots = config.channel_events;
     let mut buffer = oscilloscope_buffer.as_deref_mut();
-    if !emit_snapshots && buffer.is_none() {
+    let mut chip_state = chip_state.as_deref_mut();
+    if !emit_snapshots && buffer.is_none() && chip_state.is_none() {
         return;
     }
 
     for frame in frames.read() {
+        if let Some(state) = chip_state.as_deref_mut() {
+            state.update_from_registers(frame.registers);
+        }
+
         if emit_snapshots && frame.samples_per_frame > 0 {
             let inv_len = 1.0 / frame.samples_per_frame.max(1) as f32;
             for (channel, amplitude) in frame.channel_energy.iter().enumerate() {
@@ -330,6 +384,7 @@ pub(crate) struct FrameAudioData {
     pub channel_energy: [f32; 3],
     pub frequencies: [Option<f32>; 3],
     pub samples_per_frame: usize,
+    pub registers: [u8; 16],
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -342,6 +397,7 @@ pub(in crate::plugin) fn initialize_playback(
     )>,
     mut audio_assets: ResMut<Assets<Ym2149AudioSource>>,
     mut pending_reads: Local<HashMap<(Entity, PendingSlot), PendingFileRead>>,
+    audio_sinks: Query<&AudioSink>,
 ) {
     let mut alive = Vec::new();
 
@@ -381,13 +437,8 @@ pub(in crate::plugin) fn initialize_playback(
                 .as_ref()
                 .map(|m| m.total_samples())
                 .unwrap_or(usize::MAX);
-            let audio_source = Ym2149AudioSource::from_shared_player(
-                player_arc,
-                metadata,
-                total_samples,
-                playback.stereo_gain.clone(),
-                playback.tone_settings.clone(),
-            );
+            let audio_source =
+                Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
             let audio_handle = audio_assets.add(audio_source);
             let settings = if playback.state == PlaybackState::Playing {
                 PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(playback.volume))
@@ -403,13 +454,13 @@ pub(in crate::plugin) fn initialize_playback(
         }
 
         // If a new player is already prepared (e.g., crossfade finalized), refresh only the audio source.
+        // But if there's a pending_subsong, we need to do a full reload to apply it.
         if playback.needs_reload
-            && playback.player.is_some()
-            && playback.metrics.is_some()
             && !playback.inline_player
+            && playback.pending_subsong.is_none()
+            && let Some(player_arc) = playback.player.clone()
+            && let Some(metrics) = playback.metrics
         {
-            let player_arc = playback.player.clone().unwrap();
-            let metrics = playback.metrics.unwrap();
             let metadata = Ym2149Metadata {
                 title: playback.song_title.clone(),
                 author: playback.song_author.clone(),
@@ -419,13 +470,8 @@ pub(in crate::plugin) fn initialize_playback(
             };
             let total_samples = metrics.total_samples();
 
-            let audio_source = Ym2149AudioSource::from_shared_player(
-                player_arc,
-                metadata,
-                total_samples,
-                playback.stereo_gain.clone(),
-                playback.tone_settings.clone(),
-            );
+            let audio_source =
+                Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
             let audio_handle = audio_assets.add(audio_source);
 
             // Remove old AudioPlayer and AudioSink components if they exist
@@ -474,38 +520,50 @@ pub(in crate::plugin) fn initialize_playback(
                 SourceLoadResult::Ready(bytes) => bytes,
             };
 
-            // Clone data for both player and audio source creation
-            let data_for_audio = loaded.data.clone();
-
-            let mut load =
-                match load_player_from_bytes(loaded.data.clone(), loaded.metadata.as_ref()) {
-                    Ok(load) => load,
-                    Err(err) => {
-                        error!("Failed to initialize YM2149 player: {}", err);
-                        continue;
-                    }
-                };
+            let mut load = match load_player_from_bytes(&loaded.data, loaded.metadata.as_ref()) {
+                Ok(load) => load,
+                Err(err) => {
+                    error!("Failed to initialize YM2149 player: {}", err);
+                    continue;
+                }
+            };
 
             playback.song_title = load.metadata.title.clone();
             playback.song_author = load.metadata.author.clone();
             playback.metrics = Some(load.metrics);
 
-            if playback.state == PlaybackState::Playing
-                && let Err(e) = load.player.play()
-            {
-                error!("Failed to start player: {}", e);
+            if playback.state == PlaybackState::Playing {
+                load.player.play();
+            }
+
+            // Take pending subsong if any (for subsong switching)
+            let pending_subsong = playback.pending_subsong.take();
+
+            // Apply pending subsong to the loaded player before wrapping
+            if let Some(subsong_index) = pending_subsong {
+                load.player.set_subsong(subsong_index);
             }
 
             let player_arc = Arc::new(RwLock::new(load.player));
-            // Diagnostics/crossfade use this player; audio playback uses the audio source below
+            // Diagnostics/crossfade use this player; audio playback uses its own player below
             playback.player = Some(player_arc);
             playback.needs_reload = false;
 
-            // Create a Ym2149AudioSource asset from the loaded data
-            let audio_source = match Ym2149AudioSource::new_with_shared(
-                data_for_audio,
+            // Update the subsong cache after loading
+            playback.update_subsong_cache();
+
+            // Stop the old audio sink immediately to prevent old samples from playing
+            if let Ok(old_sink) = audio_sinks.get(entity) {
+                old_sink.stop();
+            }
+
+            // Create a Ym2149AudioSource with its own player (separate from diagnostics)
+            // but with the same subsong selection applied
+            let audio_source = match Ym2149AudioSource::new_with_subsong(
+                loaded.data.clone(),
                 playback.stereo_gain.clone(),
                 playback.tone_settings.clone(),
+                pending_subsong,
             ) {
                 Ok(source) => source,
                 Err(err) => {
@@ -580,13 +638,9 @@ pub(in crate::plugin) fn drive_playback_state(
             PlaybackState::Playing => {
                 runtime.time_since_last_frame = 0.0;
                 runtime.emitted_finished = false;
-                if let Err(err) = player.play() {
-                    error!("Failed to resume YM playback: {}", err);
-                }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.play()
-                {
-                    error!("Failed to resume crossfade deck: {}", err);
+                player.play();
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.play();
                 }
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.play();
@@ -601,26 +655,18 @@ pub(in crate::plugin) fn drive_playback_state(
                 }
             }
             PlaybackState::Paused => {
-                if let Err(err) = player.pause() {
-                    error!("Failed to pause YM playback: {}", err);
-                }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.pause()
-                {
-                    error!("Failed to pause crossfade deck: {}", err);
+                player.pause();
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.pause();
                 }
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.pause();
                 }
             }
             PlaybackState::Idle => {
-                if let Err(err) = player.pause() {
-                    error!("Failed to stop YM playback: {}", err);
-                }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.pause()
-                {
-                    error!("Failed to stop crossfade deck: {}", err);
+                player.pause();
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.pause();
                 }
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.pause();
@@ -632,10 +678,8 @@ pub(in crate::plugin) fn drive_playback_state(
                 if let Ok(sink) = audio_sinks.get_mut(entity) {
                     sink.pause();
                 }
-                if let Some(cf) = crossfade_player.as_mut()
-                    && let Err(err) = cf.pause()
-                {
-                    error!("Failed to pause crossfade deck: {}", err);
+                if let Some(cf) = crossfade_player.as_mut() {
+                    cf.pause();
                 }
                 if config.channel_events && !runtime.emitted_finished {
                     finished_events.write(TrackFinished { entity });
@@ -683,13 +727,13 @@ pub(in crate::plugin) fn process_playback_frames(
         }
 
         if playback.state != PlaybackState::Playing {
-            playback.seek(player.get_current_frame() as u32);
+            playback.seek(player.current_frame() as u32);
             continue;
         }
 
         runtime.time_since_last_frame += delta;
 
-        let samples_per_frame = player.samples_per_frame_value() as usize;
+        let samples_per_frame = player.samples_per_frame() as usize;
         if samples_per_frame == 0 {
             continue;
         }
@@ -701,10 +745,11 @@ pub(in crate::plugin) fn process_playback_frames(
             runtime.frames_rendered += 1;
 
             let prev_frame = playback.frame_position;
-            playback.frame_position = player.get_current_frame() as u32;
+            playback.frame_position = player.current_frame() as u32;
 
+            let mut mono_samples = vec![0.0f32; samples_per_frame];
+            let mut channel_samples_raw = vec![[0.0f32; 3]; samples_per_frame];
             let mut stereo_samples = Vec::with_capacity(samples_per_frame * 2);
-            let mut channel_samples = Vec::with_capacity(samples_per_frame);
             let mut channel_energy = [0.0f32; 3];
             let gain = (playback.volume * master_volume).clamp(0.0, 1.0);
             let left_gain = playback.left_gain.clamp(0.0, 1.0);
@@ -722,12 +767,13 @@ pub(in crate::plugin) fn process_playback_frames(
                 })
                 .unwrap_or((1.0, 0.0));
 
-            for _ in 0..samples_per_frame {
-                let sample = player.generate_sample();
-                let (mut ch_a, mut ch_b, mut ch_c) = player
-                    .chip()
-                    .map(|chip| chip.get_channel_outputs())
-                    .unwrap_or((0.0, 0.0, 0.0));
+            // Generate samples with synchronized channel outputs for visualization
+            player.generate_samples_with_channels(&mut mono_samples, &mut channel_samples_raw);
+
+            // Process samples for output
+            let mut channel_samples = Vec::with_capacity(samples_per_frame);
+            for (i, sample) in mono_samples.iter().enumerate() {
+                let [mut ch_a, mut ch_b, mut ch_c] = channel_samples_raw[i];
 
                 if playback.volume != 1.0 {
                     ch_a *= playback.volume;
@@ -760,10 +806,11 @@ pub(in crate::plugin) fn process_playback_frames(
                 stereo_samples.push(scaled * right_gain);
             }
 
-            let frequencies = player
+            let registers = player
                 .chip()
-                .map(|chip| channel_frequencies(&chip.dump_registers()))
-                .unwrap_or([None; 3]);
+                .map(|chip| chip.dump_registers())
+                .unwrap_or([0; 16]);
+            let frequencies = channel_frequencies(&registers);
 
             let elapsed_seconds = runtime.frames_rendered as f32 * frame_duration;
             let looped = playback.frame_position < prev_frame;
@@ -777,6 +824,7 @@ pub(in crate::plugin) fn process_playback_frames(
                 channel_energy,
                 frequencies,
                 samples_per_frame,
+                registers,
             });
             if let Some(sfx) = runtime.sfx.as_mut() {
                 sfx.tick_frame();
@@ -806,7 +854,7 @@ pub(in crate::plugin) fn process_playback_frames(
             }
         }
 
-        playback.seek(player.get_current_frame() as u32);
+        playback.seek(player.current_frame() as u32);
         let crossfade_complete = playback
             .crossfade
             .as_ref()
@@ -837,24 +885,16 @@ pub(in crate::plugin) fn process_playback_frames(
             runtime.time_since_last_frame = 0.0;
 
             if settings.loop_enabled {
-                match player.stop().and_then(|_| player.play()) {
-                    Ok(()) => {
-                        runtime.frames_rendered = 0;
-                        playback.seek(0);
-                        runtime.emitted_finished = false;
-                        if config.channel_events {
-                            started_events.write(TrackStarted { entity });
-                        }
-                    }
-                    Err(err) => {
-                        error!("Failed to loop YM playback: {}", err);
-                        playback.state = PlaybackState::Finished;
-                    }
+                player.stop();
+                player.play();
+                runtime.frames_rendered = 0;
+                playback.seek(0);
+                runtime.emitted_finished = false;
+                if config.channel_events {
+                    started_events.write(TrackStarted { entity });
                 }
             } else {
-                if let Err(err) = player.stop() {
-                    error!("Failed to stop YM playback: {}", err);
-                }
+                player.stop();
                 playback.seek(0);
                 playback.state = PlaybackState::Finished;
                 if config.channel_events && !runtime.emitted_finished {
@@ -864,6 +904,29 @@ pub(in crate::plugin) fn process_playback_frames(
             }
         }
     }
+}
+
+pub(super) struct LoadResult {
+    pub(super) player: YmSongPlayer,
+    pub(super) metrics: PlaybackMetrics,
+    pub(super) metadata: Ym2149Metadata,
+}
+
+pub(super) fn load_player_from_bytes(
+    data: &[u8],
+    override_metadata: Option<&Ym2149Metadata>,
+) -> Result<LoadResult, String> {
+    let (player, metrics, mut metadata) = load_song_from_bytes(data)?;
+    if let Some(meta) = override_metadata {
+        metadata.title = meta.title.clone();
+        metadata.author = meta.author.clone();
+        metadata.comment = meta.comment.clone();
+    }
+    Ok(LoadResult {
+        player,
+        metrics,
+        metadata,
+    })
 }
 
 #[cfg(test)]
@@ -896,6 +959,7 @@ mod tests {
             channel_energy: [amplitude, 0.0, 0.0],
             frequencies: [freq, None, None],
             samples_per_frame: 1,
+            registers: [0; 16],
         });
     }
 
@@ -936,27 +1000,4 @@ mod tests {
         app.update();
         assert_eq!(drain_hits(&mut app).len(), 1);
     }
-}
-
-pub(super) struct LoadResult {
-    pub(super) player: YmSongPlayer,
-    pub(super) metrics: PlaybackMetrics,
-    pub(super) metadata: Ym2149Metadata,
-}
-
-pub(super) fn load_player_from_bytes(
-    data: Vec<u8>,
-    override_metadata: Option<&Ym2149Metadata>,
-) -> Result<LoadResult, String> {
-    let (player, metrics, mut metadata) = load_song_from_bytes(&data)?;
-    if let Some(meta) = override_metadata {
-        metadata.title = meta.title.clone();
-        metadata.author = meta.author.clone();
-        metadata.comment = meta.comment.clone();
-    }
-    Ok(LoadResult {
-        player,
-        metrics,
-        metadata,
-    })
 }

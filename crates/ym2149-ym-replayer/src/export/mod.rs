@@ -2,7 +2,6 @@
 //!
 //! This module provides utilities to export YM file playback to various audio formats:
 //! - WAV (uncompressed PCM)
-//! - MP3 (LAME-encoded)
 //!
 //! # Examples
 //!
@@ -21,30 +20,10 @@
 //! # }
 //! ```
 //!
-//! ## Export to MP3
-//!
-//! ```no_run
-//! use ym2149::export::export_to_mp3;
-//! use ym2149::replayer::load_song;
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let data = std::fs::read("song.ym")?;
-//! let (mut player, _) = load_song(&data)?;
-//!
-//! export_to_mp3(&mut player, "output.mp3", 192)?; // 192 kbps
-//! # Ok(())
-//! # }
-//! ```
-
 #[cfg(feature = "export-wav")]
 mod wav;
 #[cfg(feature = "export-wav")]
 pub use wav::*;
-
-#[cfg(feature = "export-mp3")]
-mod mp3;
-#[cfg(feature = "export-mp3")]
-pub use mp3::*;
 
 /// Export configuration options
 #[derive(Debug, Clone)]

@@ -129,6 +129,34 @@ pub trait Ym2149Backend: Send {
         }
     }
 
+    /// Generate samples with synchronized per-sample channel outputs
+    ///
+    /// This method generates mono samples and captures per-channel outputs at the same time,
+    /// ensuring that the channel data is perfectly synchronized with the audio.
+    /// This is essential for accurate visualization (oscilloscope, spectrum analyzer).
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer` - Output slice for mono samples in range [-1.0, 1.0]
+    /// * `channel_outputs` - Output slice for per-sample channel outputs [A, B, C]
+    ///
+    /// # Panics
+    ///
+    /// Panics if buffer and channel_outputs have different lengths.
+    fn generate_samples_with_channels(
+        &mut self,
+        buffer: &mut [f32],
+        channel_outputs: &mut [[f32; 3]],
+    ) {
+        debug_assert_eq!(buffer.len(), channel_outputs.len());
+        for (sample, channels) in buffer.iter_mut().zip(channel_outputs.iter_mut()) {
+            self.clock();
+            *sample = self.get_sample();
+            let (a, b, c) = self.get_channel_outputs();
+            *channels = [a, b, c];
+        }
+    }
+
     /// Get individual channel outputs
     ///
     /// # Returns

@@ -2,7 +2,7 @@
 
 use super::{ExportConfig, apply_fade_out, normalize_samples};
 use crate::Result;
-use crate::{LoadSummary, PlaybackController, Ym6Player};
+use crate::{LoadSummary, PlaybackController, YmPlayer};
 use std::path::Path;
 
 /// Export YM playback to WAV file
@@ -29,7 +29,7 @@ use std::path::Path;
 /// # }
 /// ```
 pub fn export_to_wav<P: AsRef<Path>>(
-    player: &mut Ym6Player,
+    player: &mut YmPlayer,
     info: LoadSummary,
     output_path: P,
 ) -> Result<()> {
@@ -63,7 +63,7 @@ pub fn export_to_wav<P: AsRef<Path>>(
 /// # }
 /// ```
 pub fn export_to_wav_with_config<P: AsRef<Path>>(
-    player: &mut Ym6Player,
+    player: &mut YmPlayer,
     output_path: P,
     info: LoadSummary,
     config: ExportConfig,
@@ -165,7 +165,7 @@ fn write_wav_file(path: &Path, samples: &[f32], sample_rate: u32, channels: u16)
 
 /// Write samples to WAV file using streaming (memory-efficient for large files)
 fn write_wav_file_streaming(
-    player: &mut Ym6Player,
+    player: &mut YmPlayer,
     path: &Path,
     total_samples: usize,
     sample_rate: u32,

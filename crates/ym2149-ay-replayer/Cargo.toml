@@ -15,7 +15,10 @@ categories = ["multimedia::audio", "emulators"]
 [dependencies]
 thiserror.workspace = true
 iz80 = "0.4.4"
-ym2149 = { path = "../ym2149-core", version = "0.6" }
+ym2149 = { path = "../ym2149-core", version = "0.7" }
+
+# Common traits (PlaybackMetadata, ChiptunePlayer)
+ym2149-common = { path = "../ym2149-common", version = "0.7" }
 
 [features]
 default = []
