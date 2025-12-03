@@ -110,6 +110,18 @@
             margin-bottom: 15px;
         }
 
+        .format-section {
+            margin-bottom: 15px;
+        }
+
+        .format-section h3 {
+            color: #00aaff;
+            font-size: 13px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(0, 170, 255, 0.3);
+            padding-bottom: 5px;
+        }
+
         .file-list {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -205,13 +217,33 @@
 
         <div class="test-files">
             <h2>Test Files Included</h2>
-            <div class="file-list">
-                <a href="simple-player.html?file=Ashtray.ym" class="file-item">📼 Ashtray.ym</a>
-                <a href="simple-player.html?file=Credits.ym" class="file-item">📼 Credits.ym</a>
-                <a href="simple-player.html?file=ND-Toxygene.ym" class="file-item">📼 ND-Toxygene.ym</a>
-                <a href="simple-player.html?file=Prelude.ym" class="file-item">📼 Prelude.ym</a>
-                <a href="simple-player.html?file=Scout.ym" class="file-item">📼 Scout.ym</a>
-                <a href="simple-player.html?file=Steps.ym" class="file-item">📼 Steps.ym</a>
+            <div class="format-section">
+                <h3>YM Format (Atari ST)</h3>
+                <div class="file-list">
+                    <a href="simple-player.html?file=Prelude.ym" class="file-item">📼 Prelude.ym</a>
+                    <a href="simple-player.html?file=Scout.ym" class="file-item">📼 Scout.ym</a>
+                </div>
+            </div>
+            <div class="format-section">
+                <h3>AKS Format (Arkos Tracker)</h3>
+                <div class="file-list">
+                    <a href="simple-player.html?file=LopEars.aks" class="file-item">🎶 LopEars.aks</a>
+                    <a href="simple-player.html?file=JustAddCream.aks" class="file-item">🎶 JustAddCream.aks</a>
+                </div>
+            </div>
+            <div class="format-section">
+                <h3>SNDH Format (Atari ST)</h3>
+                <div class="file-list">
+                    <a href="simple-player.html?file=Main_Menu.sndh" class="file-item">🎵 Main_Menu.sndh</a>
+                    <a href="simple-player.html?file=Intensity_200hz.sndh" class="file-item">🎵 Intensity_200hz.sndh</a>
+                </div>
+            </div>
+            <div class="format-section">
+                <h3>AY Format (ZX Spectrum/Amstrad)</h3>
+                <div class="file-list">
+                    <a href="simple-player.html?file=AcousticDreams.ay" class="file-item">🎹 AcousticDreams.ay</a>
+                    <a href="simple-player.html?file=ZUB.AY" class="file-item">🎹 ZUB.AY</a>
+                </div>
             </div>
         </div>
 

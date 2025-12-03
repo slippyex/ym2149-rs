@@ -38,10 +38,25 @@ jobs:
           cd crates/ym2149-wasm
           wasm-pack build --target web --release
 
-      - name: Copy WASM to docs
+      - name: Copy WASM and examples to docs
         run: |
+          # Copy WASM build output
           cp crates/ym2149-wasm/pkg/ym2149_wasm* docs/pkg/
+
+          # Copy HTML files from examples
+          cp crates/ym2149-wasm/examples/index.html docs/
+          cp crates/ym2149-wasm/examples/simple-player.html docs/
+
+          # Copy example songs (all formats)
+          cp crates/ym2149-wasm/examples/*.ym docs/ 2>/dev/null || true
+          cp crates/ym2149-wasm/examples/*.aks docs/ 2>/dev/null || true
+          cp crates/ym2149-wasm/examples/*.ay docs/ 2>/dev/null || true
+          cp crates/ym2149-wasm/examples/*.sndh docs/ 2>/dev/null || true
+
+          echo "=== docs/pkg/ ==="
           ls -lh docs/pkg/
+          echo "=== docs/ ==="
+          ls -lh docs/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
