@@ -56,9 +56,5 @@ pub use player::{
     YmPlayerGeneric, load_song, load_song_with_rate,
 };
 
-/// Optional YM player using the experimental softsynth backend.
-#[cfg(feature = "softsynth")]
-pub type SoftSynthPlayer = player::YmPlayerGeneric<ym2149_softsynth::SoftSynth>;
-
 // Re-export unified player trait from ym2149-common
 pub use ym2149_common::{ChiptunePlayer, PlaybackMetadata};

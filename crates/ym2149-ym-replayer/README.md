@@ -75,7 +75,6 @@ This crate was extracted from `ym2149-core` to provide better separation of conc
 
 - **ym2149-core**: Pure YM2149 chip emulation
 - **ym2149-ym-replayer**: YM file parsing and playback (this crate)
-- **ym2149-softsynth**: Experimental synthesizer backend (workspace helper; not published)
 
 ## Migration from ym2149-core < 0.6
 
@@ -97,9 +96,7 @@ use ym2149_ym_replayer::loader;
 - `effects`: Enable YM6 effect processing
 - `tracker`: Enable tracker mode support
 - `digidrums`: Enable Mad Max digi-drums
-- `streaming`: Enable real-time audio output (requires `rodio`) - for CLI/standalone use; Bevy integration uses native audio
 - `export-wav`: Enable WAV file export (requires `hound`)
-- `softsynth`: Workspace-only hook for experimental software synthesizer backends (requires providing your own `ym2149-softsynth` via `[patch]`)
 
 > MP3 export was removed because the LAME/Autotools toolchain is fragile across environments. Export WAV and transcode externally (e.g., `ffmpeg`).
 
