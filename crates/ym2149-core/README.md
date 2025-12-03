@@ -101,6 +101,7 @@ fn play_note<B: Ym2149Backend>(chip: &mut B) {
 |--------|-------------|
 | `ym2149` | Core chip implementation |
 | `backend` | `Ym2149Backend` trait for alternative implementations |
+| `channel_state` | `ChannelStates` for extracting visualization data from registers |
 | `util` | Register math helpers (period/frequency conversion) |
 
 ## Migration from < 0.7

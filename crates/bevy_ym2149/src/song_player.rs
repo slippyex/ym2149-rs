@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use bevy::prelude::error;
 use parking_lot::RwLock;
+use ym2149::Ym2149Backend;
 use ym2149_arkos_replayer::{AksSong, parser::load_aks, player::ArkosPlayer};
 use ym2149_ay_replayer::{AyMetadata as AyFileMetadata, AyPlayer, CPC_UNSUPPORTED_MSG};
 use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields};
@@ -173,6 +174,62 @@ impl YmSongPlayer {
             Self::Ay(p) => p.generate_samples_into(buffer),
             Self::Sndh(p) => p.generate_samples_into(buffer),
             Self::Synth(p) => p.generate_samples_into(buffer),
+        }
+    }
+
+    /// Generate samples and capture per-sample channel outputs for visualization.
+    ///
+    /// This method generates mono samples into `buffer` and simultaneously captures
+    /// the individual channel outputs (A, B, C) into `channel_outputs` for oscilloscope
+    /// and spectrum visualization.
+    ///
+    /// This is the correct way to get synchronized channel data - calling `get_channel_outputs()`
+    /// separately can return stale data for cached players (Arkos, AY, SNDH).
+    pub(crate) fn generate_samples_with_channels(
+        &mut self,
+        buffer: &mut [f32],
+        channel_outputs: &mut [[f32; 3]],
+    ) {
+        debug_assert_eq!(buffer.len(), channel_outputs.len());
+
+        match self {
+            Self::Ym { player, .. } => {
+                // YM player: generate sample by sample, capturing channel outputs
+                for (sample, channels) in buffer.iter_mut().zip(channel_outputs.iter_mut()) {
+                    *sample = player.generate_sample();
+                    let (a, b, c) = player.get_chip().get_channel_outputs();
+                    *channels = [a, b, c];
+                }
+            }
+            Self::Arkos(p) => {
+                // Arkos: use cached channel outputs that were captured during cache fill
+                for (sample, channels) in buffer.iter_mut().zip(channel_outputs.iter_mut()) {
+                    *sample = p.generate_sample();
+                    *channels = p.get_cached_channel_outputs();
+                }
+            }
+            Self::Ay(p) => {
+                // AY: use cached channel outputs that were captured during cache fill
+                for (sample, channels) in buffer.iter_mut().zip(channel_outputs.iter_mut()) {
+                    *sample = p.generate_sample();
+                    *channels = p.get_cached_channel_outputs();
+                }
+            }
+            Self::Sndh(p) => {
+                // SNDH: use cached channel outputs that were captured during cache fill
+                for (sample, channels) in buffer.iter_mut().zip(channel_outputs.iter_mut()) {
+                    *sample = p.generate_sample();
+                    *channels = p.get_cached_channel_outputs();
+                }
+            }
+            Self::Synth(p) => {
+                // Synth: generate samples and capture outputs directly (no cache)
+                for (sample, channels) in buffer.iter_mut().zip(channel_outputs.iter_mut()) {
+                    *sample = p.generate_sample();
+                    let (a, b, c) = p.chip().get_channel_outputs();
+                    *channels = [a, b, c];
+                }
+            }
         }
     }
 
@@ -375,6 +432,7 @@ pub struct ArkosBevyPlayer {
     samples_per_frame: u32,
     estimated_frames: usize,
     cache: Vec<f32>,
+    channel_cache: Vec<[f32; 3]>,
     cache_pos: usize,
     cache_len: usize,
     current_subsong: usize,
@@ -397,6 +455,7 @@ impl ArkosBevyPlayer {
             samples_per_frame,
             estimated_frames,
             cache: vec![0.0; 1024],
+            channel_cache: vec![[0.0; 3]; 1024],
             cache_pos: 0,
             cache_len: 0,
             current_subsong: 0,
@@ -465,10 +524,31 @@ impl ArkosBevyPlayer {
     fn refill_cache(&mut self) {
         if self.cache.is_empty() {
             self.cache.resize(1024, 0.0);
+            self.channel_cache.resize(1024, [0.0; 3]);
         }
+        // Generate samples through the player
         self.player.generate_samples_into(&mut self.cache);
+        // Capture channel outputs from primary chip state after generation
+        if let Some(chip) = self.player.chip(0) {
+            let (a, b, c) = chip.get_channel_outputs();
+            let outputs = [a, b, c];
+            self.channel_cache.fill(outputs);
+        } else {
+            self.channel_cache.fill([0.0; 3]);
+        }
         self.cache_len = self.cache.len();
         self.cache_pos = 0;
+    }
+
+    /// Get channel outputs for sample at current cache position
+    pub(crate) fn get_cached_channel_outputs(&self) -> [f32; 3] {
+        if self.cache_pos > 0 && self.cache_pos <= self.cache_len {
+            self.channel_cache[self.cache_pos - 1]
+        } else if !self.channel_cache.is_empty() {
+            self.channel_cache[0]
+        } else {
+            [0.0, 0.0, 0.0]
+        }
     }
 
     pub fn subsong_count(&self) -> usize {
@@ -504,6 +584,7 @@ pub struct AyBevyPlayer {
     player: AyPlayer,
     metadata: Ym2149Metadata,
     cache: Vec<f32>,
+    channel_cache: Vec<[f32; 3]>,
     cache_pos: usize,
     cache_len: usize,
     unsupported: bool,
@@ -516,6 +597,7 @@ impl AyBevyPlayer {
             player,
             metadata,
             cache: vec![0.0; AY_CACHE_SAMPLES],
+            channel_cache: vec![[0.0; 3]; AY_CACHE_SAMPLES],
             cache_pos: 0,
             cache_len: 0,
             unsupported: false,
@@ -578,15 +660,33 @@ impl AyBevyPlayer {
     }
 
     fn fill_cache(&mut self) {
+        // Generate samples through the player (includes Z80 emulation)
         ChiptunePlayerBase::generate_samples_into(
             &mut self.player,
             &mut self.cache[..AY_CACHE_SAMPLES],
         );
         if self.check_and_mark_unsupported() {
             self.cache.fill(0.0);
+            self.channel_cache.fill([0.0; 3]);
+        } else {
+            // Capture channel outputs from chip state after generation
+            let (a, b, c) = self.player.chip().get_channel_outputs();
+            let outputs = [a, b, c];
+            self.channel_cache[..AY_CACHE_SAMPLES].fill(outputs);
         }
         self.cache_pos = 0;
         self.cache_len = AY_CACHE_SAMPLES;
+    }
+
+    /// Get channel outputs for sample at current cache position
+    pub(crate) fn get_cached_channel_outputs(&self) -> [f32; 3] {
+        if self.cache_pos > 0 && self.cache_pos <= self.cache_len {
+            self.channel_cache[self.cache_pos - 1]
+        } else if !self.channel_cache.is_empty() {
+            self.channel_cache[0]
+        } else {
+            [0.0, 0.0, 0.0]
+        }
     }
 
     fn metadata(&self) -> &Ym2149Metadata {
@@ -646,6 +746,7 @@ pub struct SndhBevyPlayer {
     metadata: Ym2149Metadata,
     samples_per_frame: u32,
     cache: Vec<f32>,
+    channel_cache: Vec<[f32; 3]>,
     cache_pos: usize,
     cache_len: usize,
 }
@@ -661,6 +762,7 @@ impl SndhBevyPlayer {
             metadata,
             samples_per_frame,
             cache: vec![0.0; SNDH_CACHE_SAMPLES],
+            channel_cache: vec![[0.0; 3]; SNDH_CACHE_SAMPLES],
             cache_pos: 0,
             cache_len: 0,
         }
@@ -707,12 +809,29 @@ impl SndhBevyPlayer {
     }
 
     fn fill_cache(&mut self) {
+        // Generate samples through the player (includes 68000 emulation)
         ChiptunePlayerBase::generate_samples_into(
             &mut self.player,
             &mut self.cache[..SNDH_CACHE_SAMPLES],
         );
+        // Capture channel outputs from chip state after generation
+        // Not sample-accurate, but provides reasonable visualization
+        let (a, b, c) = self.player.ym2149().get_channel_outputs();
+        let outputs = [a, b, c];
+        self.channel_cache[..SNDH_CACHE_SAMPLES].fill(outputs);
         self.cache_pos = 0;
         self.cache_len = SNDH_CACHE_SAMPLES;
+    }
+
+    /// Get channel outputs for sample at current cache position
+    pub(crate) fn get_cached_channel_outputs(&self) -> [f32; 3] {
+        if self.cache_pos > 0 && self.cache_pos <= self.cache_len {
+            self.channel_cache[self.cache_pos - 1]
+        } else if !self.channel_cache.is_empty() {
+            self.channel_cache[0]
+        } else {
+            [0.0, 0.0, 0.0]
+        }
     }
 
     fn metadata(&self) -> &Ym2149Metadata {

@@ -5,6 +5,18 @@ All notable changes to the ym2149-rs project.
 ## [Unreleased] - v0.7.0
 
 ### Added
+- **`ChannelStates` module** - New `ym2149::channel_state` module for unified register-based visualization:
+  - `ChannelState` - Per-channel state (tone period, frequency, note name, MIDI note, amplitude, mixer flags)
+  - `EnvelopeState` - Envelope generator state (period, shape, shape name)
+  - `NoiseState` - Noise generator state (period, frequency)
+  - `ChannelStates::from_registers()` - Extract visualization-ready data from any YM2149 register dump
+  - Works consistently across all formats (YM, AKS, AY, SNDH) since all use the same YM2149 registers
+- **`ChipStateSnapshot` resource** - New Bevy resource in `bevy_ym2149` for visualization access:
+  - Provides latest YM2149 register dump without locking the player
+  - Includes derived `ChannelStates` for immediate use by visualization systems
+- **`generate_samples_with_channels()` method** - New `Ym2149Backend` trait method for synchronized visualization:
+  - Generates audio samples and captures per-sample channel outputs simultaneously
+  - Ensures visualization data is perfectly synchronized with audio playback
 - **`ym2149-sndh-replayer` crate** - New crate for SNDH file playback with full Atari ST machine emulation:
   - **ICE! 2.4 Decompression** - Decompress ICE-packed SNDH files
   - **SNDH Parser** - Parse SNDH headers and metadata (TITL, COMM, YEAR, TIME, timer tags, etc.)

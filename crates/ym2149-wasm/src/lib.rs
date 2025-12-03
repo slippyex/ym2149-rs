@@ -229,6 +229,77 @@ impl Ym2149Player {
         self.player.dump_registers().to_vec()
     }
 
+    /// Get channel states for visualization (frequency, amplitude, note, effects).
+    ///
+    /// Returns a JsValue containing an object with channel data:
+    /// ```json
+    /// {
+    ///   "channels": [
+    ///     { "frequency": 440.0, "note": "A4", "amplitude": 0.8, "toneEnabled": true, "noiseEnabled": false, "envelopeEnabled": false },
+    ///     ...
+    ///   ],
+    ///   "envelope": { "period": 256, "shape": 14, "shapeName": "/\\/\\" }
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = getChannelStates)]
+    pub fn get_channel_states(&self) -> JsValue {
+        use ym2149::ChannelStates;
+
+        let regs = self.player.dump_registers();
+        let states = ChannelStates::from_registers(&regs);
+
+        // Build JavaScript-friendly object
+        let obj = js_sys::Object::new();
+
+        // Channels array
+        let channels = js_sys::Array::new();
+        for ch in &states.channels {
+            let ch_obj = js_sys::Object::new();
+            js_sys::Reflect::set(
+                &ch_obj,
+                &"frequency".into(),
+                &ch.frequency_hz.unwrap_or(0.0).into(),
+            )
+            .ok();
+            js_sys::Reflect::set(
+                &ch_obj,
+                &"note".into(),
+                &ch.note_name.unwrap_or("--").into(),
+            )
+            .ok();
+            js_sys::Reflect::set(
+                &ch_obj,
+                &"amplitude".into(),
+                &ch.amplitude_normalized.into(),
+            )
+            .ok();
+            js_sys::Reflect::set(&ch_obj, &"toneEnabled".into(), &ch.tone_enabled.into()).ok();
+            js_sys::Reflect::set(&ch_obj, &"noiseEnabled".into(), &ch.noise_enabled.into()).ok();
+            js_sys::Reflect::set(
+                &ch_obj,
+                &"envelopeEnabled".into(),
+                &ch.envelope_enabled.into(),
+            )
+            .ok();
+            channels.push(&ch_obj);
+        }
+        js_sys::Reflect::set(&obj, &"channels".into(), &channels).ok();
+
+        // Envelope info
+        let env_obj = js_sys::Object::new();
+        js_sys::Reflect::set(&env_obj, &"period".into(), &states.envelope.period.into()).ok();
+        js_sys::Reflect::set(&env_obj, &"shape".into(), &states.envelope.shape.into()).ok();
+        js_sys::Reflect::set(
+            &env_obj,
+            &"shapeName".into(),
+            &states.envelope.shape_name.into(),
+        )
+        .ok();
+        js_sys::Reflect::set(&obj, &"envelope".into(), &env_obj).ok();
+
+        obj.into()
+    }
+
     /// Enable or disable the ST color filter.
     pub fn set_color_filter(&mut self, enabled: bool) {
         self.player.set_color_filter(enabled);

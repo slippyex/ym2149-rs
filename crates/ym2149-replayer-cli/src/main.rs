@@ -37,12 +37,56 @@ pub struct VisualSnapshot {
     pub registers: [[u8; 16]; MAX_PSG_COUNT],
     /// Number of active PSG chips
     pub psg_count: usize,
-    /// Sync buzzer effect active
+    /// Sync buzzer effect active (from YM metadata, not detected)
     pub sync_buzzer: bool,
-    /// SID voice effects active per channel (up to 12 channels for 4 PSGs)
+    /// SID voice effects active per channel (detected from registers or metadata)
     pub sid_active: [bool; MAX_PSG_COUNT * 3],
-    /// Drum effects active per channel (up to 12 channels for 4 PSGs)
+    /// Drum effects active per channel (detected from registers or metadata)
     pub drum_active: [bool; MAX_PSG_COUNT * 3],
+}
+
+impl VisualSnapshot {
+    /// Detect SID/drum effects from register patterns.
+    ///
+    /// This heuristic detects effects when metadata is not available
+    /// (SNDH/AY formats). It analyzes envelope usage and amplitude patterns.
+    pub fn detect_effects_from_registers(&mut self) {
+        for psg_idx in 0..self.psg_count {
+            let regs = &self.registers[psg_idx];
+            let base_ch = psg_idx * 3;
+
+            // Get envelope info
+            let env_period = (regs[11] as u16) | ((regs[12] as u16) << 8);
+            let env_shape = regs[13] & 0x0F;
+
+            // SID detection: envelope enabled with active/complex shape
+            // Shapes 8-15 are "complex" (sustaining/cycling)
+            let is_complex_env = env_shape >= 8;
+            let env_active = env_period > 0;
+
+            for local_ch in 0..3 {
+                let global_ch = base_ch + local_ch;
+                let amp_reg = regs[8 + local_ch];
+                let env_enabled = (amp_reg & 0x10) != 0;
+                let amplitude = amp_reg & 0x0F;
+
+                // Skip if already set (from YM metadata)
+                if !self.sid_active[global_ch] {
+                    // SID: envelope mode with complex shape and reasonable period
+                    // Real SID effects typically use fast envelope periods (< 1000)
+                    self.sid_active[global_ch] =
+                        env_enabled && is_complex_env && env_active && env_period < 2000;
+                }
+
+                if !self.drum_active[global_ch] {
+                    // DRUM: high amplitude spikes without envelope
+                    // DigiDrum typically uses direct amplitude writes (no envelope)
+                    // with values near max (13-15)
+                    self.drum_active[global_ch] = !env_enabled && amplitude >= 13;
+                }
+            }
+        }
+    }
 }
 
 /// CLI-specific trait for real-time chip emulation with visualization.

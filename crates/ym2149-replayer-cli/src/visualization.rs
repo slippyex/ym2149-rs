@@ -432,6 +432,10 @@ fn display_frame(
     fill_pct: f32,
     subsong_info: Option<(usize, usize)>,
 ) {
+    // Clone and detect effects from registers if not already set
+    let mut snapshot = *snapshot;
+    snapshot.detect_effects_from_registers();
+
     let psg_count = snapshot.psg_count;
     let sync_buzzer_active = snapshot.sync_buzzer;
 

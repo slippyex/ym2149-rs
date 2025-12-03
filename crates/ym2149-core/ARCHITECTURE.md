@@ -88,6 +88,7 @@ pub trait Ym2149Backend: Send {
     fn clock(&mut self);
     fn get_sample(&self) -> f32;
     fn generate_samples(&mut self, count: usize) -> Vec<f32>;
+    fn generate_samples_with_channels(&mut self, buffer: &mut [f32], channels: &mut [[f32; 3]]);
     fn get_channel_outputs(&self) -> (f32, f32, f32);
     fn set_channel_mute(&mut self, channel: usize, mute: bool);
     fn is_channel_muted(&self, channel: usize) -> bool;
@@ -167,6 +168,7 @@ ym2149-core/src/
 │   ├── tables.rs         # Hardware lookup tables (ENV_DATA, SHAPE_TO_ENV, YM2149_LOG_LEVELS)
 │   └── psg_bank.rs       # Multi-PSG bank (Arkos/PlayCity)
 ├── backend.rs            # Ym2149Backend trait
+├── channel_state.rs      # ChannelStates for extracting visualization data from registers
 ├── util.rs               # Register math helpers (period/frequency conversion)
 └── lib.rs                # Public API exports
 ```

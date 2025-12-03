@@ -39,6 +39,7 @@
 use crate::audio_bridge::{AudioBridgeBuffers, AudioBridgeTargets};
 use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Metadata};
+use crate::chip_state::ChipStateSnapshot;
 use crate::events::{
     BeatHit, ChannelSnapshot, PatternTriggered, PlaybackFrameMarker, TrackFinished, TrackStarted,
     YmSfxRequest,
@@ -142,14 +143,20 @@ pub(in crate::plugin) fn emit_playback_diagnostics(
     mut frames: MessageReader<FrameAudioData>,
     mut snapshot_events: MessageWriter<ChannelSnapshot>,
     mut oscilloscope_buffer: Option<ResMut<OscilloscopeBuffer>>,
+    mut chip_state: Option<ResMut<ChipStateSnapshot>>,
 ) {
     let emit_snapshots = config.channel_events;
     let mut buffer = oscilloscope_buffer.as_deref_mut();
-    if !emit_snapshots && buffer.is_none() {
+    let mut chip_state = chip_state.as_deref_mut();
+    if !emit_snapshots && buffer.is_none() && chip_state.is_none() {
         return;
     }
 
     for frame in frames.read() {
+        if let Some(state) = chip_state.as_deref_mut() {
+            state.update_from_registers(frame.registers);
+        }
+
         if emit_snapshots && frame.samples_per_frame > 0 {
             let inv_len = 1.0 / frame.samples_per_frame.max(1) as f32;
             for (channel, amplitude) in frame.channel_energy.iter().enumerate() {
@@ -377,6 +384,7 @@ pub(crate) struct FrameAudioData {
     pub channel_energy: [f32; 3],
     pub frequencies: [Option<f32>; 3],
     pub samples_per_frame: usize,
+    pub registers: [u8; 16],
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -739,8 +747,9 @@ pub(in crate::plugin) fn process_playback_frames(
             let prev_frame = playback.frame_position;
             playback.frame_position = player.get_current_frame() as u32;
 
+            let mut mono_samples = vec![0.0f32; samples_per_frame];
+            let mut channel_samples_raw = vec![[0.0f32; 3]; samples_per_frame];
             let mut stereo_samples = Vec::with_capacity(samples_per_frame * 2);
-            let mut channel_samples = Vec::with_capacity(samples_per_frame);
             let mut channel_energy = [0.0f32; 3];
             let gain = (playback.volume * master_volume).clamp(0.0, 1.0);
             let left_gain = playback.left_gain.clamp(0.0, 1.0);
@@ -758,12 +767,13 @@ pub(in crate::plugin) fn process_playback_frames(
                 })
                 .unwrap_or((1.0, 0.0));
 
-            for _ in 0..samples_per_frame {
-                let sample = player.generate_sample();
-                let (mut ch_a, mut ch_b, mut ch_c) = player
-                    .chip()
-                    .map(|chip| chip.get_channel_outputs())
-                    .unwrap_or((0.0, 0.0, 0.0));
+            // Generate samples with synchronized channel outputs for visualization
+            player.generate_samples_with_channels(&mut mono_samples, &mut channel_samples_raw);
+
+            // Process samples for output
+            let mut channel_samples = Vec::with_capacity(samples_per_frame);
+            for (i, sample) in mono_samples.iter().enumerate() {
+                let [mut ch_a, mut ch_b, mut ch_c] = channel_samples_raw[i];
 
                 if playback.volume != 1.0 {
                     ch_a *= playback.volume;
@@ -796,10 +806,11 @@ pub(in crate::plugin) fn process_playback_frames(
                 stereo_samples.push(scaled * right_gain);
             }
 
-            let frequencies = player
+            let registers = player
                 .chip()
-                .map(|chip| channel_frequencies(&chip.dump_registers()))
-                .unwrap_or([None; 3]);
+                .map(|chip| chip.dump_registers())
+                .unwrap_or([0; 16]);
+            let frequencies = channel_frequencies(&registers);
 
             let elapsed_seconds = runtime.frames_rendered as f32 * frame_duration;
             let looped = playback.frame_position < prev_frame;
@@ -813,6 +824,7 @@ pub(in crate::plugin) fn process_playback_frames(
                 channel_energy,
                 frequencies,
                 samples_per_frame,
+                registers,
             });
             if let Some(sfx) = runtime.sfx.as_mut() {
                 sfx.tick_frame();
@@ -947,6 +959,7 @@ mod tests {
             channel_energy: [amplitude, 0.0, 0.0],
             frequencies: [freq, None, None],
             samples_per_frame: 1,
+            registers: [0; 16],
         });
     }
 

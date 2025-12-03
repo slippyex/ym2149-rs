@@ -96,6 +96,7 @@
 //! - [`bevy_ym2149_viz`](https://crates.io/crates/bevy_ym2149_viz) - Optional UI components and display helpers
 
 // Public modules - user-facing API
+pub mod chip_state;
 pub mod error;
 pub mod events;
 pub mod music_state;
@@ -132,6 +133,9 @@ pub use plugin::{Ym2149Plugin, Ym2149PluginConfig};
 
 // Playback control (main user-facing types)
 pub use playback::{PlaybackState, Ym2149Playback, Ym2149Settings};
+
+// Register snapshot for visualization
+pub use chip_state::ChipStateSnapshot;
 
 // Error handling
 pub use error::{BevyYm2149Error, Result};

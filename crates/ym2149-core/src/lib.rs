@@ -32,6 +32,7 @@
 
 // Domain modules
 pub mod backend; // Backend trait abstraction
+pub mod channel_state; // Visualization-ready channel state extraction
 pub mod util; // Register math helpers
 pub mod ym2149; // YM2149 PSG emulation
 
@@ -73,4 +74,5 @@ pub type Result<T> = std::result::Result<T, Ym2149Error>;
 
 // Public API exports
 pub use backend::Ym2149Backend;
+pub use channel_state::ChannelStates;
 pub use ym2149::Ym2149;

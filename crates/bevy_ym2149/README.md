@@ -4,13 +4,13 @@
 [![Docs.rs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
-Bevy plugin that embeds the cycle-accurate [`ym2149`](../ym2149-core) emulator, providing real-time YM/AKS/AY playback, playlists, crossfades, diagnostics, audio mirroring, and optional UI widgets via `bevy_ym2149_viz`.
+Bevy plugin that embeds the cycle-accurate [`ym2149`](../ym2149-core) emulator, providing real-time YM/AKS/AY/SNDH playback, playlists, crossfades, diagnostics, audio mirroring, and optional UI widgets via `bevy_ym2149_viz`.
 
 <img src="../../docs/screenshots/advanced_example.png" alt="Advanced Bevy example" width="780">
 
 ## Why Use This Plugin?
 
-- 🎵 **Accurate playback**: YM2–YM6/YMT + AKS + AY files rendered with the same cores as the CLI/exporter (`ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`)
+- 🎵 **Accurate playback**: YM2–YM6/YMT + AKS + AY + SNDH files rendered with the same cores as the CLI/exporter (`ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`, `ym2149-sndh-replayer`)
 - 🎚️ **ECS-native control**: `Ym2149Playback` component (play/pause/seek/volume/stereo gain)
 - 🧭 **Music systems**: playlists with seamless crossfades, `.ymplaylist` loader, music state graphs
 - ✨ **Tone shaping**: single-chip post FX (soft saturation, accent boost, stereo widen, ST color filter) via `ToneSettings`
@@ -85,7 +85,7 @@ Disable what you don’t need to keep your app lean.
 
 ## Runtime Flow / Systems
 
-1. **Asset Loading** – `.ym`/`.aks` files load via Bevy’s asset system as `Ym2149AudioSource` (implements `Decodable`)
+1. **Asset Loading** – `.ym`/`.aks`/`.ay`/`.sndh` files load via Bevy's asset system as `Ym2149AudioSource` (implements `Decodable`)
 2. **Initialization (PreUpdate)** – `initialize_playback` attaches `AudioPlayer`/`PlaybackRuntimeState` to entities
 3. **State Driving (PreUpdate)** – `drive_playback_state` reacts to `Ym2149Playback.state`, controlling `AudioSink`s and emitting `TrackStarted/TrackFinished`
 4. **Frame Processing (Update)** – `process_playback_frames` generates audio samples per VBL frame, drives crossfades, and emits lightweight `FrameAudioData` messages

@@ -19,6 +19,7 @@ use crate::audio_bridge::{
 };
 use crate::audio_reactive::AudioReactiveState;
 use crate::audio_source::{Ym2149AudioSource, Ym2149Loader};
+use crate::chip_state::ChipStateSnapshot;
 use crate::diagnostics::{register as register_diagnostics, update_diagnostics};
 use crate::events::{
     AudioBridgeRequest, BeatHit, ChannelSnapshot, MusicStateRequest, PatternTriggered,
@@ -91,6 +92,7 @@ impl Plugin for Ym2149Plugin {
         app.add_message::<PatternTriggered>();
         app.init_resource::<AudioReactiveState>();
         app.init_resource::<PatternTriggerRuntime>();
+        app.init_resource::<ChipStateSnapshot>();
 
         // Core playback lifecycle.
         app.add_systems(PreUpdate, (initialize_playback, drive_playback_state));
