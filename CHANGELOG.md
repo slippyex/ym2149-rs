@@ -2,6 +2,16 @@
 
 All notable changes to the ym2149-rs project.
 
+## 2025/12/04 - v0.7.1
+
+### Fixed
+- **bevy_ym2149 diagnostics module** - Made `diagnostics` module public and exported `FRAME_POSITION_PATH`, `BUFFER_FILL_PATH`, `update_diagnostics`, and `register_diagnostics` to fix compilation of dependent crates
+- **WASM player iOS audio** - Fixed audio playback on iOS Safari using MediaStream routing through HTML Audio element
+- **WASM player UI** - Redesigned index.html and simple-player.html for better mobile experience
+
+### Added
+- Added 4 new SNDH example songs from Tao (Intensity_200hz) and !Cube (Bullet_Sequence, Elusive_Groove, Outpost)
+
 ## 2025/12/03 - v0.7.0
 
 ### Added

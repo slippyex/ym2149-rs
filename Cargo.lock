@@ -1561,7 +1561,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "bevy",
@@ -1580,7 +1580,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_examples"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "bevy",
  "bevy_embedded_assets",
@@ -1594,7 +1594,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_viz"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "bevy",
  "bevy_ym2149",
@@ -6025,7 +6025,7 @@ checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "ym2149"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "approx",
  "criterion",
@@ -6034,7 +6034,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-arkos-replayer"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -6050,7 +6050,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-ay-replayer"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "iz80",
  "thiserror 1.0.69",
@@ -6060,11 +6060,11 @@ dependencies = [
 
 [[package]]
 name = "ym2149-common"
-version = "0.7.0"
+version = "0.7.1"
 
 [[package]]
 name = "ym2149-gist-replayer"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "cpal",
  "parking_lot",
@@ -6073,7 +6073,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-replayer-cli"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "parking_lot",
  "rodio 0.17.3",
@@ -6087,7 +6087,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-sndh-replayer"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "m68000",
@@ -6098,7 +6098,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-softsynth"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "approx",
  "ym2149",
@@ -6106,7 +6106,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-wasm"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "bitflags 2.10.0",
  "console_error_panic_hook",
@@ -6127,7 +6127,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-ym-replayer"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "approx",
  "bitflags 2.10.0",

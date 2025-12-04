@@ -114,7 +114,7 @@ pub mod oscilloscope;
 
 // Internal modules - implementation details (not part of public API)
 pub(crate) mod audio_reactive;
-pub(crate) mod diagnostics;
+pub mod diagnostics;
 pub(crate) mod song_player;
 pub(crate) mod streaming;
 
@@ -182,3 +182,8 @@ pub use playlist::{
 
 // Music state processing
 pub use music_state::process_music_state_requests;
+
+// Diagnostics
+pub use diagnostics::{
+    BUFFER_FILL_PATH, FRAME_POSITION_PATH, register as register_diagnostics, update_diagnostics,
+};

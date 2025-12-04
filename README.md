@@ -8,9 +8,9 @@
 
 The **Yamaha YM2149** (and its compatible sibling, the General Instrument **AY-3-8910**) is a **Programmable Sound Generator (PSG)** — a dedicated audio chip that defined the sound of an entire computing era.
 
-**Three square-wave channels. One noise generator. Hardware envelopes. Pure 8-bit soul.**
+**Three square-wave channels. One noise generator. Hardware envelopes. Pure 8-bit/16-bit retro soul.**
 
-If you've ever heard music from an **Atari ST**, **Amstrad CPC**, **ZX Spectrum 128**, **MSX**, or countless arcade machines from the 1980s, you've heard this chip. It powered everything from game soundtracks to the legendary European demoscene, where programmers pushed these simple waveforms to create surprisingly complex and powerful music.
+If you've ever heard music from an **Atari ST**, **Amstrad CPC**, **ZX Spectrum 128**, **MSX**, or countless arcade machines from the 1980s/90s, you've heard this chip. It powered everything from game soundtracks to the legendary European demoscene, where programmers pushed (and still push) these simple waveforms to create surprisingly complex and powerful music.
 
 The YM2149 doesn't do wavetables or samples (mostly). It doesn't do FM synthesis. What it does is generate raw, characterful square waves with programmable frequencies, a shared noise source, and distinctive hardware envelopes — all mixed through a logarithmic DAC that gives it that unmistakable warm, buzzy, *chiptune* sound.
 
