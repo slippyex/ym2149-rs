@@ -169,15 +169,30 @@ impl Playlist {
         &self.search_query
     }
 
-    /// Jump to the first entry matching the search query
+    /// Jump to the first entry matching the search query.
+    ///
+    /// For single-character queries, prioritizes entries that START with the character
+    /// (jump-to-letter behavior). For multi-character queries, matches anywhere.
     fn jump_to_search_match(&mut self) {
         if self.search_query.is_empty() || self.entries.is_empty() {
             return;
         }
 
         let query_lower = self.search_query.to_lowercase();
+        let is_single_char = self.search_query.len() == 1;
 
-        // First, try to find a match starting from current position
+        // For single character: prioritize "starts with" matches from the beginning
+        if is_single_char {
+            // Search from beginning for entries starting with the character
+            for (i, entry) in self.entries.iter().enumerate() {
+                if entry_starts_with(&query_lower, entry) {
+                    self.selected = i;
+                    return;
+                }
+            }
+        }
+
+        // Multi-char or no "starts with" match: search for "contains" from current position
         for (i, entry) in self.entries.iter().enumerate().skip(self.selected) {
             if entry_matches(&query_lower, entry) {
                 self.selected = i;
@@ -241,7 +256,7 @@ impl Playlist {
     }
 }
 
-/// Check if an entry matches the search query
+/// Check if an entry matches the search query (contains)
 fn entry_matches(query_lower: &str, entry: &PlaylistEntry) -> bool {
     // Match against title, author, or filename
     let title_lower = entry.title.to_lowercase();
@@ -256,6 +271,13 @@ fn entry_matches(query_lower: &str, entry: &PlaylistEntry) -> bool {
     title_lower.contains(query_lower)
         || author_lower.contains(query_lower)
         || filename_lower.contains(query_lower)
+}
+
+/// Check if an entry starts with the search query (for jump-to-letter)
+fn entry_starts_with(query_lower: &str, entry: &PlaylistEntry) -> bool {
+    // Check display string (which is what user sees in the list)
+    let display = entry.display_string().to_lowercase();
+    display.starts_with(query_lower)
 }
 
 /// Recursively scan directory for music files
