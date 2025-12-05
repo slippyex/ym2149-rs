@@ -9,11 +9,13 @@
 
 mod capture;
 mod mono_output;
+mod note_history;
 mod oscilloscope;
 mod playlist_overlay;
 mod spectrum;
 
 pub use capture::CaptureBuffer;
+use note_history::NoteHistory;
 
 use crate::VisualSnapshot;
 use crate::playlist::Playlist;
@@ -62,13 +64,10 @@ pub struct App {
     pub title: String,
     pub author: String,
     pub format: String,
-    pub frame_count: u32,
-    pub comment: String,
     /// Playback info
     pub elapsed: f32,
     pub duration: f32,
     pub is_playing: bool,
-    pub current_frame: u32,
     /// Subsong info
     pub subsong: Option<(usize, usize)>,
     /// PSG count
@@ -83,6 +82,8 @@ pub struct App {
     pub has_started_playback: bool,
     /// Master volume (0.0 - 1.0)
     pub volume: f32,
+    /// Note history for scrolling display
+    pub note_history: NoteHistory,
 }
 
 impl App {
@@ -93,11 +94,8 @@ impl App {
             title: String::new(),
             author: String::new(),
             format: String::new(),
-            frame_count: 0,
-            comment: String::new(),
             elapsed: 0.0,
             duration: 0.0,
-            current_frame: 0,
             is_playing: false,
             subsong: None,
             psg_count: 1,
@@ -112,6 +110,7 @@ impl App {
             show_playlist: false,
             has_started_playback: false,
             volume: 1.0,
+            note_history: NoteHistory::new(),
         }
     }
 
@@ -145,6 +144,7 @@ impl App {
         self.duration = meta.duration_secs;
         self.subsong = None; // Reset, will be updated on next frame
         self.has_started_playback = true;
+        self.note_history = NoteHistory::new(); // Clear note history on song change
     }
 
     /// Check if we have a playlist
@@ -187,6 +187,54 @@ impl App {
             &self.snapshot.sid_active,
             &self.snapshot.drum_active,
         );
+        drop(capture);
+
+        // Update note history from register states
+        for psg_idx in 0..self.psg_count {
+            let channel_states =
+                ym2149::ChannelStates::from_registers(&self.snapshot.registers[psg_idx]);
+            for (local_ch, ch_state) in channel_states.channels.iter().enumerate() {
+                let global_ch = psg_idx * 3 + local_ch;
+
+                // For buzz sounds: use tone frequency if available, otherwise envelope frequency
+                // Sync-buzzer: tone_period sets pitch, envelope provides timbre
+                // Pure buzz: envelope frequency is the pitch
+                let (freq, note) = if ch_state.envelope_enabled {
+                    if ch_state.tone_period > 0 {
+                        // Sync-buzzer: use tone frequency
+                        (
+                            ch_state.frequency_hz.unwrap_or(0.0),
+                            ch_state.note_name.unwrap_or("---"),
+                        )
+                    } else if let Some(env_freq) = channel_states.envelope.frequency_hz {
+                        // Pure buzz: use envelope frequency
+                        // Convert envelope freq to note name
+                        let note = freq_to_note_name(env_freq);
+                        (env_freq, note)
+                    } else {
+                        (0.0, "---")
+                    }
+                } else {
+                    // Normal tone
+                    (
+                        ch_state.frequency_hz.unwrap_or(0.0),
+                        ch_state.note_name.unwrap_or("---"),
+                    )
+                };
+
+                // Channel has output if amplitude > 0 OR envelope is enabled (for buzz sounds)
+                let has_output = ch_state.amplitude > 0 || ch_state.envelope_enabled;
+
+                // Get envelope shape if envelope is enabled
+                let envelope_shape = if ch_state.envelope_enabled {
+                    Some(channel_states.envelope.shape_name)
+                } else {
+                    None
+                };
+
+                self.note_history.update_channel(global_ch, note, freq, has_output, envelope_shape);
+            }
+        }
     }
 }
 
@@ -701,78 +749,173 @@ fn draw_channels(f: &mut Frame, area: Rect, app: &App) {
     }
 }
 
-/// Draw song information panel
+/// Draw song information panel with note history table
 fn draw_song_info(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default().borders(Borders::ALL).title(" Song Info ");
 
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    // Build info lines
+    // Split into metadata section (top) and note history table (bottom)
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(4), // Compact metadata
+            Constraint::Min(9),    // Note history table
+        ])
+        .split(inner);
+
+    // Draw compact metadata
+    draw_song_metadata(f, chunks[0], app);
+
+    // Draw note history table
+    draw_note_history_table(f, chunks[1], app);
+}
+
+/// Draw compact song metadata
+fn draw_song_metadata(f: &mut Frame, area: Rect, app: &App) {
     let mut lines = Vec::new();
 
-    // Title
+    // Title + Author on one line
     if !app.title.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("Title:  ", Style::default().fg(Color::DarkGray)),
-            Span::styled(&app.title, Style::default().fg(Color::White).bold()),
-        ]));
+        let mut spans = vec![Span::styled(&app.title, Style::default().fg(Color::Cyan).bold())];
+        if !app.author.is_empty() {
+            spans.push(Span::raw(" by "));
+            spans.push(Span::styled(&app.author, Style::default().fg(Color::White)));
+        }
+        lines.push(Line::from(spans));
     }
 
-    // Author
-    if !app.author.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("Author: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(&app.author, Style::default().fg(Color::Cyan)),
-        ]));
-    }
-
-    // Format
+    // Format + PSG count
+    let mut info_spans = Vec::new();
     if !app.format.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("Format: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(&app.format, Style::default().fg(Color::Yellow)),
-        ]));
+        info_spans.push(Span::styled(&app.format, Style::default().fg(Color::Yellow)));
     }
-
-    // Frame info
-    if app.frame_count > 0 {
-        let frame_info = format!("{} / {}", app.current_frame, app.frame_count);
-        lines.push(Line::from(vec![
-            Span::styled("Frames: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(frame_info, Style::default().fg(Color::Green)),
-        ]));
-    }
-
-    // PSG count
     if app.psg_count > 1 {
-        lines.push(Line::from(vec![
-            Span::styled("PSGs:   ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                format!("{} chips", app.psg_count),
-                Style::default().fg(Color::Magenta),
-            ),
-        ]));
+        if !info_spans.is_empty() {
+            info_spans.push(Span::raw(" | "));
+        }
+        info_spans.push(Span::styled(
+            format!("{} PSGs", app.psg_count),
+            Style::default().fg(Color::Magenta),
+        ));
     }
-
-    // Comment (if available)
-    if !app.comment.is_empty() {
-        lines.push(Line::from(Span::raw(""))); // Empty line
-        // Truncate comment to fit
-        let max_len = inner.width.saturating_sub(2) as usize;
-        let comment = if app.comment.len() > max_len {
-            format!("{}...", &app.comment[..max_len.saturating_sub(3)])
-        } else {
-            app.comment.clone()
-        };
-        lines.push(Line::from(vec![Span::styled(
-            comment,
-            Style::default().fg(Color::DarkGray).italic(),
-        )]));
+    if !info_spans.is_empty() {
+        lines.push(Line::from(info_spans));
     }
 
     let paragraph = Paragraph::new(lines);
-    f.render_widget(paragraph, inner);
+    f.render_widget(paragraph, area);
+}
+
+/// Draw scrolling note history table (9 rows × 3 columns per PSG)
+fn draw_note_history_table(f: &mut Frame, area: Rect, app: &App) {
+    use note_history::HISTORY_SIZE;
+
+    let channel_count = app.psg_count * 3;
+    if channel_count == 0 || area.height < 3 {
+        return;
+    }
+
+    // Channel labels and colors
+    let channel_labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+    let channel_colors = [
+        Color::Red,
+        Color::Green,
+        Color::Blue,
+        Color::Yellow,
+        Color::Cyan,
+        Color::Magenta,
+        Color::LightRed,
+        Color::LightGreen,
+        Color::LightBlue,
+        Color::LightYellow,
+        Color::LightCyan,
+        Color::LightMagenta,
+    ];
+
+    // Fixed column width: "NOTE FREQ" = 4 + 1 + 5 = 10 chars per column
+    let col_width = 10;
+
+    // Build header line with channel names + last envelope shape
+    let mut header_spans = Vec::new();
+    for ch in 0..channel_count.min(12) {
+        // Add separator before each column (except first)
+        if ch > 0 {
+            header_spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
+        }
+        let shape = app.note_history.channel(ch).last_envelope_shape().unwrap_or("");
+        let header_text = if shape.is_empty() {
+            format!("{:^width$}", channel_labels[ch], width = col_width)
+        } else {
+            // Show channel name + shape, e.g. "A \/\/"
+            format!("{:^width$}", format!("{} {}", channel_labels[ch], shape), width = col_width)
+        };
+        header_spans.push(Span::styled(header_text, Style::default().fg(channel_colors[ch]).bold()));
+    }
+    let header_line = Line::from(header_spans);
+
+    // Build note rows (9 rows, current note highlighted)
+    let mut rows: Vec<Line> = Vec::with_capacity(HISTORY_SIZE + 1);
+    rows.push(header_line);
+
+    // Get visible notes and current position for each channel
+    let channel_data: Vec<_> = (0..channel_count.min(12))
+        .map(|ch| app.note_history.channel(ch).visible_notes())
+        .collect();
+
+    // Find the maximum number of visible notes across all channels
+    let max_visible = channel_data.iter().map(|(notes, _)| notes.len()).max().unwrap_or(0);
+
+    // Render each row
+    for row_idx in 0..max_visible.min(HISTORY_SIZE) {
+        let mut row_spans = Vec::new();
+
+        for (ch, (notes, current_pos)) in channel_data.iter().enumerate() {
+            // Add separator before each column (except first)
+            if ch > 0 {
+                row_spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
+            }
+
+            let is_current = row_idx == *current_pos;
+
+            let cell_text = if row_idx < notes.len() {
+                let note = &notes[row_idx];
+                if note.freq > 0.0 {
+                    // Fixed-width format: "NOTE FREQ" = 4 + 1 + 5 = 10 chars
+                    let note_str = format!("{:>4}", &note.note[..note.note.len().min(4)]);
+                    let freq_str = if note.freq >= 1000.0 {
+                        format!("{:>5}", format!("{:.1}k", note.freq / 1000.0))
+                    } else {
+                        format!("{:>5}", format!("{:.0}", note.freq))
+                    };
+                    format!("{} {}", note_str, freq_str)
+                } else {
+                    format!("{:^width$}", "---", width = col_width)
+                }
+            } else {
+                format!("{:^width$}", "", width = col_width)
+            };
+
+            let style = if is_current {
+                // Highlighted current note: inverse colors
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(channel_colors[ch])
+                    .bold()
+            } else {
+                // Dim for non-current notes
+                Style::default().fg(Color::DarkGray)
+            };
+
+            row_spans.push(Span::styled(cell_text, style));
+        }
+
+        rows.push(Line::from(row_spans));
+    }
+
+    let paragraph = Paragraph::new(rows);
+    f.render_widget(paragraph, area);
 }
 
 /// Draw footer with controls help
@@ -825,4 +968,35 @@ fn format_time(seconds: f32) -> String {
     let mins = (clamped / 60.0) as u32;
     let secs = (clamped % 60.0) as u32;
     format!("{:02}:{:02}", mins, secs)
+}
+
+/// Convert frequency to note name (e.g., "A4", "C#5")
+fn freq_to_note_name(freq: f32) -> &'static str {
+    if !(20.0..=20000.0).contains(&freq) {
+        return "---";
+    }
+
+    // MIDI note number: 69 = A4 = 440Hz
+    let midi_float = 12.0 * (freq / 440.0).log2() + 69.0;
+    let midi = midi_float.round() as i32;
+
+    if !(0..=127).contains(&midi) {
+        return "---";
+    }
+
+    static NOTE_NAMES: [&str; 128] = [
+        "C-1", "C#-1", "D-1", "D#-1", "E-1", "F-1", "F#-1", "G-1", "G#-1", "A-1", "A#-1", "B-1",
+        "C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0",
+        "C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
+        "C2", "C#2", "D2", "D#2", "E2", "F2", "F#2", "G2", "G#2", "A2", "A#2", "B2",
+        "C3", "C#3", "D3", "D#3", "E3", "F3", "F#3", "G3", "G#3", "A3", "A#3", "B3",
+        "C4", "C#4", "D4", "D#4", "E4", "F4", "F#4", "G4", "G#4", "A4", "A#4", "B4",
+        "C5", "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "G#5", "A5", "A#5", "B5",
+        "C6", "C#6", "D6", "D#6", "E6", "F6", "F#6", "G6", "G#6", "A6", "A#6", "B6",
+        "C7", "C#7", "D7", "D#7", "E7", "F7", "F#7", "G7", "G#7", "A7", "A#7", "B7",
+        "C8", "C#8", "D8", "D#8", "E8", "F8", "F#8", "G8", "G#8", "A8", "A#8", "B8",
+        "C9", "C#9", "D9", "D#9", "E9", "F9", "F#9", "G9",
+    ];
+
+    NOTE_NAMES.get(midi as usize).copied().unwrap_or("---")
 }
