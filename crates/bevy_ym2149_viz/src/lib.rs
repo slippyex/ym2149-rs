@@ -27,7 +27,7 @@ pub use systems::{
     update_detailed_channel_display, update_oscilloscope, update_song_info, update_song_progress,
     update_status_display,
 };
-pub use uniforms::{OscilloscopeUniform, SpectrumUniform};
+pub use uniforms::{OscilloscopeUniform, RegisterWaveformState, SpectrumUniform};
 
 /// Plugin that wires the visualization resources and systems into a Bevy app.
 #[derive(Default)]
@@ -38,6 +38,7 @@ impl Plugin for Ym2149VizPlugin {
         app.init_resource::<bevy_ym2149::OscilloscopeBuffer>();
         app.init_resource::<OscilloscopeUniform>();
         app.init_resource::<SpectrumUniform>();
+        app.init_resource::<RegisterWaveformState>();
 
         app.add_systems(
             Update,

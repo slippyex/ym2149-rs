@@ -5,15 +5,21 @@
 //! - Terminal-based visualization
 //! - Interactive playback control
 //! - YM2149 hardware emulation
+//! - Directory playback with playlist selection
 
 mod args;
 mod audio;
 mod player_factory;
+mod playlist;
 mod streaming;
+mod tui;
 mod visualization;
 mod viz_helpers;
 
 use audio::{DEFAULT_SAMPLE_RATE, StreamConfig};
+use parking_lot::Mutex;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 use ym2149::Ym2149Backend;
 use ym2149_arkos_replayer::ArkosPlayer;
@@ -24,7 +30,9 @@ use ym2149_ym_replayer::player::ym_player::YmPlayerGeneric;
 
 use args::CliArgs;
 use player_factory::{create_demo_player, create_player};
+use playlist::Playlist;
 use streaming::StreamingContext;
+use tui::{CaptureBuffer, SongMetadata, run_tui_loop_with_playlist, terminal_supports_tui};
 use visualization::run_visualization_loop;
 
 /// Maximum number of PSG chips supported for visualization.
@@ -300,11 +308,16 @@ impl RealtimeChip for SndhPlayerWrapper {
 }
 
 fn main() -> ym2149_ym_replayer::Result<()> {
-    println!("YM2149 PSG Emulator - Real-time Streaming Playback");
-    println!("===================================================\n");
-
     // Parse command-line arguments
     let args = CliArgs::parse();
+
+    // Check if we'll use TUI mode upfront (to suppress unnecessary output)
+    let will_use_tui = terminal_supports_tui();
+
+    if !will_use_tui {
+        println!("YM2149 PSG Emulator - Real-time Streaming Playback");
+        println!("===================================================\n");
+    }
 
     if args.show_help {
         CliArgs::print_help();
@@ -315,51 +328,172 @@ fn main() -> ym2149_ym_replayer::Result<()> {
         };
     }
 
+    // Check if input is a directory
+    let is_directory = args
+        .file_path
+        .as_ref()
+        .map(|p| Path::new(p).is_dir())
+        .unwrap_or(false);
+
+    // Load playlist if directory mode
+    let playlist = if is_directory {
+        let path = Path::new(args.file_path.as_ref().unwrap());
+        if !will_use_tui {
+            println!("Scanning directory: {}\n", path.display());
+        }
+        match Playlist::scan_directory(path) {
+            Ok(pl) if !pl.is_empty() => {
+                if !will_use_tui {
+                    println!("Found {} songs\n", pl.len());
+                }
+                Some(pl)
+            }
+            Ok(_) => {
+                return Err("No supported music files found in directory".into());
+            }
+            Err(e) => {
+                return Err(format!("Failed to scan directory: {e}").into());
+            }
+        }
+    } else {
+        None
+    };
+
+    // Determine initial file to play
+    let initial_file = if let Some(ref pl) = playlist {
+        // Start with first song in playlist
+        pl.entries
+            .first()
+            .map(|e| e.path.to_string_lossy().to_string())
+    } else {
+        args.file_path.clone()
+    };
+
     // Create player instance
-    let player_info = match args.file_path {
+    let player_info = match initial_file {
         Some(ref file_path) => {
             create_player(file_path, args.chip_choice, args.color_filter_override)?
         }
         None => create_demo_player(args.chip_choice)?,
     };
 
-    // Display file information
-    println!("File Information:");
-    println!("{}\n", player_info.song_info);
-    println!("Selected Chip: {}\n", args.chip_choice);
+    // Display file information (only in non-TUI mode)
+    if !will_use_tui {
+        println!("File Information:");
+        println!("{}\n", player_info.song_info);
+        println!("Selected Chip: {}\n", args.chip_choice);
+    }
 
     // Configure streaming
     let config = StreamConfig::low_latency(DEFAULT_SAMPLE_RATE);
-    println!("Streaming Configuration:");
-    println!("  Sample rate: {} Hz", config.sample_rate);
-    println!(
-        "  Buffer size: {} samples ({:.1}ms latency)",
-        config.ring_buffer_size,
-        config.latency_ms()
-    );
-    println!("  Total samples: {}\n", player_info.total_samples);
+    if !will_use_tui {
+        println!("Streaming Configuration:");
+        println!("  Sample rate: {} Hz", config.sample_rate);
+        println!(
+            "  Buffer size: {} samples ({:.1}ms latency)",
+            config.ring_buffer_size,
+            config.latency_ms()
+        );
+        println!("  Total samples: {}\n", player_info.total_samples);
+    }
 
-    // Start streaming
+    // Use TUI mode (already determined above)
+    let use_tui = will_use_tui;
+
+    // Extract metadata before moving player_info
+    let song_metadata = SongMetadata {
+        title: player_info.title.clone(),
+        author: player_info.author.clone(),
+        format: player_info.format.clone(),
+        duration_secs: player_info.total_samples as f32 / DEFAULT_SAMPLE_RATE as f32,
+    };
+
+    // Start streaming (with capture buffer if using TUI)
+    // In playlist mode, start paused so user can select a song first
     let playback_start = Instant::now();
-    let context = StreamingContext::start(player_info.player, config, player_info.color_filter)?;
+    let context = if use_tui {
+        let capture = Arc::new(Mutex::new(CaptureBuffer::new()));
+        if is_directory {
+            // Playlist mode: start paused, user selects song first
+            StreamingContext::start_paused(
+                player_info.player,
+                config,
+                player_info.color_filter,
+                Some(capture),
+            )?
+        } else {
+            // Single file mode: start playing immediately
+            StreamingContext::start_with_capture(
+                player_info.player,
+                config,
+                player_info.color_filter,
+                Some(capture),
+            )?
+        }
+    } else {
+        StreamingContext::start(player_info.player, config, player_info.color_filter)?
+    };
 
-    // Run visualization loop
-    run_visualization_loop(&context);
+    // Create player loader closure for song switching
+    let chip_choice = args.chip_choice;
+    let color_filter_override = args.color_filter_override;
+    let player_loader: Option<tui::PlayerLoader> = if is_directory {
+        Some(Box::new(move |path: &std::path::Path| {
+            let path_str = path.to_string_lossy().to_string();
+            match create_player(&path_str, chip_choice, color_filter_override) {
+                Ok(info) => Some((
+                    info.player,
+                    SongMetadata {
+                        title: info.title,
+                        author: info.author,
+                        format: info.format,
+                        duration_secs: info.total_samples as f32 / DEFAULT_SAMPLE_RATE as f32,
+                    },
+                )),
+                Err(e) => {
+                    eprintln!("Failed to load song: {e}");
+                    None
+                }
+            }
+        }))
+    } else {
+        None
+    };
+
+    // Run visualization loop (TUI or classic)
+    if use_tui
+        && let Some(ref capture) = context.capture
+        && let Err(e) = run_tui_loop_with_playlist(
+            &context,
+            Arc::clone(capture),
+            song_metadata,
+            playlist,
+            player_loader,
+        )
+    {
+        eprintln!("TUI error: {e}");
+    } else if !use_tui {
+        run_visualization_loop(&context);
+    }
 
     // Shutdown and display statistics
     let total_time = playback_start.elapsed();
     let final_stats = context.streamer.get_stats();
     context.shutdown();
-    println!("\n=== Playback Statistics ===");
-    println!("Duration:          {:.2} seconds", total_time.as_secs_f32());
-    println!("Samples played:    {}", final_stats.samples_played);
-    println!("Overrun events:    {}", final_stats.overrun_count);
-    println!("Buffer latency:    {:.1} ms", config.latency_ms());
-    println!(
-        "Memory used:       {} bytes (ring buffer)",
-        config.ring_buffer_size * std::mem::size_of::<f32>()
-    );
-    println!("\nPlayback complete!");
+
+    // Only print stats if not using TUI (TUI already shows them)
+    if !use_tui {
+        println!("\n=== Playback Statistics ===");
+        println!("Duration:          {:.2} seconds", total_time.as_secs_f32());
+        println!("Samples played:    {}", final_stats.samples_played);
+        println!("Overrun events:    {}", final_stats.overrun_count);
+        println!("Buffer latency:    {:.1} ms", config.latency_ms());
+        println!(
+            "Memory used:       {} bytes (ring buffer)",
+            config.ring_buffer_size * std::mem::size_of::<f32>()
+        );
+        println!("\nPlayback complete!");
+    }
 
     Ok(())
 }

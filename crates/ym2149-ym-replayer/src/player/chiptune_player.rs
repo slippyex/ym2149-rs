@@ -113,6 +113,14 @@ impl<B: Ym2149Backend> ChiptunePlayerBase for YmPlayerGeneric<B> {
     fn playback_position(&self) -> f32 {
         YmPlayerGeneric::playback_position(self)
     }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        YmPlayerGeneric::set_channel_mute(self, channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        YmPlayerGeneric::is_channel_muted(self, channel)
+    }
 }
 
 impl<B: Ym2149Backend> ChiptunePlayer for YmPlayerGeneric<B> {

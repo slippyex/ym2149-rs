@@ -30,10 +30,15 @@
 mod cached_player;
 mod metadata;
 mod player;
+pub mod visualization;
 
 pub use cached_player::{CacheablePlayer, CachedPlayer, DEFAULT_CACHE_SIZE, SampleCache};
 pub use metadata::{BasicMetadata, MetadataFields, PlaybackMetadata};
 pub use player::{ChiptunePlayer, ChiptunePlayerBase, PlaybackState};
+pub use visualization::{
+    MAX_CHANNEL_COUNT, MAX_PSG_COUNT, SPECTRUM_BINS, SPECTRUM_DECAY, SpectrumAnalyzer,
+    WaveformSynthesizer, freq_to_bin,
+};
 
 // ============================================================================
 // Common Constants

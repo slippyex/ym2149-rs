@@ -37,6 +37,10 @@ rodio.workspace = true
 # Synchronization
 parking_lot.workspace = true
 
+# TUI Framework
+ratatui = "0.29"
+crossterm = "0.28"
+
 [features]
 default = []
 softsynth = [] # workspace-only hook for experimental softsynth backends

@@ -7,7 +7,6 @@
 //! - Configuring chip-specific settings
 
 use crate::audio::DEFAULT_SAMPLE_RATE;
-use std::env;
 use std::fs;
 use std::path::Path;
 use ym2149::Ym2149Backend;
@@ -29,6 +28,12 @@ pub struct PlayerInfo {
     pub song_info: String,
     /// Whether to run the ST-style post filter
     pub color_filter: bool,
+    /// Song title
+    pub title: String,
+    /// Song author/composer
+    pub author: String,
+    /// File format (YM5, SNDH, AKS, etc.)
+    pub format: String,
 }
 
 /// Load an Arkos Tracker (AKS) file.
@@ -75,6 +80,10 @@ fn load_arkos_file(
         subsong.replay_frequency_hz,
     );
 
+    // Extract title/author before creating player (song still available here)
+    let title = song.metadata.title.clone();
+    let author = song.metadata.author.clone();
+
     // Create player - song is moved, player owns Arc<AksSong>
     let player =
         ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to create Arkos player: {}", e))?;
@@ -86,6 +95,9 @@ fn load_arkos_file(
         total_samples,
         song_info: info_str,
         color_filter,
+        title,
+        author,
+        format: "Arkos Tracker 3 (AKS)".to_string(),
     })
 }
 
@@ -127,6 +139,9 @@ fn load_sndh_file(
         total_samples,
         song_info: info_str,
         color_filter,
+        title,
+        author,
+        format: "SNDH (Atari ST)".to_string(),
     })
 }
 
@@ -177,6 +192,9 @@ fn load_ay_file(
         total_samples,
         song_info: info_str,
         color_filter,
+        title: metadata.song_name.clone(),
+        author: metadata.author.clone(),
+        format: "AY/EMUL".to_string(),
     })
 }
 
@@ -196,7 +214,7 @@ pub fn create_player(
     chip_choice: ChipChoice,
     color_filter_override: Option<bool>,
 ) -> ym2149_ym_replayer::Result<PlayerInfo> {
-    println!("Loading file: {}\n", file_path);
+    // Note: No println! here - TUI mode handles its own display
     let file_data =
         fs::read(file_path).map_err(|e| format!("Failed to read file '{}': {}", file_path, e))?;
 
@@ -209,24 +227,19 @@ pub fn create_player(
         .unwrap_or_default();
 
     if extension == "aks" {
-        println!("Detected format: Arkos Tracker 3 (AKS)\n");
         return load_arkos_file(&file_data, file_path, chip_choice, color_filter_override);
     } else if extension == "ay" {
-        println!("Detected format: AY (ZXAY/EMUL)\n");
         return load_ay_file(&file_data, file_path, color_filter_override);
     } else if extension == "sndh" {
-        println!("Detected format: SNDH (Atari ST)\n");
         return load_sndh_file(&file_data, file_path, color_filter_override);
     }
 
     // Header-based detection for SNDH data even if the extension is missing
     if is_sndh_data(&file_data) {
-        println!("Detected format: SNDH (Atari ST)\n");
         return load_sndh_file(&file_data, file_path, color_filter_override);
     }
 
     let (mut ym_player, summary) = load_song(&file_data)?;
-    println!("Detected format: {}\n", summary.format);
 
     match chip_choice {
         ChipChoice::Ym2149 => {
@@ -234,6 +247,13 @@ pub fn create_player(
             if let Some(cf) = color_filter_override {
                 ym_player.get_chip_mut().set_color_filter(cf);
             }
+
+            // Extract metadata
+            let (title, author) = if let Some(info) = ym_player.info() {
+                (info.song_name.clone(), info.author.clone())
+            } else {
+                (String::new(), String::new())
+            };
 
             let info_str = format!(
                 "File: {} ({})\n{}",
@@ -249,6 +269,9 @@ pub fn create_player(
                 total_samples,
                 song_info: info_str,
                 color_filter,
+                title,
+                author,
+                format: summary.format.to_string(),
             })
         }
     }
@@ -262,15 +285,7 @@ pub fn create_player(
 /// # Returns
 /// PlayerInfo with a demo player
 pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result<PlayerInfo> {
-    println!("No YM file specified. Running in demo mode (5 seconds).");
-    println!(
-        "Usage: {} <path/to/song.ym>\n",
-        env::current_exe()
-            .ok()
-            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
-            .unwrap_or_else(|| "ym2149".to_string())
-    );
-
+    // Note: No println! here - TUI mode handles its own display
     match chip_choice {
         ChipChoice::Ym2149 => {
             let mut demo_player = Player::new();
@@ -286,6 +301,9 @@ pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result
                 total_samples,
                 song_info: info_str,
                 color_filter: true,
+                title: "Demo Mode".to_string(),
+                author: String::new(),
+                format: "Demo".to_string(),
             })
         }
     }

@@ -146,7 +146,7 @@ pub fn run_visualization_loop(context: &StreamingContext) {
 
     if has_subsongs {
         println!(
-            "Playback running — keys: {}, [↑/↓]=subsong, [space]=pause/resume, [q]=quit\n",
+            "Playback running — keys: {}, [+/-]=subsong, [space]=pause/resume, [q]=quit\n",
             mute_keys
         );
     } else {
@@ -344,8 +344,28 @@ fn handle_key_press(
             b'q' | b'Q' => {
                 running.store(false, Ordering::Relaxed);
             }
+            // Subsong navigation: + or = for next, - or _ for previous
+            b'+' | b'=' => {
+                let mut guard = player.lock();
+                if guard.has_subsongs() {
+                    let current = guard.current_subsong();
+                    let count = guard.subsong_count();
+                    let next = if current >= count { 1 } else { current + 1 };
+                    guard.set_subsong(next);
+                }
+            }
+            b'-' | b'_' => {
+                let mut guard = player.lock();
+                if guard.has_subsongs() {
+                    let current = guard.current_subsong();
+                    let count = guard.subsong_count();
+                    let prev = if current <= 1 { count } else { current - 1 };
+                    guard.set_subsong(prev);
+                }
+            }
             _ => {}
         },
+        // Arrow keys also work for subsong navigation
         KeyEvent::ArrowUp => {
             let mut guard = player.lock();
             if guard.has_subsongs() {

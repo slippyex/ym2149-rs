@@ -2,6 +2,83 @@
 
 All notable changes to the ym2149-rs project.
 
+## 2025/12/10 - v0.7.2
+
+### Added
+- **Directory playback with playlist selection** - Play all songs from a directory
+  - Recursive scanning of directories for supported music files (YM, AKS, AY, SNDH)
+  - Playlist overlay with song title, author, and duration from metadata
+  - Press `[p]` to toggle playlist, `[↑↓]` to navigate, `[Enter]` to select song
+  - Seamless song switching without restarting the player or leaving TUI mode
+  - Auto-advance to next song when current song ends
+  - Falls back to filename display when metadata is unavailable
+  - Directory mode starts with playlist overlay open for immediate song selection
+  - **Type-ahead search** in playlist: just start typing to filter songs
+    - Searches title, author, and filename
+    - `[↑↓]` jumps to next/previous match when searching
+    - `[Backspace]` deletes characters, `[Esc]` clears search
+    - Matching text highlighted in yellow, non-matching entries dimmed
+- **Ratatui-based TUI for CLI** - New terminal UI with oscilloscope and spectrum analyzer
+  - Oscilloscope with per-channel waveform display (A=Red, B=Green, C=Blue)
+  - Spectrum analyzer with 16 note-aligned frequency bins
+  - Auto-scaling with DC offset correction
+  - Auto-detection: TUI mode for terminals ≥80×24, classic mode for smaller
+  - Controls: 1-9 mute channels, Space pause, ↑↓ subsong, p playlist, Q quit
+  - **Volume control** with `[←→]` arrow keys (5% steps, displayed in footer)
+  - **Quick song navigation** with `[,]` previous / `[.]` next (playlist mode)
+- **`ym2149_common::visualization` module** - Shared visualization utilities for all frontends:
+  - `WaveformSynthesizer` - Register-based waveform synthesis with per-channel phase accumulators
+  - `SpectrumAnalyzer` - Note-aligned spectrum with 16 bins (C1-B8, half-octave resolution)
+  - `freq_to_bin()` - Musical frequency to spectrum bin mapping
+  - Unified implementation used by both Bevy and CLI
+
+### Changed
+- **Register-based visualization** - Complete rewrite of oscilloscope and spectrum in both Bevy and CLI
+  - Oscilloscope now synthesizes waveforms from YM2149 register state, not audio samples
+  - Works with digidrums and STE-DAC samples that bypass the PSG
+  - Square waves for tone, pseudo-random noise, realistic envelope shapes for buzz
+  - Per-channel phase accumulators with proper overflow handling (`.fract()`)
+- **Realistic envelope waveform synthesis** - All 16 YM2149 envelope shapes now visualize correctly:
+  - Decay shapes (0x00-0x03, 0x09): High to low
+  - Attack shapes (0x04-0x07, 0x0F): Low to high
+  - Sawtooth down (0x08): Continuous decay
+  - Triangle (0x0A): /\/\/\
+  - Decay + hold high (0x0B): Decay then sustain max
+  - Sawtooth up (0x0C): Continuous attack
+  - Attack + hold high (0x0D): Attack then sustain max
+  - Triangle inverted (0x0E): \/\/\/
+- **Note-aligned spectrum bins** - Spectrum analyzer now shows musical notes
+  - 16 bins covering 8 octaves (C1 to B8), 2 bins per octave
+  - Base frequency C1 = 32.703 Hz (MIDI note 24)
+  - Logarithmic mapping: `bin = log2(freq / C1) * 2`
+- **Improved envelope/sync-buzzer detection** - Spectrum shows correct frequency for:
+  - Pure envelope buzz (uses envelope frequency)
+  - Sync-buzzer (uses tone period even when tone disabled in mixer)
+  - Noise (spread across high frequency bins based on noise period)
+- **Smooth spectrum decay** - Decay factor 0.85 for responsive yet smooth visualization
+
+### Fixed
+- **Bevy spectrum bars** - Now show actually played notes instead of FFT analysis
+- **Bevy oscilloscope** - Shows distinct per-channel waveforms (was showing same signal 3x)
+- **CLI oscilloscope** - Per-channel waveform synthesis with auto-scaling
+- **Envelope amplitude detection** - Fixed check: `amplitude > 0 || envelope_enabled`
+- **Phase accumulator overflow** - Now uses `.fract()` to handle high frequency edge cases
+- **TUI visual glitches** - Suppressed `println!` output when TUI mode is active
+  - File loading messages no longer bleed into TUI borders
+  - Format detection output hidden in TUI mode
+- **Playlist mode auto-start** - Player now waits for user song selection instead of auto-playing
+  - Directory mode starts paused with playlist overlay open
+  - Auto-advance only triggers after user has selected a song
+
+### Refactored
+- **Bevy visualization code cleanup** - Removed ~100 lines of redundant spectrum calculation from `systems.rs`
+  - Now uses shared `ym2149_common::visualization` module instead of local FFT-based computation
+  - Eliminated duplicate constants (`SPECTRUM_DECAY`, `SPECTRUM_BINS`, `SPECTRUM_BASE_FREQ`, `BINS_PER_OCTAVE`)
+  - Removed duplicate `freq_to_bin()` function - now imported from shared library
+  - Removed unused `OscilloscopeBuffer` parameter (register-based waveforms don't need audio samples)
+- **CLI streaming cleanup** - Removed unused capture parameter from producer loop
+  - Waveform visualization now generated from register state in TUI, not from audio thread
+
 ## 2025/12/04 - v0.7.1
 
 ### Fixed

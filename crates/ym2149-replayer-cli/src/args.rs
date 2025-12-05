@@ -115,14 +115,20 @@ impl CliArgs {
     /// Print help text to stderr.
     pub fn print_help() {
         eprintln!(
-            "Usage:\n  ym2149 [--no-color-filter] [--chip <mode>] <file.ym>\n\n\
+            "Usage:\n  ym2149 [--no-color-filter] [--chip <mode>] <file.ym|directory>\n\n\
              Flags:\n\
              \x20 --no-color-filter    Disable ST-style color filter globally (default enabled)\n\
              \x20 --chip <mode>        Select synthesis engine:\n\
              \x20                        - ym2149 (default)\n\
              \x20 -h, --help           Show this help\n\n\
+             Supported Formats:\n\
+             \x20 YM (YM2, YM3, YM5, YM6), AKS, AY, SNDH\n\n\
+             Directory Mode:\n\
+             \x20 When a directory is specified, all supported files are scanned recursively.\n\
+             \x20 Press [p] to open the playlist overlay and select a song.\n\n\
              Examples:\n\
-             \x20 ym2149 examples/ym/Scaven6.ym\n"
+             \x20 ym2149 song.ym              # Play single file\n\
+             \x20 ym2149 ~/music/chiptunes    # Browse directory\n"
         );
     }
 }

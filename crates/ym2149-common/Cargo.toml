@@ -11,3 +11,5 @@ keywords = ["ym2149", "chiptune", "audio", "retro"]
 categories = ["multimedia::audio"]
 
 [dependencies]
+# Core YM2149 emulation (for ChannelStates in visualization)
+ym2149 = { path = "../ym2149-core", version = "0.7" }

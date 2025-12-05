@@ -56,13 +56,17 @@ impl RealtimePlayer {
     }
 
     /// Write samples to the playback buffer
-    /// Blocks indefinitely if buffer is full (backpressure) until all samples are written
+    /// Blocks with backpressure until all samples are written or max retries exceeded.
+    /// Returns number of samples actually written.
     pub fn write_blocking(&self, samples: &[f32]) -> usize {
+        const MAX_RETRIES: u32 = 1000; // ~100ms max wait at 100µs backoff
+
         let mut total_written = 0;
         let mut remaining = samples;
+        let mut retry_count = 0;
 
-        // Keep retrying until all samples are written
-        while !remaining.is_empty() {
+        // Keep retrying until all samples are written or max retries exceeded
+        while !remaining.is_empty() && retry_count < MAX_RETRIES {
             let written = self.buffer.write(remaining);
 
             {
@@ -77,9 +81,11 @@ impl RealtimePlayer {
             if written == 0 {
                 // Buffer is full, back off and retry
                 std::thread::sleep(std::time::Duration::from_micros(BUFFER_BACKOFF_MICROS));
+                retry_count += 1;
             } else {
-                // Successfully wrote some samples
+                // Successfully wrote some samples, reset retry count
                 remaining = &remaining[written..];
+                retry_count = 0;
             }
         }
 
