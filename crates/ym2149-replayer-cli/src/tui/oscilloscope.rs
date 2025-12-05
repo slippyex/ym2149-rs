@@ -2,6 +2,7 @@
 //!
 //! Displays per-channel waveforms using Ratatui's Canvas widget.
 //! Supports up to 12 channels (4 PSGs × 3 channels) for multi-PSG configurations.
+//! Uses downsampling and smoothing for fluid animation.
 
 use super::App;
 use ratatui::{
@@ -49,6 +50,52 @@ const CHANNEL_LABELS: [&str; 12] = [
 /// Minimum peak value to avoid division by zero
 const MIN_PEAK: f32 = 0.001;
 
+/// Number of display points for smoother rendering (less = smoother but less detail)
+const DISPLAY_POINTS: usize = 64;
+
+/// Cubic interpolation for smooth waveform
+fn cubic_interpolate(y0: f32, y1: f32, y2: f32, y3: f32, t: f32) -> f32 {
+    let a0 = y3 - y2 - y0 + y1;
+    let a1 = y0 - y1 - a0;
+    let a2 = y2 - y0;
+    let a3 = y1;
+    a0 * t * t * t + a1 * t * t + a2 * t + a3
+}
+
+/// Downsample and smooth waveform data
+fn smooth_waveform(samples: &[f32], target_len: usize) -> Vec<f32> {
+    if samples.is_empty() || target_len == 0 {
+        return vec![0.0; target_len];
+    }
+
+    let src_len = samples.len();
+    if src_len <= target_len {
+        // Not enough samples, just pad/repeat
+        let mut result = samples.to_vec();
+        result.resize(target_len, *samples.last().unwrap_or(&0.0));
+        return result;
+    }
+
+    let mut result = Vec::with_capacity(target_len);
+    let step = (src_len - 1) as f32 / (target_len - 1).max(1) as f32;
+
+    for i in 0..target_len {
+        let pos = i as f32 * step;
+        let idx = pos as usize;
+        let t = pos - idx as f32;
+
+        // Get 4 points for cubic interpolation (with boundary handling)
+        let y0 = samples[idx.saturating_sub(1).min(src_len - 1)];
+        let y1 = samples[idx.min(src_len - 1)];
+        let y2 = samples[(idx + 1).min(src_len - 1)];
+        let y3 = samples[(idx + 2).min(src_len - 1)];
+
+        result.push(cubic_interpolate(y0, y1, y2, y3, t));
+    }
+
+    result
+}
+
 /// Draw oscilloscope with dynamic channel count
 pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
@@ -67,24 +114,32 @@ pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
     let drum_active: Vec<bool> = (0..channel_count)
         .map(|ch| capture.is_drum_active(ch))
         .collect();
+    let buzz_active: Vec<bool> = (0..channel_count)
+        .map(|ch| capture.is_buzz_active(ch))
+        .collect();
     drop(capture);
 
-    // Pre-process waveforms: compute mean (DC offset) and peak for auto-scaling
+    // Pre-process waveforms: smooth, center, and compute peak for auto-scaling
     let processed: Vec<(Vec<f32>, f32)> = waveforms
         .iter()
         .map(|waveform| {
             if waveform.is_empty() {
-                return (vec![], 1.0);
+                return (vec![0.0; DISPLAY_POINTS], 1.0);
             }
 
             // Compute DC offset (mean)
             let mean: f32 = waveform.iter().sum::<f32>() / waveform.len() as f32;
 
-            // Center the waveform and find peak
+            // Center the waveform
             let centered: Vec<f32> = waveform.iter().map(|&s| s - mean).collect();
-            let peak = centered.iter().map(|&s| s.abs()).fold(MIN_PEAK, f32::max);
 
-            (centered, peak)
+            // Smooth/downsample for fluid display
+            let smoothed = smooth_waveform(&centered, DISPLAY_POINTS);
+
+            // Find peak after smoothing
+            let peak = smoothed.iter().map(|&s| s.abs()).fold(MIN_PEAK, f32::max);
+
+            (smoothed, peak)
         })
         .collect();
 
@@ -127,6 +182,7 @@ pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
                 // Check for special effects
                 let is_sid = sid_active.get(ch).copied().unwrap_or(false);
                 let is_drum = drum_active.get(ch).copied().unwrap_or(false);
+                let is_buzz = buzz_active.get(ch).copied().unwrap_or(false);
 
                 if is_drum {
                     // DigiDrum: draw a distinctive "noise burst" pattern
@@ -143,29 +199,15 @@ pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
                             color: Color::White, // White for drums
                         });
                     }
-                } else if is_sid {
-                    // SID voice: draw a sawtooth-like pattern to indicate SID effect
-                    for segment in 0..8 {
-                        let x_start = segment as f64 * 12.5;
-                        let x_end = (segment + 1) as f64 * 12.5;
-                        // Rising sawtooth
-                        ctx.draw(&CanvasLine {
-                            x1: x_start,
-                            y1: y_base - amplitude_scale * 0.8,
-                            x2: x_end,
-                            y2: y_base + amplitude_scale * 0.8,
-                            color: Color::Cyan, // Cyan for SID
-                        });
-                        // Drop back
-                        ctx.draw(&CanvasLine {
-                            x1: x_end,
-                            y1: y_base + amplitude_scale * 0.8,
-                            x2: x_end,
-                            y2: y_base - amplitude_scale * 0.8,
-                            color: Color::Cyan,
-                        });
-                    }
                 } else if !centered.is_empty() {
+                    // Color priority: SID (cyan) > Buzz (yellow/orange) > normal
+                    let wave_color = if is_sid {
+                        Color::Cyan
+                    } else if is_buzz {
+                        Color::Rgb(255, 180, 50) // Orange for buzz/envelope
+                    } else {
+                        color
+                    };
                     // Normal waveform: draw as connected lines
                     let len = centered.len();
                     let step = 100.0 / len as f64;
@@ -186,7 +228,7 @@ pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
                             y1,
                             x2,
                             y2,
-                            color,
+                            color: wave_color,
                         });
                     }
                 }
@@ -197,6 +239,8 @@ pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
                     Color::White
                 } else if is_sid {
                     Color::Cyan
+                } else if is_buzz {
+                    Color::Rgb(255, 180, 50) // Orange for buzz
                 } else {
                     color
                 };
@@ -204,6 +248,8 @@ pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
                     format!("{}♪", label)
                 } else if is_sid {
                     format!("{}~", label)
+                } else if is_buzz {
+                    format!("{}≈", label) // ≈ symbol for buzz/envelope
                 } else {
                     label.to_string()
                 };

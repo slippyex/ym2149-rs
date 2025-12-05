@@ -5,13 +5,72 @@
 //! - Producer thread for sample generation
 //! - Real-time buffer management
 //! - Playback state synchronization
+//! - Visualization delay compensation (syncs visuals with audio output)
 
-use crate::RealtimeChip;
+use crate::{RealtimeChip, VisualSnapshot};
 use crate::audio::{AudioDevice, BUFFER_BACKOFF_MICROS, RealtimePlayer, StreamConfig};
 use crate::tui::CaptureBuffer;
 use parking_lot::Mutex;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+/// Delay buffer for visual snapshots to sync visualization with audio output.
+///
+/// The audio ring buffer introduces latency between when samples are generated
+/// and when they're actually played. This buffer delays the visual snapshots
+/// by the same amount so visualization matches the audible output.
+pub struct SnapshotDelayBuffer {
+    /// Ring buffer of snapshots
+    snapshots: VecDeque<VisualSnapshot>,
+    /// Target delay in number of snapshots (based on audio buffer size)
+    target_delay: usize,
+    /// Current delayed snapshot for TUI to read
+    current_delayed: VisualSnapshot,
+}
+
+impl SnapshotDelayBuffer {
+    /// Create a new delay buffer.
+    ///
+    /// # Arguments
+    /// * `audio_buffer_samples` - Size of the audio ring buffer in samples
+    /// * `batch_size` - Number of samples generated per batch (snapshot interval)
+    pub fn new(audio_buffer_samples: usize, batch_size: usize) -> Self {
+        // Calculate how many batches fit in the audio buffer
+        // This is the delay we need to compensate for
+        let target_delay = (audio_buffer_samples / batch_size).max(1);
+
+        Self {
+            snapshots: VecDeque::with_capacity(target_delay + 2),
+            target_delay,
+            current_delayed: VisualSnapshot::default(),
+        }
+    }
+
+    /// Push a new snapshot (called from producer thread after generating samples).
+    /// Updates the current_delayed snapshot that the TUI reads.
+    pub fn push(&mut self, snapshot: VisualSnapshot) {
+        self.snapshots.push_back(snapshot);
+
+        // Update delayed snapshot if we have enough buffered
+        if self.snapshots.len() > self.target_delay
+            && let Some(delayed) = self.snapshots.pop_front()
+        {
+            self.current_delayed = delayed;
+        }
+    }
+
+    /// Get the current delayed snapshot (called from TUI thread).
+    pub fn get_delayed(&self) -> VisualSnapshot {
+        self.current_delayed
+    }
+
+    /// Clear the buffer (e.g., when switching songs).
+    pub fn clear(&mut self) {
+        self.snapshots.clear();
+        self.current_delayed = VisualSnapshot::default();
+    }
+}
 
 #[derive(Clone, Copy)]
 struct ColorFilter {
@@ -42,6 +101,9 @@ impl ColorFilter {
     }
 }
 
+/// Batch size for sample generation (samples per visual snapshot).
+const SAMPLE_BATCH_SIZE: usize = 4096;
+
 /// Audio streaming context with device and producer thread.
 pub struct StreamingContext {
     /// Audio device handle
@@ -58,6 +120,8 @@ pub struct StreamingContext {
     pub capture: Option<Arc<Mutex<CaptureBuffer>>>,
     /// Master volume (0-100 as percentage, stored as atomic for thread safety)
     pub volume: Arc<AtomicU32>,
+    /// Delay buffer for syncing visuals with audio output
+    pub snapshot_delay: Arc<Mutex<SnapshotDelayBuffer>>,
 }
 
 impl StreamingContext {
@@ -128,10 +192,17 @@ impl StreamingContext {
         let running = Arc::new(AtomicBool::new(true));
         let volume = Arc::new(AtomicU32::new(100)); // 100% default
 
+        // Create delay buffer to sync visuals with audio output
+        let snapshot_delay = Arc::new(Mutex::new(SnapshotDelayBuffer::new(
+            config.ring_buffer_size,
+            SAMPLE_BATCH_SIZE,
+        )));
+
         let running_clone = Arc::clone(&running);
         let player_clone = Arc::clone(&player);
         let streamer_clone = Arc::clone(&streamer);
         let volume_clone = Arc::clone(&volume);
+        let snapshot_delay_clone = Arc::clone(&snapshot_delay);
 
         let producer_thread = std::thread::spawn(move || {
             run_producer_loop(
@@ -141,6 +212,7 @@ impl StreamingContext {
                 ColorFilter::new(color_filter_enabled),
                 auto_start,
                 volume_clone,
+                snapshot_delay_clone,
             );
         });
 
@@ -152,6 +224,7 @@ impl StreamingContext {
             streamer,
             capture,
             volume,
+            snapshot_delay,
         })
     }
 
@@ -179,6 +252,16 @@ impl StreamingContext {
         *guard = new_player;
         // Start new player
         guard.play();
+        // Clear the snapshot delay buffer for fresh start
+        self.snapshot_delay.lock().clear();
+    }
+
+    /// Get a delayed visual snapshot that's synced with audio output.
+    ///
+    /// Call this instead of directly reading from the player to get
+    /// visualization that matches what's currently being heard.
+    pub fn get_delayed_snapshot(&self) -> VisualSnapshot {
+        self.snapshot_delay.lock().get_delayed()
     }
 
     /// Signal shutdown and wait for producer thread to finish.
@@ -198,7 +281,8 @@ impl StreamingContext {
 /// Producer loop that generates samples and feeds them to the streamer.
 ///
 /// Runs in a dedicated thread, continuously generating audio samples
-/// from the player and writing them to the ring buffer.
+/// from the player and writing them to the ring buffer. Also captures
+/// visual snapshots and pushes them to the delay buffer for sync.
 fn run_producer_loop(
     player: Arc<Mutex<Box<dyn RealtimeChip>>>,
     streamer: Arc<RealtimePlayer>,
@@ -206,6 +290,7 @@ fn run_producer_loop(
     mut color_filter: ColorFilter,
     auto_start: bool,
     volume: Arc<AtomicU32>,
+    snapshot_delay: Arc<Mutex<SnapshotDelayBuffer>>,
 ) {
     let mut sample_buffer = [0.0f32; 4096];
 
@@ -218,8 +303,8 @@ fn run_producer_loop(
     while running.load(Ordering::Relaxed) {
         let batch_size = sample_buffer.len();
 
-        // Generate samples (zero-allocation: reuse sample_buffer)
-        {
+        // Generate samples and capture snapshot (zero-allocation: reuse sample_buffer)
+        let snapshot = {
             let mut player = player.lock();
 
             // Check for unsupported format
@@ -231,7 +316,14 @@ fn run_producer_loop(
 
             // Generate samples (produces silence when stopped/paused)
             player.generate_samples_into(&mut sample_buffer);
-        }
+
+            // Capture visual snapshot AFTER generating samples
+            // This is the state that corresponds to the audio we just generated
+            player.visual_snapshot()
+        };
+
+        // Push snapshot to delay buffer (syncs visualization with audio output)
+        snapshot_delay.lock().push(snapshot);
 
         color_filter.process(&mut sample_buffer[..batch_size]);
 

@@ -14,10 +14,10 @@ pub struct OscilloscopeUniform(
 
 /// Buffer storing spectrum magnitudes ready for GPU uniforms.
 ///
-/// Each entry contains 16 frequency bin magnitudes for one channel.
+/// Each entry contains frequency bin magnitudes for one channel (96 bins = 8 octaves × 12 semitones).
 #[derive(Resource, Default, Clone)]
 pub struct SpectrumUniform(
-    /// Per-channel array of 16 frequency bin magnitudes.
+    /// Per-channel array of frequency bin magnitudes.
     pub Vec<[f32; SPECTRUM_BINS]>,
 );
 

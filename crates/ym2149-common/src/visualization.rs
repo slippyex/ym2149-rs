@@ -46,17 +46,21 @@ pub const VISUAL_SAMPLE_RATE: f32 = 44100.0;
 /// Number of samples to generate per frame update (~20ms at 50Hz).
 pub const SAMPLES_PER_UPDATE: usize = 64;
 
-/// Number of spectrum bins (8 octaves × 2 bins per octave).
-pub const SPECTRUM_BINS: usize = 16;
+/// Number of octaves covered by spectrum display.
+/// 8 octaves covers C1 (~33 Hz) to B8 (~8 kHz), full YM2149 range.
+pub const SPECTRUM_OCTAVES: usize = 8;
+
+/// Bins per octave (4 = minor-third resolution for compact display).
+pub const BINS_PER_OCTAVE: usize = 4;
+
+/// Number of spectrum bins (8 octaves × 4 bins per octave = 32 bins).
+pub const SPECTRUM_BINS: usize = SPECTRUM_OCTAVES * BINS_PER_OCTAVE;
 
 /// Decay factor for spectrum bars (0.85 = fast release, responsive visualization).
 pub const SPECTRUM_DECAY: f32 = 0.85;
 
 /// Base frequency for spectrum bins: C1 = 32.703 Hz (MIDI note 24).
 pub const SPECTRUM_BASE_FREQ: f32 = 32.703;
-
-/// Bins per octave (2 = half-octave resolution, 6 semitones per bin).
-pub const BINS_PER_OCTAVE: f32 = 2.0;
 
 // ============================================================================
 // Waveform Synthesizer
@@ -189,6 +193,12 @@ impl WaveformSynthesizer {
     }
 
     /// Synthesize a single sample for a channel.
+    ///
+    /// Handles different YM2149 sound types:
+    /// - Pure tone: square wave
+    /// - Pure noise: LFSR-like noise
+    /// - Buzz/Envelope: envelope waveform (sawtooth, triangle, etc.)
+    /// - Sync-buzzer: envelope with tone frequency modulation
     #[inline]
     fn synthesize_sample(
         &self,
@@ -200,17 +210,22 @@ impl WaveformSynthesizer {
     ) -> f32 {
         let phase = self.phase[ch];
 
-        if ch_state.tone_enabled && freq > 0.0 {
-            // Square wave: +amplitude when phase < 0.5, -amplitude when phase >= 0.5
+        // Priority: Envelope/Buzz sounds take precedence for visualization
+        // because they have the most interesting waveform shape.
+        // Sync-buzzer: envelope_enabled + tone_period > 0 (freq used for pitch)
+        // Pure buzz: envelope_enabled + tone_period = 0 (envelope freq for pitch)
+        if ch_state.envelope_enabled && freq > 0.0 {
+            // Envelope/Buzz: synthesize based on actual shape register
+            // This includes sync-buzzer (tone+envelope) and pure buzz (envelope only)
+            self.synthesize_envelope_sample(envelope_shape, phase, amplitude)
+        } else if ch_state.tone_enabled && freq > 0.0 {
+            // Pure tone: square wave
             if phase < 0.5 { amplitude } else { -amplitude }
         } else if ch_state.noise_enabled {
             // Noise: pseudo-random values scaled by amplitude
             // Use LFSR-like behavior based on phase
             let noise = (phase * 12345.0).sin() * 2.0 - 1.0;
             noise * amplitude * 0.7
-        } else if ch_state.envelope_enabled && freq > 0.0 {
-            // Envelope: synthesize based on actual shape register
-            self.synthesize_envelope_sample(envelope_shape, phase, amplitude)
         } else {
             0.0
         }
@@ -316,22 +331,24 @@ impl WaveformSynthesizer {
 // Spectrum Analyzer
 // ============================================================================
 
-/// Map a frequency to a spectrum bin index (note-aligned).
+/// Map a frequency to a spectrum bin index (note-aligned, minor-third resolution).
 ///
-/// Returns bin 0-15 based on octave position:
-/// - Bin 0: C1-F#1 (32.7-46.2 Hz)
-/// - Bin 1: G1-B1 (49.0-61.7 Hz)
-/// - ...
-/// - Bin 15: G8+ (6272+ Hz)
+/// Returns bin 0-31 based on position (3 semitones per bin):
+/// - Bin 0: C1 (32.7 Hz)
+/// - Bin 4: C2 (65.4 Hz)
+/// - Bin 12: C4 (262 Hz, middle C)
+/// - Bin 16: C5 (523 Hz)
+/// - Bin 28: C8 (4186 Hz)
+/// - Bin 31: A#8 (~7458 Hz)
 #[inline]
 pub fn freq_to_bin(freq: f32) -> usize {
     if freq <= 0.0 {
         return 0;
     }
-    // Calculate how many half-octaves above C1
-    // bin = log2(freq / C1) * 2
+    // Calculate semitones above C1
+    // bin = log2(freq / C1) * 12
     let octaves_above_c1 = (freq / SPECTRUM_BASE_FREQ).log2();
-    let bin = (octaves_above_c1 * BINS_PER_OCTAVE).round() as i32;
+    let bin = (octaves_above_c1 * BINS_PER_OCTAVE as f32).round() as i32;
     bin.clamp(0, (SPECTRUM_BINS - 1) as i32) as usize
 }
 
@@ -567,12 +584,13 @@ mod tests {
 
     #[test]
     fn test_freq_to_bin_a4() {
-        // A4 = 440 Hz is about 3.75 octaves above C1
-        // bin = log2(440/32.703) * 2 ≈ 7.5 → 8
+        // A4 = 440 Hz is 3 octaves + 9 semitones above C1
+        // With 4 bins per octave: bin = log2(440/32.703) * 4 ≈ 15
+        // C1=0, C2=4, C3=8, C4=12, A4≈15
         let bin = freq_to_bin(440.0);
         assert!(
-            bin >= 7 && bin <= 8,
-            "A4 should be around bin 7-8, got {}",
+            bin >= 14 && bin <= 16,
+            "A4 should be around bin 15, got {}",
             bin
         );
     }

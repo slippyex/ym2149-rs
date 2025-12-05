@@ -39,7 +39,7 @@ use visualization::run_visualization_loop;
 pub const MAX_PSG_COUNT: usize = 4;
 
 /// Snapshot of chip state for visualization.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct VisualSnapshot {
     /// YM2149 register values for each PSG chip (R0-R15 per chip)
     pub registers: [[u8; 16]; MAX_PSG_COUNT],

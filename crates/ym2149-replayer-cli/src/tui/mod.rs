@@ -2,11 +2,13 @@
 //!
 //! This module provides an enhanced terminal UI with:
 //! - Oscilloscope waveform display per channel
+//! - Mono output waveform display
 //! - Spectrum analyzer with frequency bars
 //! - Real-time playback status and controls
 //! - Playlist overlay for directory playback
 
 mod capture;
+mod mono_output;
 mod oscilloscope;
 mod playlist_overlay;
 mod spectrum;
@@ -154,10 +156,12 @@ impl App {
     pub fn update(&mut self, context: &StreamingContext, elapsed: f32) {
         self.elapsed = elapsed;
 
+        // Get delayed snapshot for visualization (synced with audio output)
+        let delayed_snapshot = context.get_delayed_snapshot();
+
         let guard = context.player.lock();
         self.is_playing = guard.state() == PlaybackState::Playing;
         self.psg_count = guard.psg_count();
-        self.snapshot = guard.visual_snapshot();
 
         // Update mute states
         let channel_count = guard.channel_count();
@@ -170,8 +174,12 @@ impl App {
         if guard.has_subsongs() {
             self.subsong = Some((guard.current_subsong(), guard.subsong_count()));
         }
+        drop(guard);
 
-        // Update spectrum and waveforms from all PSG register states
+        // Use delayed snapshot for visualization (syncs with audio output)
+        self.snapshot = delayed_snapshot;
+
+        // Update spectrum and waveforms from delayed register states
         let mut capture = self.capture.lock();
         capture.update_from_registers(
             &self.snapshot.registers,
@@ -573,28 +581,40 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(header, area);
 }
 
-/// Draw main content with oscilloscope, spectrum, channels, and song info
+/// Draw main content with oscilloscope, mono output, spectrum, channels, and song info
 fn draw_content(f: &mut Frame, area: Rect, app: &App) {
-    // Split vertically: oscilloscope + spectrum on top, channels + info on bottom
+    // Split vertically: visualizations on top, channels + info on bottom
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(55), // Oscilloscope + Spectrum
+            Constraint::Percentage(55), // Oscilloscope + Mono + Spectrum
             Constraint::Percentage(45), // Channels + Song Info
         ])
         .split(area);
 
-    // Split top section: oscilloscope left, spectrum right
+    // Split top section: oscilloscope/mono left, spectrum right
     let top_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(60), // Oscilloscope
+            Constraint::Percentage(60), // Oscilloscope + Mono Output
             Constraint::Percentage(40), // Spectrum
         ])
         .split(chunks[0]);
 
+    // Split left section: oscilloscope on top, mono output below
+    let left_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(75), // Oscilloscope (per-channel)
+            Constraint::Percentage(25), // Mono Output (mixed)
+        ])
+        .split(top_chunks[0]);
+
     // Draw oscilloscope
-    oscilloscope::draw_oscilloscope(f, top_chunks[0], app);
+    oscilloscope::draw_oscilloscope(f, left_chunks[0], app);
+
+    // Draw mono output
+    mono_output::draw_mono_output(f, left_chunks[1], app);
 
     // Draw spectrum
     spectrum::draw_spectrum(f, top_chunks[1], app);
