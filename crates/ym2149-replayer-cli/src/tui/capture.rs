@@ -98,9 +98,9 @@ impl CaptureBuffer {
                 // Calculate absolute change
                 let delta = (cur_val - self.prev_spectrum[ch][bin]).abs();
                 // Smooth the velocity (exponential moving average)
-                self.spectrum_velocity[ch][bin] =
-                    VELOCITY_SMOOTHING * self.spectrum_velocity[ch][bin]
-                        + (1.0 - VELOCITY_SMOOTHING) * delta * 3.0; // Scale up for visibility
+                self.spectrum_velocity[ch][bin] = VELOCITY_SMOOTHING
+                    * self.spectrum_velocity[ch][bin]
+                    + (1.0 - VELOCITY_SMOOTHING) * delta * 3.0; // Scale up for visibility
                 // Store current for next frame
                 self.prev_spectrum[ch][bin] = cur_val;
             }
@@ -169,7 +169,13 @@ impl CaptureBuffer {
         let mut mono = std::collections::VecDeque::with_capacity(len);
         for i in 0..len {
             let sum: f32 = (0..channel_count)
-                .map(|ch| self.waveform.channel_waveform(ch).get(i).copied().unwrap_or(0.0))
+                .map(|ch| {
+                    self.waveform
+                        .channel_waveform(ch)
+                        .get(i)
+                        .copied()
+                        .unwrap_or(0.0)
+                })
                 .sum();
             // Normalize by channel count to prevent clipping
             mono.push_back(sum / channel_count as f32);

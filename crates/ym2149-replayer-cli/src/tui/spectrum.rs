@@ -21,17 +21,17 @@ use ym2149_common::visualization::SPECTRUM_BINS;
 /// PSG 3: Gold, Teal, Pink
 const CHANNEL_BASE_RGB: [(u8, u8, u8); 12] = [
     // PSG 0 - Primary colors
-    (180, 60, 60),   // Red
-    (60, 180, 60),   // Green
-    (60, 60, 180),   // Blue
+    (180, 60, 60), // Red
+    (60, 180, 60), // Green
+    (60, 60, 180), // Blue
     // PSG 1 - Secondary colors
-    (180, 180, 60),  // Yellow
-    (60, 180, 180),  // Cyan
-    (180, 60, 180),  // Magenta
+    (180, 180, 60), // Yellow
+    (60, 180, 180), // Cyan
+    (180, 60, 180), // Magenta
     // PSG 2 - Bright variants
-    (200, 100, 60),  // Orange-Red
-    (100, 200, 60),  // Lime-Green
-    (60, 150, 200),  // Sky-Blue
+    (200, 100, 60), // Orange-Red
+    (100, 200, 60), // Lime-Green
+    (60, 150, 200), // Sky-Blue
     // PSG 3 - More variants
     (200, 180, 60),  // Gold
     (60, 150, 150),  // Teal
@@ -101,7 +101,11 @@ pub fn draw_spectrum(f: &mut Frame, area: Rect, app: &App) {
         .collect();
     // Get velocity for each channel/bin
     let velocities: Vec<Vec<f32>> = (0..channel_count)
-        .map(|ch| (0..SPECTRUM_BINS).map(|bin| capture.spectrum_velocity(ch, bin)).collect())
+        .map(|ch| {
+            (0..SPECTRUM_BINS)
+                .map(|bin| capture.spectrum_velocity(ch, bin))
+                .collect()
+        })
         .collect();
     drop(capture);
 
@@ -122,7 +126,11 @@ pub fn draw_spectrum(f: &mut Frame, area: Rect, app: &App) {
         for (ch_idx, spectrum) in spectrums.iter().enumerate() {
             let is_drum = drum_active.get(ch_idx).copied().unwrap_or(false);
             let is_sid = sid_active.get(ch_idx).copied().unwrap_or(false);
-            let velocity = velocities.get(ch_idx).and_then(|v| v.get(bin_idx)).copied().unwrap_or(0.0);
+            let velocity = velocities
+                .get(ch_idx)
+                .and_then(|v| v.get(bin_idx))
+                .copied()
+                .unwrap_or(0.0);
 
             let value = if is_drum {
                 has_drum = true;

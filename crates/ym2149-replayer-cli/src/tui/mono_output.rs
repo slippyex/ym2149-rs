@@ -19,9 +19,7 @@ const MIN_PEAK: f32 = 0.001;
 
 /// Draw mono output waveform
 pub fn draw_mono_output(f: &mut Frame, area: Rect, app: &App) {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Output ");
+    let block = Block::default().borders(Borders::ALL).title(" Output ");
 
     // Get mono output samples from capture buffer
     let capture = app.capture.lock();

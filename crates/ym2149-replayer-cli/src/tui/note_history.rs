@@ -71,7 +71,13 @@ impl ChannelHistory {
     ///
     /// `has_output` should be true if the channel is producing sound (amplitude > 0 OR envelope_enabled).
     /// `envelope_shape` should be Some("shape") if envelope is enabled for this note.
-    pub fn update(&mut self, note: &str, freq: f32, has_output: bool, envelope_shape: Option<&str>) {
+    pub fn update(
+        &mut self,
+        note: &str,
+        freq: f32,
+        has_output: bool,
+        envelope_shape: Option<&str>,
+    ) {
         // Update last seen envelope shape if one is provided
         if let Some(shape) = envelope_shape {
             self.last_envelope_shape = Some(shape.to_string());
@@ -164,7 +170,14 @@ impl NoteHistory {
     ///
     /// `has_output` should be true if the channel is producing sound (amplitude > 0 OR envelope_enabled).
     /// `envelope_shape` should be Some("shape") if envelope is enabled for this note.
-    pub fn update_channel(&mut self, channel: usize, note: &str, freq: f32, has_output: bool, envelope_shape: Option<&str>) {
+    pub fn update_channel(
+        &mut self,
+        channel: usize,
+        note: &str,
+        freq: f32,
+        has_output: bool,
+        envelope_shape: Option<&str>,
+    ) {
         if channel < 12 {
             self.channels[channel].update(note, freq, has_output, envelope_shape);
         }

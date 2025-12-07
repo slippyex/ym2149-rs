@@ -7,9 +7,9 @@
 //! - Playback state synchronization
 //! - Visualization delay compensation (syncs visuals with audio output)
 
-use crate::{RealtimeChip, VisualSnapshot};
 use crate::audio::{AudioDevice, BUFFER_BACKOFF_MICROS, RealtimePlayer, StreamConfig};
 use crate::tui::CaptureBuffer;
+use crate::{RealtimeChip, VisualSnapshot};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::Arc;
