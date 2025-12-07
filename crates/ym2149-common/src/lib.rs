@@ -28,13 +28,20 @@
 #![warn(missing_docs)]
 
 mod cached_player;
+pub mod channel_state;
 mod metadata;
 mod player;
+pub mod util;
 pub mod visualization;
 
 pub use cached_player::{CacheablePlayer, CachedPlayer, DEFAULT_CACHE_SIZE, SampleCache};
+pub use channel_state::{ChannelState, ChannelStates, EnvelopeState, NoiseState};
 pub use metadata::{BasicMetadata, MetadataFields, PlaybackMetadata};
 pub use player::{ChiptunePlayer, ChiptunePlayerBase, PlaybackState};
+pub use util::{
+    PSG_MASTER_CLOCK_HZ, channel_frequencies, channel_frequencies_with_clock, channel_period,
+    period_to_frequency, period_to_frequency_with_clock,
+};
 pub use visualization::{
     MAX_CHANNEL_COUNT, MAX_PSG_COUNT, SPECTRUM_BINS, SPECTRUM_DECAY, SpectrumAnalyzer,
     WaveformSynthesizer, freq_to_bin,

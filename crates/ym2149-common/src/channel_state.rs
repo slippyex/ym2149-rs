@@ -6,12 +6,11 @@
 //!
 //! # Example
 //!
-//! ```
-//! use ym2149::{Ym2149, Ym2149Backend};
-//! use ym2149::channel_state::ChannelStates;
+//! ```ignore
+//! use ym2149_common::ChannelStates;
 //!
-//! let chip = Ym2149::new();
-//! let states = ChannelStates::from_registers(&chip.dump_registers());
+//! let registers: [u8; 16] = [/* ... register dump ... */];
+//! let states = ChannelStates::from_registers(&registers);
 //!
 //! for (i, ch) in states.channels.iter().enumerate() {
 //!     println!("Channel {}: {:?}Hz, amp={}", i, ch.frequency_hz, ch.amplitude);

@@ -95,6 +95,21 @@ impl SndhWasmPlayer {
     pub fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for SNDH (uses real 68000 code)
     }
+
+    /// Get number of subsongs.
+    pub fn subsong_count(&self) -> usize {
+        self.player.subsong_count()
+    }
+
+    /// Get current subsong (1-based).
+    pub fn current_subsong(&self) -> usize {
+        self.player.current_subsong()
+    }
+
+    /// Set subsong (1-based). Returns true on success.
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        self.player.init_subsong(index).is_ok()
+    }
 }
 
 /// Convert SNDH player metadata to YmMetadata for WASM.

@@ -32,9 +32,12 @@
 
 // Domain modules
 pub mod backend; // Backend trait abstraction
-pub mod channel_state; // Visualization-ready channel state extraction
-pub mod util; // Register math helpers
 pub mod ym2149; // YM2149 PSG emulation
+
+// Re-export from ym2149-common for backwards compatibility
+// These modules have been moved to ym2149-common as they are shared utilities
+pub use ym2149_common::channel_state;
+pub use ym2149_common::util;
 
 /// Error types for YM2149 chip emulator operations
 ///

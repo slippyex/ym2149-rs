@@ -9,7 +9,7 @@
 //!
 //! ```ignore
 //! use ym2149_common::visualization::{WaveformSynthesizer, SpectrumAnalyzer};
-//! use ym2149::ChannelStates;
+//! use ym2149_common::ChannelStates;
 //!
 //! let mut waveform = WaveformSynthesizer::new();
 //! let mut spectrum = SpectrumAnalyzer::new();
@@ -24,6 +24,7 @@
 //! let bins = spectrum.get_bins();
 //! ```
 
+use crate::channel_state::ChannelStates;
 use std::collections::VecDeque;
 
 // ============================================================================
@@ -118,14 +119,14 @@ impl WaveformSynthesizer {
     ///
     /// Call this once per frame to generate new waveform samples based on
     /// the current register state. This updates channels 0-2.
-    pub fn update(&mut self, channel_states: &ym2149::ChannelStates) {
+    pub fn update(&mut self, channel_states: &ChannelStates) {
         self.update_psg(0, channel_states);
     }
 
     /// Update waveforms for a specific PSG (0-3).
     ///
     /// Call this for each active PSG to update its 3 channels.
-    pub fn update_psg(&mut self, psg_index: usize, channel_states: &ym2149::ChannelStates) {
+    pub fn update_psg(&mut self, psg_index: usize, channel_states: &ChannelStates) {
         if psg_index >= MAX_PSG_COUNT {
             return;
         }
@@ -187,7 +188,7 @@ impl WaveformSynthesizer {
         self.set_psg_count(psg_count);
 
         for (psg_idx, registers) in register_banks.iter().enumerate().take(psg_count) {
-            let channel_states = ym2149::ChannelStates::from_registers(registers);
+            let channel_states = ChannelStates::from_registers(registers);
             self.update_psg(psg_idx, &channel_states);
         }
     }
@@ -202,7 +203,7 @@ impl WaveformSynthesizer {
     #[inline]
     fn synthesize_sample(
         &self,
-        ch_state: &ym2149::channel_state::ChannelState,
+        ch_state: &crate::channel_state::ChannelState,
         ch: usize,
         amplitude: f32,
         envelope_shape: u8,
@@ -403,7 +404,7 @@ impl SpectrumAnalyzer {
     ///
     /// Call this once per frame. Applies decay to previous values
     /// and updates bins based on current frequencies. Updates channels 0-2.
-    pub fn update(&mut self, channel_states: &ym2149::ChannelStates) {
+    pub fn update(&mut self, channel_states: &ChannelStates) {
         self.update_psg(0, channel_states);
         self.update_combined();
     }
@@ -411,7 +412,7 @@ impl SpectrumAnalyzer {
     /// Update spectrum for a specific PSG (0-3).
     ///
     /// Call this for each active PSG to update its 3 channels.
-    pub fn update_psg(&mut self, psg_index: usize, channel_states: &ym2149::ChannelStates) {
+    pub fn update_psg(&mut self, psg_index: usize, channel_states: &ChannelStates) {
         if psg_index >= MAX_PSG_COUNT {
             return;
         }
@@ -480,7 +481,7 @@ impl SpectrumAnalyzer {
         self.set_psg_count(psg_count);
 
         for (psg_idx, registers) in register_banks.iter().enumerate().take(psg_count) {
-            let channel_states = ym2149::ChannelStates::from_registers(registers);
+            let channel_states = ChannelStates::from_registers(registers);
             self.update_psg(psg_idx, &channel_states);
         }
 
@@ -520,8 +521,8 @@ impl SpectrumAnalyzer {
     fn add_envelope_to_spectrum(
         &mut self,
         ch: usize,
-        ch_state: &ym2149::channel_state::ChannelState,
-        channel_states: &ym2149::ChannelStates,
+        ch_state: &crate::channel_state::ChannelState,
+        channel_states: &ChannelStates,
         magnitude: f32,
     ) {
         // Sync-buzzer: tone_period sets the pitch, envelope provides the timbre
@@ -612,7 +613,7 @@ mod tests {
         regs[7] = 0x3E; // Tone A enabled
         regs[8] = 0x0F; // Max amplitude
 
-        let states = ym2149::ChannelStates::from_registers(&regs);
+        let states = ChannelStates::from_registers(&regs);
         synth.update(&states);
 
         // Phase should always be in [0, 1)
@@ -630,7 +631,7 @@ mod tests {
         regs[7] = 0x3E;
         regs[8] = 0x0F;
 
-        let states = ym2149::ChannelStates::from_registers(&regs);
+        let states = ChannelStates::from_registers(&regs);
         analyzer.update(&states);
 
         let initial_bin = freq_to_bin(440.0);
@@ -639,7 +640,7 @@ mod tests {
 
         // Now update with silence
         let silent_regs = [0u8; 16];
-        let silent_states = ym2149::ChannelStates::from_registers(&silent_regs);
+        let silent_states = ChannelStates::from_registers(&silent_regs);
         analyzer.update(&silent_states);
 
         // Value should have decayed but not be zero

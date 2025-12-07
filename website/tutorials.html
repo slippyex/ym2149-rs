@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tutorials | YM2149-rs</title>
+    <meta name="description" content="Learn how to use YM2149-rs with step-by-step tutorials for standalone playback, WASM, Bevy integration, and more.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'chip': {
+                            'dark': '#0a0a0f',
+                            'darker': '#05050a',
+                            'purple': '#8b5cf6',
+                            'cyan': '#06b6d4',
+                            'pink': '#ec4899',
+                            'green': '#10b981',
+                        }
+                    },
+                    fontFamily: {
+                        'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
+                        'display': ['Space Grotesk', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            overflow-x: hidden;
+            max-width: 100vw;
+        }
+        body {
+            background: #05050a;
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 50%, #ec4899 100%);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .glow-purple {
+            box-shadow: 0 0 40px rgba(139, 92, 246, 0.3);
+        }
+        .card-glow:hover {
+            box-shadow: 0 0 60px rgba(139, 92, 246, 0.2), 0 0 100px rgba(6, 182, 212, 0.1);
+        }
+        .grid-bg {
+            background-image:
+                linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+        pre {
+            background: #0a0a0f;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            overflow-x: auto;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            max-width: 100%;
+        }
+        /* Ensure code boxes don't overflow on mobile */
+        .code-container {
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        @media (max-width: 640px) {
+            pre {
+                font-size: 0.7rem;
+                padding: 0.75rem;
+            }
+        }
+        code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .keyword { color: #c678dd; }
+        .string { color: #98c379; }
+        .function { color: #61afef; }
+        .type { color: #e5c07b; }
+        .comment { color: #5c6370; }
+        .number { color: #d19a66; }
+        .macro { color: #56b6c2; }
+    </style>
+</head>
+<body class="font-display text-gray-100 overflow-x-hidden">
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-40 bg-chip-darker/80 backdrop-blur-lg border-b border-purple-900/20">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <a href="index.html" class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center">
+                        <span class="font-mono font-bold text-sm">YM</span>
+                    </div>
+                    <span class="font-mono font-semibold text-lg">YM2149-rs</span>
+                </a>
+
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-6">
+                    <a href="index.html" class="text-gray-400 hover:text-white transition-colors">Home</a>
+                    <a href="tutorials.html" class="text-white font-medium">Tutorials</a>
+                    <a href="index.html#demo" class="text-gray-400 hover:text-white transition-colors">Demo</a>
+                    <div class="flex items-center space-x-3">
+                        <a href="https://github.com/slippyex/ym2149-rs" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all" title="GitHub">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                        </a>
+                        <a href="https://docs.rs/ym2149" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all" title="docs.rs">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Mobile Menu Button -->
+                <button id="mobileMenuBtn" class="md:hidden p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all">
+                    <svg id="menuIconOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <svg id="menuIconClose" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Mobile Menu -->
+            <div id="mobileMenu" class="hidden md:hidden mt-4 pb-4 border-t border-gray-800 pt-4">
+                <div class="flex flex-col space-y-3">
+                    <a href="index.html" class="text-gray-400 hover:text-white transition-colors py-2">Home</a>
+                    <a href="tutorials.html" class="text-white font-medium py-2">Tutorials</a>
+                    <a href="index.html#demo" class="text-gray-400 hover:text-white transition-colors py-2">Demo</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <header class="pt-32 pb-16 px-6 grid-bg">
+        <div class="max-w-4xl mx-auto text-center">
+            <h1 class="text-4xl sm:text-5xl font-bold mb-6">
+                <span class="gradient-text">Tutorials</span>
+            </h1>
+            <p class="text-xl text-gray-400 max-w-2xl mx-auto">
+                From raw chip emulation to game engine integration. Pick your use case and get started.
+            </p>
+        </div>
+    </header>
+
+    <!-- Use Case Overview -->
+    <section class="py-8 px-6 border-b border-gray-800">
+        <div class="max-w-5xl mx-auto">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <a href="#core" class="p-3 rounded-xl bg-chip-purple/10 border border-chip-purple/30 text-center hover:bg-chip-purple/20 transition-colors">
+                    <div class="text-2xl mb-1">🎛️</div>
+                    <div class="text-xs text-chip-purple font-medium">Core Chip</div>
+                </a>
+                <a href="#standalone" class="p-3 rounded-xl bg-chip-cyan/10 border border-chip-cyan/30 text-center hover:bg-chip-cyan/20 transition-colors">
+                    <div class="text-2xl mb-1">🎵</div>
+                    <div class="text-xs text-chip-cyan font-medium">Standalone</div>
+                </a>
+                <a href="#wasm" class="p-3 rounded-xl bg-chip-pink/10 border border-chip-pink/30 text-center hover:bg-chip-pink/20 transition-colors">
+                    <div class="text-2xl mb-1">🌐</div>
+                    <div class="text-xs text-chip-pink font-medium">WASM</div>
+                </a>
+                <a href="#gist" class="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-center hover:bg-orange-500/20 transition-colors">
+                    <div class="text-2xl mb-1">💥</div>
+                    <div class="text-xs text-orange-400 font-medium">GIST SFX</div>
+                </a>
+                <a href="#bevy" class="p-3 rounded-xl bg-chip-green/10 border border-chip-green/30 text-center hover:bg-chip-green/20 transition-colors">
+                    <div class="text-2xl mb-1">🎮</div>
+                    <div class="text-xs text-chip-green font-medium">Bevy</div>
+                </a>
+                <a href="#formats" class="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-center hover:bg-red-500/20 transition-colors">
+                    <div class="text-2xl mb-1">📁</div>
+                    <div class="text-xs text-red-400 font-medium">Formats</div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tutorial 1: Core Chip -->
+    <section id="core" class="py-16 px-6">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-xl bg-chip-purple/20 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">🎛️</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white">Core Chip Emulation</h2>
+                    <p class="text-gray-400">Direct register access, cycle-accurate emulation</p>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-purple mb-4">Raw YM2149 Access</h3>
+                    <p class="text-gray-400 mb-4">Use <code class="text-chip-cyan">ym2149-core</code> for direct chip control:</p>
+                    <pre><code><span class="keyword">use</span> ym2149::{<span class="type">Ym2149</span>, <span class="type">Ym2149Backend</span>};
+
+<span class="keyword">fn</span> <span class="function">main</span>() {
+    <span class="keyword">let mut</span> chip = <span class="type">Ym2149</span>::new();
+
+    <span class="comment">// Set channel A frequency (440 Hz)</span>
+    chip.<span class="function">write_register</span>(<span class="number">0</span>, <span class="number">0x1C</span>);  <span class="comment">// Tone A Lo</span>
+    chip.<span class="function">write_register</span>(<span class="number">1</span>, <span class="number">0x01</span>);  <span class="comment">// Tone A Hi</span>
+    chip.<span class="function">write_register</span>(<span class="number">8</span>, <span class="number">0x0F</span>);  <span class="comment">// Volume A (max)</span>
+    chip.<span class="function">write_register</span>(<span class="number">7</span>, <span class="number">0x3E</span>);  <span class="comment">// Mixer: enable tone A</span>
+
+    <span class="comment">// Generate samples</span>
+    <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="number">0</span>..<span class="number">44100</span> {
+        chip.<span class="function">clock</span>();
+        <span class="keyword">let</span> sample = chip.<span class="function">get_sample</span>();
+        <span class="comment">// Send sample to audio output...</span>
+    }
+}</code></pre>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-purple mb-4">Register Map</h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs sm:text-sm font-mono">
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-purple">R0-1</span> Tone A</div>
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-purple">R2-3</span> Tone B</div>
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-purple">R4-5</span> Tone C</div>
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-purple">R6</span> Noise</div>
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-cyan">R7</span> Mixer</div>
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-cyan">R8-10</span> Volume</div>
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-pink">R11-12</span> Env Period</div>
+                        <div class="p-2 rounded bg-chip-darker"><span class="text-chip-pink">R13</span> Env Shape</div>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-xl bg-chip-purple/10 border border-chip-purple/30 overflow-hidden">
+                    <p class="text-sm text-gray-300 break-all">
+                        <span class="text-chip-purple font-semibold">Crate:</span>
+                        <code class="text-chip-cyan ml-2 break-all">ym2149-core</code>
+                    </p>
+                </div>
+
+                <!-- Back to Top -->
+                <div class="mt-8 text-center">
+                    <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                        Back to Top
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tutorial 2: Standalone Player -->
+    <section id="standalone" class="py-16 px-6 bg-chip-dark/50">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-xl bg-chip-cyan/20 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">🎵</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white">Standalone Playback</h2>
+                    <p class="text-gray-400">Play YM files without a game engine</p>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-cyan mb-4">Load and Play YM Files</h3>
+                    <p class="text-gray-400 mb-4">Use <code class="text-chip-cyan">ym2149-ym-replayer</code> for YM2-YM6 formats:</p>
+                    <pre><code><span class="keyword">use</span> ym2149_ym_replayer::{load_song, <span class="type">PlaybackController</span>};
+
+<span class="keyword">fn</span> <span class="function">main</span>() -> <span class="type">Result</span>&lt;(), <span class="type">Box</span>&lt;<span class="keyword">dyn</span> <span class="type">Error</span>&gt;&gt; {
+    <span class="comment">// Load YM file</span>
+    <span class="keyword">let</span> data = std::fs::<span class="function">read</span>(<span class="string">"music.ym"</span>)?;
+    <span class="keyword">let</span> (<span class="keyword">mut</span> player, summary) = <span class="function">load_song</span>(&amp;data)?;
+
+    <span class="macro">println!</span>(<span class="string">"Title: {}"</span>, summary.title);
+    <span class="macro">println!</span>(<span class="string">"Author: {}"</span>, summary.author);
+    <span class="macro">println!</span>(<span class="string">"Duration: {}s"</span>, summary.duration_seconds);
+
+    <span class="comment">// Start playback</span>
+    player.<span class="function">play</span>()?;
+
+    <span class="comment">// Generate samples (e.g., for cpal audio output)</span>
+    <span class="keyword">let</span> samples = player.<span class="function">generate_samples</span>(<span class="number">44100</span>);
+    <span class="type">Ok</span>(())
+}</code></pre>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-cyan mb-4">With cpal Audio Output</h3>
+                    <p class="text-gray-400 mb-4">Real-time playback using the cpal audio library:</p>
+                    <pre><code><span class="keyword">use</span> cpal::traits::{<span class="type">DeviceTrait</span>, <span class="type">HostTrait</span>, <span class="type">StreamTrait</span>};
+<span class="keyword">use</span> parking_lot::<span class="type">Mutex</span>;
+<span class="keyword">use</span> std::sync::<span class="type">Arc</span>;
+
+<span class="keyword">let</span> player = <span class="type">Arc</span>::new(<span class="type">Mutex</span>::new(player));
+<span class="keyword">let</span> player_clone = <span class="type">Arc</span>::clone(&amp;player);
+
+<span class="keyword">let</span> host = cpal::<span class="function">default_host</span>();
+<span class="keyword">let</span> device = host.<span class="function">default_output_device</span>().<span class="function">unwrap</span>();
+<span class="keyword">let</span> config = device.<span class="function">default_output_config</span>().<span class="function">unwrap</span>();
+
+<span class="keyword">let</span> stream = device.<span class="function">build_output_stream</span>(
+    &amp;config.<span class="function">into</span>(),
+    <span class="keyword">move</span> |data: &amp;<span class="keyword">mut</span> [<span class="type">f32</span>], _| {
+        <span class="keyword">let mut</span> p = player_clone.<span class="function">lock</span>();
+        p.<span class="function">generate_samples_into</span>(data);
+    },
+    |err| <span class="macro">eprintln!</span>(<span class="string">"Audio error: {}"</span>, err),
+    <span class="type">None</span>,
+).<span class="function">unwrap</span>();
+
+stream.<span class="function">play</span>().<span class="function">unwrap</span>();
+std::thread::<span class="function">sleep</span>(<span class="type">Duration</span>::from_secs(<span class="number">60</span>));</code></pre>
+                </div>
+
+                <div class="p-4 rounded-xl bg-chip-cyan/10 border border-chip-cyan/30 overflow-hidden">
+                    <p class="text-sm text-gray-300 break-all">
+                        <span class="text-chip-cyan font-semibold">Crate:</span>
+                        <code class="text-chip-purple ml-2 break-all">ym2149-ym-replayer</code>
+                        <span class="text-gray-500 ml-2">+ cpal for audio</span>
+                    </p>
+                </div>
+
+                <!-- Back to Top -->
+                <div class="mt-8 text-center">
+                    <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                        Back to Top
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tutorial 3: WASM -->
+    <section id="wasm" class="py-16 px-6">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-xl bg-chip-pink/20 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">🌐</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white">WebAssembly / Browser</h2>
+                    <p class="text-gray-400">Play chiptunes in the browser</p>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-pink mb-4">JavaScript Integration</h3>
+                    <p class="text-gray-400 mb-4">Use the pre-built WASM module:</p>
+                    <pre><code><span class="keyword">import</span> init, { <span class="type">Ym2149Player</span> } <span class="keyword">from</span> <span class="string">'./ym2149_wasm.js'</span>;
+
+<span class="keyword">async function</span> <span class="function">playChiptune</span>(fileData) {
+    <span class="keyword">await</span> <span class="function">init</span>();
+
+    <span class="comment">// Create player from file data (Uint8Array)</span>
+    <span class="keyword">const</span> player = <span class="keyword">new</span> <span class="type">Ym2149Player</span>(fileData);
+
+    <span class="comment">// Get metadata</span>
+    <span class="keyword">const</span> meta = player.metadata;
+    console.<span class="function">log</span>(<span class="string">`Playing: ${meta.title} by ${meta.author}`</span>);
+
+    <span class="comment">// Setup Web Audio API</span>
+    <span class="keyword">const</span> ctx = <span class="keyword">new</span> <span class="type">AudioContext</span>({ sampleRate: <span class="number">44100</span> });
+    <span class="keyword">const</span> processor = ctx.<span class="function">createScriptProcessor</span>(<span class="number">4096</span>, <span class="number">1</span>, <span class="number">1</span>);
+
+    processor.onaudioprocess = (e) => {
+        <span class="keyword">const</span> output = e.outputBuffer.<span class="function">getChannelData</span>(<span class="number">0</span>);
+        <span class="keyword">const</span> samples = player.<span class="function">generateSamples</span>(output.length);
+        <span class="keyword">for</span> (<span class="keyword">let</span> i = <span class="number">0</span>; i &lt; output.length; i++) {
+            output[i] = samples[i];
+        }
+    };
+
+    processor.<span class="function">connect</span>(ctx.destination);
+    player.<span class="function">play</span>();
+}</code></pre>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-pink mb-4">Player API</h3>
+                    <div class="grid sm:grid-cols-2 gap-3 text-sm font-mono">
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">play()</span>
+                            <span class="text-gray-500 ml-2">Start playback</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">pause()</span>
+                            <span class="text-gray-500 ml-2">Pause playback</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">stop()</span>
+                            <span class="text-gray-500 ml-2">Stop and reset</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">set_volume(v)</span>
+                            <span class="text-gray-500 ml-2">0.0 - 1.0</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">seek_to_percentage(p)</span>
+                            <span class="text-gray-500 ml-2">0.0 - 1.0</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">set_channel_mute(ch, b)</span>
+                            <span class="text-gray-500 ml-2">Mute channel</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">next_subsong()</span>
+                            <span class="text-gray-500 ml-2">AKS/SNDH</span>
+                        </div>
+                        <div class="p-3 rounded-lg bg-chip-darker">
+                            <span class="text-chip-pink">generateSamples(n)</span>
+                            <span class="text-gray-500 ml-2">Get n samples</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-xl bg-chip-pink/10 border border-chip-pink/30 overflow-hidden">
+                    <p class="text-sm text-gray-300 break-all">
+                        <span class="text-chip-pink font-semibold">Crate:</span>
+                        <code class="text-chip-cyan ml-2 break-all">ym2149-wasm</code>
+                        <span class="text-gray-500 ml-2">+ wasm-pack</span>
+                    </p>
+                </div>
+
+                <!-- Back to Top -->
+                <div class="mt-8 text-center">
+                    <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                        Back to Top
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tutorial 4: GIST SFX -->
+    <section id="gist" class="py-16 px-6 bg-chip-dark/50">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-xl bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">💥</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white">GIST Sound Effects</h2>
+                    <p class="text-gray-400">Atari ST synthesizer patches for game SFX</p>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-orange-400 mb-4">High-Level Player</h3>
+                    <p class="text-gray-400 mb-4">Quick playback with <code class="text-chip-cyan">GistPlayer</code>:</p>
+                    <pre><code><span class="keyword">use</span> ym2149_gist_replayer::{<span class="type">GistPlayer</span>, <span class="type">GistSound</span>};
+
+<span class="comment">// Load a GIST .snd effect</span>
+<span class="keyword">let</span> explosion = <span class="type">GistSound</span>::<span class="function">load</span>(<span class="string">"explosion.snd"</span>)?;
+<span class="keyword">let</span> laser = <span class="type">GistSound</span>::<span class="function">load</span>(<span class="string">"laser.snd"</span>)?;
+
+<span class="comment">// Create player (uses its own YM2149 chip)</span>
+<span class="keyword">let mut</span> player = <span class="type">GistPlayer</span>::new();
+
+<span class="comment">// Play sound on any free channel</span>
+player.<span class="function">play_sound</span>(&amp;explosion, <span class="type">None</span>, <span class="type">None</span>);
+
+<span class="comment">// Generate audio while playing</span>
+<span class="keyword">while</span> player.<span class="function">is_playing</span>() {
+    <span class="keyword">let</span> samples = player.<span class="function">generate_samples</span>(<span class="number">882</span>); <span class="comment">// ~20ms</span>
+    <span class="comment">// Send to audio output...</span>
+}</code></pre>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-orange-400 mb-4">Dedicated SFX Chip (Music + Effects)</h3>
+                    <p class="text-gray-400 mb-4">Use a second YM2149 for SFX alongside music:</p>
+                    <pre><code><span class="comment">// Main music player</span>
+<span class="keyword">let mut</span> music_player = <span class="function">load_song</span>(&amp;ym_data)?;
+music_player.<span class="function">play</span>()?;
+
+<span class="comment">// Separate GIST player for sound effects</span>
+<span class="keyword">let mut</span> sfx_player = <span class="type">GistPlayer</span>::new();
+<span class="keyword">let</span> jump_sfx = <span class="type">GistSound</span>::<span class="function">load</span>(<span class="string">"jump.snd"</span>)?;
+
+<span class="comment">// In your audio callback, mix both</span>
+<span class="keyword">fn</span> <span class="function">generate_audio</span>(output: &amp;<span class="keyword">mut</span> [<span class="type">f32</span>]) {
+    <span class="keyword">let</span> music = music_player.<span class="function">generate_samples</span>(output.len());
+    <span class="keyword">let</span> sfx = sfx_player.<span class="function">generate_samples</span>(output.len());
+
+    <span class="keyword">for</span> i <span class="keyword">in</span> <span class="number">0</span>..output.len() {
+        output[i] = (music[i] + sfx[i]) * <span class="number">0.5</span>; <span class="comment">// Mix 50/50</span>
+    }
+}
+
+<span class="comment">// Trigger SFX on game events</span>
+<span class="keyword">if</span> player_jumped {
+    sfx_player.<span class="function">play_sound</span>(&amp;jump_sfx, <span class="type">None</span>, <span class="type">None</span>);
+}</code></pre>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-orange-400 mb-4">Low-Level Driver</h3>
+                    <p class="text-gray-400 mb-4">Direct control with <code class="text-chip-cyan">GistDriver</code>:</p>
+                    <pre><code><span class="keyword">use</span> ym2149::<span class="type">Ym2149</span>;
+<span class="keyword">use</span> ym2149_gist_replayer::{<span class="type">GistDriver</span>, <span class="type">GistSound</span>, TICK_RATE};
+
+<span class="keyword">let</span> sound = <span class="type">GistSound</span>::<span class="function">load</span>(<span class="string">"effect.snd"</span>)?;
+<span class="keyword">let mut</span> chip = <span class="type">Ym2149</span>::new();
+<span class="keyword">let mut</span> driver = <span class="type">GistDriver</span>::new();
+
+<span class="comment">// Start sound (channel=None auto-selects, priority=i16::MAX-1)</span>
+driver.<span class="function">snd_on</span>(&amp;<span class="keyword">mut</span> chip, &amp;sound, <span class="type">None</span>, <span class="type">None</span>, -<span class="number">1</span>, i16::MAX - <span class="number">1</span>);
+
+<span class="comment">// Call tick() at 200 Hz (GIST Timer C rate)</span>
+<span class="keyword">while</span> driver.<span class="function">is_playing</span>() {
+    driver.<span class="function">tick</span>(&amp;<span class="keyword">mut</span> chip);
+    <span class="comment">// Generate samples from chip...</span>
+}</code></pre>
+                </div>
+
+                <div class="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30 overflow-hidden">
+                    <p class="text-sm text-gray-300 break-all">
+                        <span class="text-orange-400 font-semibold">Crate:</span>
+                        <code class="text-chip-cyan ml-2 break-all">ym2149-gist-replayer</code>
+                    </p>
+                </div>
+
+                <!-- Back to Top -->
+                <div class="mt-8 text-center">
+                    <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                        Back to Top
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tutorial 5: Bevy -->
+    <section id="bevy" class="py-16 px-6">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-xl bg-chip-green/20 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">🎮</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white">Bevy Game Engine</h2>
+                    <p class="text-gray-400">Full integration for games and demos</p>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-green mb-4">Basic Setup</h3>
+                    <pre><code><span class="keyword">use</span> bevy::prelude::*;
+<span class="keyword">use</span> bevy_ym2149::{<span class="type">Ym2149Playback</span>, <span class="type">Ym2149Plugin</span>};
+
+<span class="keyword">fn</span> <span class="function">main</span>() {
+    <span class="type">App</span>::new()
+        .<span class="function">add_plugins</span>(<span class="type">DefaultPlugins</span>)
+        .<span class="function">add_plugins</span>(<span class="type">Ym2149Plugin</span>::default())
+        .<span class="function">add_systems</span>(<span class="type">Startup</span>, setup)
+        .<span class="function">run</span>();
+}
+
+<span class="keyword">fn</span> <span class="function">setup</span>(<span class="keyword">mut</span> commands: <span class="type">Commands</span>) {
+    commands.<span class="function">spawn</span>(<span class="type">Camera2d</span>);
+    commands.<span class="function">spawn</span>(<span class="type">Ym2149Playback</span>::new(<span class="string">"music.ym"</span>));
+}</code></pre>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-green mb-4">Playlists with Crossfade</h3>
+                    <pre><code><span class="keyword">use</span> bevy_ym2149::playlist::{
+    <span class="type">CrossfadeConfig</span>, <span class="type">PlaylistMode</span>, <span class="type">PlaylistSource</span>,
+    <span class="type">Ym2149Playlist</span>, <span class="type">Ym2149PlaylistPlayer</span>,
+};
+
+<span class="keyword">fn</span> <span class="function">setup</span>(
+    <span class="keyword">mut</span> commands: <span class="type">Commands</span>,
+    <span class="keyword">mut</span> playlists: <span class="type">ResMut</span>&lt;<span class="type">Assets</span>&lt;<span class="type">Ym2149Playlist</span>&gt;&gt;,
+) {
+    <span class="keyword">let</span> playlist = playlists.<span class="function">add</span>(<span class="type">Ym2149Playlist</span> {
+        tracks: <span class="macro">vec!</span>[
+            <span class="type">PlaylistSource</span>::Asset { path: <span class="string">"music/track1.ym"</span>.into() },
+            <span class="type">PlaylistSource</span>::Asset { path: <span class="string">"music/track2.aks"</span>.into() },
+        ],
+        mode: <span class="type">PlaylistMode</span>::Loop,
+    });
+
+    commands.<span class="function">spawn</span>((
+        <span class="type">Ym2149Playback</span>::default(),
+        <span class="type">Ym2149PlaylistPlayer</span>::with_crossfade(
+            playlist,
+            <span class="type">CrossfadeConfig</span>::start_at_seconds(<span class="number">3.0</span>),
+        ),
+    ));
+}</code></pre>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-chip-green mb-4">Pattern Triggers (Demoscene)</h3>
+                    <pre><code><span class="keyword">use</span> bevy_ym2149::{<span class="type">PatternTrigger</span>, <span class="type">PatternTriggerSet</span>, <span class="type">PatternTriggered</span>};
+
+<span class="comment">// Define patterns to detect</span>
+<span class="keyword">let</span> triggers = <span class="type">PatternTriggerSet</span>::from_patterns(<span class="macro">vec!</span>[
+    <span class="type">PatternTrigger</span>::new(<span class="string">"bass"</span>, <span class="number">0</span>).<span class="function">with_min_amplitude</span>(<span class="number">0.35</span>),
+    <span class="type">PatternTrigger</span>::new(<span class="string">"lead"</span>, <span class="number">1</span>).<span class="function">with_frequency</span>(<span class="number">440.0</span>, <span class="number">12.0</span>),
+]);
+
+commands.<span class="function">spawn</span>((<span class="type">Ym2149Playback</span>::new(<span class="string">"demo.ym"</span>), triggers));
+
+<span class="comment">// React to patterns</span>
+<span class="keyword">fn</span> <span class="function">on_beat</span>(<span class="keyword">mut</span> events: <span class="type">MessageReader</span>&lt;<span class="type">PatternTriggered</span>&gt;) {
+    <span class="keyword">for</span> hit <span class="keyword">in</span> events.<span class="function">read</span>() {
+        <span class="keyword">if</span> hit.pattern_id == <span class="string">"bass"</span> {
+            <span class="comment">// Flash screen, shake camera, etc.</span>
+        }
+    }
+}</code></pre>
+                </div>
+
+                <div class="p-4 rounded-xl bg-chip-green/10 border border-chip-green/30 overflow-hidden">
+                    <p class="text-sm text-gray-300 break-all">
+                        <span class="text-chip-green font-semibold">Crates:</span>
+                        <code class="text-chip-cyan ml-2 break-all">bevy_ym2149</code>
+                        <code class="text-chip-purple ml-2 break-all">bevy_ym2149_viz</code>
+                    </p>
+                </div>
+
+                <!-- Back to Top -->
+                <div class="mt-8 text-center">
+                    <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                        Back to Top
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tutorial 6: Formats -->
+    <section id="formats" class="py-16 px-6 bg-chip-dark/50">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">📁</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white">Supported Formats</h2>
+                    <p class="text-gray-400">Each format has its own replayer crate</p>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="grid sm:grid-cols-2 gap-4">
+                    <!-- YM Format -->
+                    <div class="p-4 sm:p-5 rounded-2xl bg-chip-dark border border-gray-800 overflow-hidden">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="text-xl">📼</span>
+                            <div>
+                                <h3 class="font-semibold text-white">YM2-YM6</h3>
+                                <span class="text-xs text-gray-500">Leonard/Atari ST</span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre class="text-xs"><code><span class="keyword">use</span> ym2149_ym_replayer::load_song;
+<span class="keyword">let</span> (player, _) = load_song(&amp;data)?;</code></pre>
+                        </div>
+                    </div>
+
+                    <!-- AKS Format -->
+                    <div class="p-4 sm:p-5 rounded-2xl bg-chip-dark border border-gray-800 overflow-hidden">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="text-xl">🎹</span>
+                            <div>
+                                <h3 class="font-semibold text-white">AKS (Arkos Tracker)</h3>
+                                <span class="text-xs text-gray-500">Multi-PSG support</span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre class="text-xs"><code><span class="keyword">use</span> ym2149_arkos_replayer::{load_aks, <span class="type">ArkosPlayer</span>};
+<span class="keyword">let</span> song = load_aks(&amp;data)?;
+<span class="keyword">let</span> player = <span class="type">ArkosPlayer</span>::new(song, <span class="number">0</span>)?;</code></pre>
+                        </div>
+                    </div>
+
+                    <!-- SNDH Format -->
+                    <div class="p-4 sm:p-5 rounded-2xl bg-chip-dark border border-gray-800 overflow-hidden">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="text-xl">💾</span>
+                            <div>
+                                <h3 class="font-semibold text-white">SNDH</h3>
+                                <span class="text-xs text-gray-500">Atari ST native 68000</span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre class="text-xs"><code><span class="keyword">use</span> ym2149_sndh_replayer::load_sndh;
+<span class="keyword">let mut</span> player = load_sndh(&amp;data, <span class="number">44100</span>)?;
+player.init_subsong(<span class="number">1</span>)?;</code></pre>
+                        </div>
+                    </div>
+
+                    <!-- AY Format -->
+                    <div class="p-4 sm:p-5 rounded-2xl bg-chip-dark border border-gray-800 overflow-hidden">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="text-xl">🔊</span>
+                            <div>
+                                <h3 class="font-semibold text-white">AY (ZX Spectrum)</h3>
+                                <span class="text-xs text-gray-500">EMUL format</span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre class="text-xs"><code><span class="keyword">use</span> ym2149_ay_replayer::{load_ay, <span class="type">AyPlayer</span>};
+<span class="keyword">let</span> song = load_ay(&amp;data)?;
+<span class="keyword">let</span> player = <span class="type">AyPlayer</span>::new(song)?;</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                    <h3 class="text-lg font-semibold text-red-400 mb-4">Unified Player Trait</h3>
+                    <p class="text-gray-400 mb-4">All players implement <code class="text-chip-cyan">ChiptunePlayer</code>:</p>
+                    <pre><code><span class="keyword">use</span> ym2149_common::<span class="type">ChiptunePlayer</span>;
+
+<span class="keyword">fn</span> <span class="function">play_any</span>&lt;P: <span class="type">ChiptunePlayer</span>&gt;(<span class="keyword">mut</span> player: P) {
+    player.<span class="function">play</span>();
+
+    <span class="keyword">let</span> meta = player.<span class="function">metadata</span>();
+    <span class="macro">println!</span>(<span class="string">"Playing: {} by {}"</span>, meta.title, meta.author);
+
+    <span class="keyword">let</span> samples = player.<span class="function">generate_samples</span>(<span class="number">4096</span>);
+    <span class="comment">// All players produce f32 samples at configured sample rate</span>
+}</code></pre>
+                </div>
+
+                <div class="p-4 rounded-xl bg-red-500/10 border border-red-500/30 overflow-hidden">
+                    <p class="text-sm text-gray-300 break-all">
+                        <span class="text-red-400 font-semibold">Trait:</span>
+                        <code class="text-chip-cyan ml-2 break-all">ym2149-common::ChiptunePlayer</code>
+                    </p>
+                </div>
+
+                <!-- Back to Top -->
+                <div class="mt-8 text-center">
+                    <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                        Back to Top
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CLI Section -->
+    <section class="py-16 px-6">
+        <div class="max-w-4xl mx-auto">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-12 h-12 rounded-xl bg-gray-700/50 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">⌨️</span>
+                </div>
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-white">CLI Replayer</h2>
+                    <p class="text-gray-400">Terminal-based player with TUI visualization</p>
+                </div>
+            </div>
+
+            <div class="p-4 sm:p-6 rounded-2xl bg-chip-dark border border-gray-800 overflow-x-auto">
+                <pre><code><span class="comment"># Install</span>
+cargo install ym2149-replayer-cli
+
+<span class="comment"># Play a single file</span>
+ym2149-replayer music.ym
+
+<span class="comment"># Play a directory (playlist mode)</span>
+ym2149-replayer ./music/
+
+<span class="comment"># Headless mode (no TUI)</span>
+ym2149-replayer --headless music.ym
+
+<span class="comment"># Export to WAV</span>
+ym2149-replayer --export output.wav music.ym</code></pre>
+            </div>
+
+            <!-- Back to Top -->
+            <div class="mt-8 text-center">
+                <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                    Back to Top
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Next Steps -->
+    <section class="py-16 px-6 bg-chip-dark/50">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-2xl sm:text-3xl font-bold mb-6">Run the Examples</h2>
+            <p class="text-gray-400 mb-8 max-w-2xl mx-auto">
+                Clone the repository and explore all the examples:
+            </p>
+            <pre class="text-left max-w-xl mx-auto mb-8 text-sm"><code>git clone https://github.com/slippyex/ym2149-rs
+<span class="keyword">cd</span> ym2149-rs
+
+<span class="comment"># Bevy examples</span>
+cargo run --example basic_example
+cargo run --example advanced_example
+cargo run --example demoscene
+
+<span class="comment"># GIST player example</span>
+cargo run -p ym2149-gist-replayer --example player -- examples/gist/laser.snd
+
+<span class="comment"># CLI replayer</span>
+cargo run -p ym2149-replayer-cli -- examples/ym/</code></pre>
+            <div class="flex flex-wrap justify-center gap-4">
+                <a href="https://github.com/slippyex/ym2149-rs" target="_blank" rel="noopener" class="px-6 py-3 rounded-xl bg-gradient-to-r from-chip-purple to-chip-cyan text-white font-semibold hover:opacity-90 transition-opacity">
+                    View on GitHub
+                </a>
+                <a href="index.html#demo" class="px-6 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-semibold transition-colors">
+                    Try the Demo
+                </a>
+            </div>
+
+            <!-- Back to Top -->
+            <div class="mt-12 text-center">
+                <a href="#" class="inline-flex items-center gap-2 text-gray-500 hover:text-chip-purple transition-colors text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                    Back to Top
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-8 px-6 border-t border-gray-800">
+        <div class="max-w-4xl mx-auto text-center text-gray-500 text-sm">
+            <p>YM2149-rs is open source under the MIT license.</p>
+            <p class="mt-2">
+                <a href="index.html" class="text-chip-purple hover:text-chip-cyan transition-colors">Back to Home</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+            const menu = document.getElementById('mobileMenu');
+            const iconOpen = document.getElementById('menuIconOpen');
+            const iconClose = document.getElementById('menuIconClose');
+            menu.classList.toggle('hidden');
+            iconOpen.classList.toggle('hidden');
+            iconClose.classList.toggle('hidden');
+        });
+
+        // Close mobile menu when clicking a link
+        document.querySelectorAll('#mobileMenu a').forEach(link => {
+            link.addEventListener('click', function() {
+                document.getElementById('mobileMenu').classList.add('hidden');
+                document.getElementById('menuIconOpen').classList.remove('hidden');
+                document.getElementById('menuIconClose').classList.add('hidden');
+            });
+        });
+    </script>
+</body>
+</html>

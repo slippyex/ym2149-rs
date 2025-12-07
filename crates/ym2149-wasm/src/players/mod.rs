@@ -172,4 +172,34 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Sndh(player) => player.set_color_filter(enabled),
         }
     }
+
+    /// Get the number of subsongs (1 for most formats, >1 for multi-song SNDH files).
+    pub fn subsong_count(&self) -> usize {
+        match self {
+            BrowserSongPlayer::Ym(_) => 1,
+            BrowserSongPlayer::Arkos(_) => 1,
+            BrowserSongPlayer::Ay(_) => 1,
+            BrowserSongPlayer::Sndh(player) => player.subsong_count(),
+        }
+    }
+
+    /// Get the current subsong index (1-based).
+    pub fn current_subsong(&self) -> usize {
+        match self {
+            BrowserSongPlayer::Ym(_) => 1,
+            BrowserSongPlayer::Arkos(_) => 1,
+            BrowserSongPlayer::Ay(_) => 1,
+            BrowserSongPlayer::Sndh(player) => player.current_subsong(),
+        }
+    }
+
+    /// Set the current subsong (1-based index). Returns true on success.
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        match self {
+            BrowserSongPlayer::Ym(_) => index == 1,
+            BrowserSongPlayer::Arkos(_) => index == 1,
+            BrowserSongPlayer::Ay(_) => index == 1,
+            BrowserSongPlayer::Sndh(player) => player.set_subsong(index),
+        }
+    }
 }

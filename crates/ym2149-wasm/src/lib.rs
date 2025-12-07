@@ -304,6 +304,24 @@ impl Ym2149Player {
     pub fn set_color_filter(&mut self, enabled: bool) {
         self.player.set_color_filter(enabled);
     }
+
+    /// Get the number of subsongs (1 for most formats, >1 for multi-song SNDH files).
+    #[wasm_bindgen(js_name = subsongCount)]
+    pub fn subsong_count(&self) -> usize {
+        self.player.subsong_count()
+    }
+
+    /// Get the current subsong index (1-based).
+    #[wasm_bindgen(js_name = currentSubsong)]
+    pub fn current_subsong(&self) -> usize {
+        self.player.current_subsong()
+    }
+
+    /// Set the current subsong (1-based index). Returns true on success.
+    #[wasm_bindgen(js_name = setSubsong)]
+    pub fn set_subsong(&mut self, index: usize) -> bool {
+        self.player.set_subsong(index)
+    }
 }
 
 /// Load a file and create the appropriate player.

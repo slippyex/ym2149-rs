@@ -6285,6 +6285,7 @@ dependencies = [
  "approx",
  "criterion",
  "thiserror 1.0.69",
+ "ym2149-common",
 ]
 
 [[package]]
@@ -6316,9 +6317,6 @@ dependencies = [
 [[package]]
 name = "ym2149-common"
 version = "0.7.1"
-dependencies = [
- "ym2149",
-]
 
 [[package]]
 name = "ym2149-gist-replayer"
