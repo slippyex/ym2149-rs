@@ -22,7 +22,7 @@ edition = "2024"
 authors = ["slippyex"]
 license = "MIT"
 repository = "https://github.com/slippyex/ym2149-rs"
-homepage = "https://github.com/slippyex/ym2149-rs"
+homepage = "https://ym2149-rs.org"
 
 [workspace.dependencies]
 thiserror = "1.0"
