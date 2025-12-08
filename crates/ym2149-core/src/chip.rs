@@ -4,11 +4,11 @@
 //! master_clock / 8 (250kHz at 2MHz). This matches the real hardware timing
 //! where internal operations run at 1/8 of the master clock.
 
-use super::dc_filter::DcFilter;
-use super::generators::{EnvelopeGenerator, NUM_CHANNELS, NoiseGenerator, ToneGenerator};
-use super::mixer::Mixer;
-use super::tables::REG_MASK;
-use crate::backend::Ym2149Backend;
+use crate::dc_filter::DcFilter;
+use crate::generators::{EnvelopeGenerator, NUM_CHANNELS, NoiseGenerator, ToneGenerator};
+use crate::mixer::Mixer;
+use crate::tables::REG_MASK;
+use ym2149_common::Ym2149Backend;
 
 /// Default Atari ST master clock (2 MHz)
 const DEFAULT_MASTER_CLOCK: u32 = 2_000_000;

@@ -3,10 +3,10 @@
 //! This resource is populated by the playback diagnostics system so that
 //! visualization crates can read the most recent register dump without
 //! locking the player directly. It also carries the derived
-//! [`ChannelStates`](ym2149::ChannelStates) for convenience.
+//! [`ChannelStates`](ym2149_common::ChannelStates) for convenience.
 
 use bevy::prelude::Resource;
-use ym2149::ChannelStates;
+use ym2149_common::ChannelStates;
 
 /// Resource containing the latest YM2149 register dump and derived state.
 #[derive(Resource, Debug, Clone, Default)]

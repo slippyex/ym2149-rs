@@ -13,7 +13,7 @@ use std::io::{self, Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-use ym2149::util::{channel_period, period_to_frequency};
+use ym2149_common::{channel_period, period_to_frequency};
 use ym2149_ym_replayer::PlaybackState;
 
 use crate::streaming::StreamingContext;

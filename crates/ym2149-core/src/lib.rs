@@ -11,8 +11,8 @@
 //! - Audio sample generation
 //!
 //! # Backend Trait
-//! The `Ym2149Backend` trait allows alternative implementations (e.g., `ym2149-softsynth` crate)
-//! to be used interchangeably with the hardware-accurate backend.
+//! The `Ym2149Backend` trait (from `ym2149-common`) allows alternative implementations
+//! (e.g., `ym2149-softsynth` crate) to be used interchangeably with the hardware-accurate backend.
 //!
 //! # Quick start
 //! ```no_run
@@ -30,14 +30,14 @@
 
 #![warn(missing_docs)]
 
-// Domain modules
-pub mod backend; // Backend trait abstraction
-pub mod ym2149; // YM2149 PSG emulation
-
-// Re-export from ym2149-common for backwards compatibility
-// These modules have been moved to ym2149-common as they are shared utilities
-pub use ym2149_common::channel_state;
-pub use ym2149_common::util;
+// Core emulation modules
+mod chip;
+pub mod constants;
+mod dc_filter;
+mod generators;
+mod mixer;
+pub mod psg_bank;
+mod tables;
 
 /// Error types for YM2149 chip emulator operations
 ///
@@ -76,6 +76,7 @@ impl From<&str> for Ym2149Error {
 pub type Result<T> = std::result::Result<T, Ym2149Error>;
 
 // Public API exports
-pub use backend::Ym2149Backend;
-pub use channel_state::ChannelStates;
-pub use ym2149::Ym2149;
+pub use chip::Ym2149;
+pub use constants::get_volume;
+pub use psg_bank::PsgBank;
+pub use ym2149_common::Ym2149Backend;

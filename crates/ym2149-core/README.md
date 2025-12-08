@@ -27,7 +27,7 @@ This crate provides **pure chip emulation only** with cycle-accurate behavior. F
 | **Effects** | SID voice, Sync Buzzer, Mad Max digi-drums, DC filter |
 | **Control** | Per-channel mute, color filter, register dump/load |
 | **Backend Trait** | `Ym2149Backend` for interchangeable implementations |
-| **Utilities** | Register math helpers for frequency/period conversion |
+| **Utilities** | Register math helpers in `ym2149-common` crate |
 
 ## Install
 
@@ -101,8 +101,8 @@ fn play_note<B: Ym2149Backend>(chip: &mut B) {
 |--------|-------------|
 | `ym2149` | Core chip implementation |
 | `backend` | `Ym2149Backend` trait for alternative implementations |
-| `channel_state` | `ChannelStates` for extracting visualization data from registers |
-| `util` | Register math helpers (period/frequency conversion) |
+
+> **Note:** Utility types like `ChannelStates` and register math helpers (`channel_period`, `period_to_frequency`) are in the `ym2149-common` crate.
 
 ## Migration from < 0.7
 

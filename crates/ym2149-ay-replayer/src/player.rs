@@ -264,12 +264,12 @@ impl AyPlayer {
     }
 
     /// Access the underlying YM2149 chip.
-    pub fn chip(&self) -> &ym2149::ym2149::Ym2149 {
+    pub fn chip(&self) -> &ym2149::Ym2149 {
         self.machine.chip()
     }
 
     /// Mutable access to the underlying YM2149 chip.
-    pub fn chip_mut(&mut self) -> &mut ym2149::ym2149::Ym2149 {
+    pub fn chip_mut(&mut self) -> &mut ym2149::Ym2149 {
         self.machine.chip_mut()
     }
 

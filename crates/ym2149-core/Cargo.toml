@@ -15,8 +15,7 @@ categories = ["emulators", "multimedia::audio"]
 [dependencies]
 # Error handling
 thiserror.workspace = true
-
-# Re-export common types for backwards compatibility
+# Shared traits (Ym2149Backend)
 ym2149-common = { path = "../ym2149-common", version = "0.7" }
 
 [dev-dependencies]

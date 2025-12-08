@@ -47,9 +47,7 @@ use crate::channel_player::ChannelPlayer;
 use crate::effect_context::EffectContext;
 use crate::error::{ArkosError, Result};
 use crate::format::{AksSong, SongMetadata};
-use ym2149::Ym2149Backend;
-use ym2149::ym2149::PsgBank;
-use ym2149::ym2149::Ym2149;
+use ym2149::{PsgBank, Ym2149, Ym2149Backend};
 
 use sample_voice::{HardwareEnvelopeState, SampleVoiceMixer};
 use tick::{TickContext, determine_speed_for_location};

@@ -12,8 +12,8 @@
 ///
 /// # Example
 ///
-/// ```
-/// use ym2149::{Ym2149Backend, Ym2149};
+/// ```ignore
+/// use ym2149_common::Ym2149Backend;
 ///
 /// fn play_note<B: Ym2149Backend>(chip: &mut B) {
 ///     chip.write_register(0x00, 0xF0); // Channel A period low

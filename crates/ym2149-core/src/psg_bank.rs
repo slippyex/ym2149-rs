@@ -6,7 +6,7 @@
 //! # Examples
 //!
 //! ```
-//! use ym2149::ym2149::{PsgBank, Ym2149};
+//! use ym2149::{PsgBank, Ym2149};
 //!
 //! // Create a 2-PSG bank (6 channels total)
 //! let mut bank = PsgBank::new(2, 2_000_000);
@@ -24,8 +24,8 @@
 //! bank.generate_samples_interleaved(&mut buffer);
 //! ```
 
-use super::Ym2149;
-use crate::backend::Ym2149Backend;
+use crate::chip::Ym2149;
+use ym2149_common::Ym2149Backend;
 
 const DEFAULT_SAMPLE_RATE: u32 = 44_100;
 
@@ -67,7 +67,7 @@ impl PsgBank {
     /// # Examples
     ///
     /// ```
-    /// use ym2149::ym2149::PsgBank;
+    /// use ym2149::PsgBank;
     ///
     /// // PlayCity setup: 2 PSGs at 2MHz
     /// let bank = PsgBank::new(2, 2_000_000);
@@ -105,7 +105,7 @@ impl PsgBank {
     /// # Examples
     ///
     /// ```
-    /// use ym2149::ym2149::PsgBank;
+    /// use ym2149::PsgBank;
     ///
     /// // CPC with PlayCity: mixed frequencies
     /// let bank = PsgBank::new_with_frequencies(vec![
@@ -203,7 +203,7 @@ impl PsgBank {
     /// # Examples
     ///
     /// ```
-    /// use ym2149::ym2149::PsgBank;
+    /// use ym2149::PsgBank;
     ///
     /// let mut bank = PsgBank::new(2, 2_000_000);
     ///
@@ -244,7 +244,7 @@ impl PsgBank {
     /// # Examples
     ///
     /// ```
-    /// use ym2149::ym2149::PsgBank;
+    /// use ym2149::PsgBank;
     ///
     /// let mut bank = PsgBank::new(2, 2_000_000);
     /// let mut buffer = vec![0.0f32; 882]; // 50Hz frame at 44.1kHz
@@ -289,7 +289,7 @@ impl PsgBank {
     /// # Examples
     ///
     /// ```
-    /// use ym2149::ym2149::PsgBank;
+    /// use ym2149::PsgBank;
     ///
     /// let mut bank = PsgBank::new(2, 2_000_000);
     /// let mut buffer0 = vec![0.0f32; 882];

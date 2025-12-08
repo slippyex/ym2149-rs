@@ -5,7 +5,7 @@
 //! - Noise generator (shared LFSR)
 //! - Envelope generator
 
-use super::tables::{ENV_DATA, SHAPE_TO_ENV};
+use crate::tables::{ENV_DATA, SHAPE_TO_ENV};
 
 /// Number of tone channels
 pub const NUM_CHANNELS: usize = 3;

@@ -3,8 +3,8 @@
 //! The mixer combines tone and noise signals according to register R7,
 //! applies volume/envelope levels, and handles special effects like DigiDrum.
 
-use super::generators::NUM_CHANNELS;
-use super::tables::{MASKS, YM2149_LOG_LEVELS};
+use crate::generators::NUM_CHANNELS;
+use crate::tables::{MASKS, YM2149_LOG_LEVELS};
 
 /// Maximum output level for normalization
 pub const MAX_LEVEL: u32 = 10922;

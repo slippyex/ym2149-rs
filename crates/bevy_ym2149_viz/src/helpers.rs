@@ -1,5 +1,5 @@
-pub(crate) use ym2149::util::channel_period as get_channel_period;
-pub(crate) use ym2149::util::period_to_frequency;
+pub(crate) use ym2149_common::channel_period as get_channel_period;
+pub(crate) use ym2149_common::period_to_frequency;
 
 pub(crate) const NOTE_NAMES: [&str; 12] = [
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",

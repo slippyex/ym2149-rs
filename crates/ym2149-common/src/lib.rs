@@ -27,6 +27,7 @@
 
 #![warn(missing_docs)]
 
+mod backend;
 mod cached_player;
 pub mod channel_state;
 mod metadata;
@@ -34,6 +35,7 @@ mod player;
 pub mod util;
 pub mod visualization;
 
+pub use backend::Ym2149Backend;
 pub use cached_player::{CacheablePlayer, CachedPlayer, DEFAULT_CACHE_SIZE, SampleCache};
 pub use channel_state::{ChannelState, ChannelStates, EnvelopeState, NoiseState};
 pub use metadata::{BasicMetadata, MetadataFields, PlaybackMetadata};

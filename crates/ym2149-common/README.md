@@ -1,10 +1,16 @@
 # ym2149-common
 
-Shared traits and types for YM2149 chiptune replayers.
+Shared traits, types, and utilities for YM2149 chiptune replayers.
 
 ## Overview
 
-This crate provides the unified interface that all replayer crates (`ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`, `ym2149-sndh-replayer`) implement. It enables writing format-agnostic code that works with any chiptune player.
+This crate provides the unified interface that all replayer crates (`ym2149-ym-replayer`, `ym2149-arkos-replayer`, `ym2149-ay-replayer`, `ym2149-sndh-replayer`) implement. It also provides shared utilities for register parsing, frequency calculations, and visualization.
+
+**Key exports:**
+- Player traits: `ChiptunePlayer`, `ChiptunePlayerBase`
+- State types: `PlaybackState`, `ChannelStates`, `BasicMetadata`
+- Register utilities: `channel_period`, `period_to_frequency`, `channel_frequencies`
+- Constants: `PSG_MASTER_CLOCK_HZ`, `NOTE_NAMES`
 
 ## Key Types
 

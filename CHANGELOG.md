@@ -2,30 +2,7 @@
 
 All notable changes to the ym2149-rs project.
 
-## 2025/12/07 - v0.7.3
-
-### Changed
-- **Module restructuring** - Moved non-core utilities from `ym2149-core` to `ym2149-common`:
-  - `channel_state.rs` (ChannelStates, ChannelState, EnvelopeState, NoiseState) now lives in `ym2149-common`
-  - `util.rs` (PSG_MASTER_CLOCK_HZ, channel_period, period_to_frequency, channel_frequencies) now lives in `ym2149-common`
-  - `ym2149-core` re-exports these modules for backwards compatibility
-  - `ym2149-common` no longer depends on `ym2149-core` (removes circular dependency risk)
-  - This makes `ym2149-core` truly focused on chip emulation only
-
-### Migration Guide
-```rust
-// Both paths still work - no breaking changes:
-
-// Old path (still works via re-export)
-use ym2149::channel_state::ChannelStates;
-use ym2149::util::{channel_period, period_to_frequency};
-
-// New preferred path (direct import)
-use ym2149_common::ChannelStates;
-use ym2149_common::{channel_period, period_to_frequency, PSG_MASTER_CLOCK_HZ};
-```
-
-## 2025/12/10 - v0.7.2
+## 2025/12/08 - v0.7.2
 
 ### Added
 - **Directory playback with playlist selection** - Play all songs from a directory
@@ -79,6 +56,11 @@ use ym2149_common::{channel_period, period_to_frequency, PSG_MASTER_CLOCK_HZ};
   - Sync-buzzer (uses tone period even when tone disabled in mixer)
   - Noise (spread across high frequency bins based on noise period)
 - **Smooth spectrum decay** - Decay factor 0.85 for responsive yet smooth visualization
+- **`ym2149-core` restructured** - Now contains only pure chip emulation:
+  - `Ym2149Backend` trait moved to `ym2149-common`
+  - Directory structure flattened: `src/ym2149/*` → `src/*`
+  - Shared utilities (`ChannelStates`, `channel_period`, `period_to_frequency`) live in `ym2149-common`
+  - Import paths simplified: `ym2149::Ym2149`, `ym2149::PsgBank`, `ym2149::constants::*`
 
 ### Fixed
 - **Bevy spectrum bars** - Now show actually played notes instead of FFT analysis

@@ -5,7 +5,7 @@
 
 use super::sample_voice::HardwareEnvelopeState;
 use crate::channel_player::{ChannelFrame, ChannelOutput};
-use ym2149::ym2149::PsgBank;
+use ym2149::PsgBank;
 
 /// Writes channel frames to PSG registers.
 ///

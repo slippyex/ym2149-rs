@@ -243,7 +243,7 @@ impl Ym2149Player {
     /// ```
     #[wasm_bindgen(js_name = getChannelStates)]
     pub fn get_channel_states(&self) -> JsValue {
-        use ym2149::ChannelStates;
+        use ym2149_common::ChannelStates;
 
         let regs = self.player.dump_registers();
         let states = ChannelStates::from_registers(&regs);

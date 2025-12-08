@@ -13,7 +13,7 @@ use super::sample_voice::{HardwareEnvelopeState, SampleVoiceMixer, note_frequenc
 use crate::channel_player::{ChannelFrame, ChannelPlayer, SampleCommand, SamplePlaybackParams};
 use crate::effect_context::EffectContext;
 use crate::format::{AksSong, InstrumentType, Subsong};
-use ym2149::ym2149::PsgBank;
+use ym2149::PsgBank;
 
 /// Tick processing context containing all mutable state needed for a tick.
 pub(crate) struct TickContext<'a> {

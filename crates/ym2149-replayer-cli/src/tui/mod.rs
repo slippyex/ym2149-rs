@@ -192,7 +192,7 @@ impl App {
         // Update note history from register states
         for psg_idx in 0..self.psg_count {
             let channel_states =
-                ym2149::ChannelStates::from_registers(&self.snapshot.registers[psg_idx]);
+                ym2149_common::ChannelStates::from_registers(&self.snapshot.registers[psg_idx]);
             for (local_ch, ch_state) in channel_states.channels.iter().enumerate() {
                 let global_ch = psg_idx * 3 + local_ch;
 

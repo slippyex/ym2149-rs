@@ -7,8 +7,7 @@ use crate::audio_source::Ym2149Metadata;
 use crate::playback::{PlaybackMetrics, YM2149_SAMPLE_RATE};
 use parking_lot::RwLock;
 use std::sync::Arc;
-use ym2149::Ym2149Backend;
-use ym2149::ym2149::Ym2149;
+use ym2149::{Ym2149, Ym2149Backend};
 use ym2149_ym_replayer::PlaybackState as YmPlaybackState;
 
 const DEFAULT_SAMPLES_PER_FRAME: u32 = YM2149_SAMPLE_RATE / 50;

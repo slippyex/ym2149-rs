@@ -6360,6 +6360,7 @@ version = "0.7.1"
 dependencies = [
  "approx",
  "ym2149",
+ "ym2149-common",
 ]
 
 [[package]]

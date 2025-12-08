@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
-use ym2149::util::{channel_period, period_to_frequency};
-use ym2149::ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
+use ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
+use ym2149_common::{channel_period, period_to_frequency};
 
 const SAMPLE_RATE: f32 = 44_100.0;
 

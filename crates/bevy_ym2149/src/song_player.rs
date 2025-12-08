@@ -36,7 +36,7 @@ pub(crate) trait BevyPlayerTrait {
     fn generate_sample_with_channels(&mut self) -> (f32, [f32; 3]);
     fn metadata(&self) -> &Ym2149Metadata;
     fn metrics(&self) -> Option<PlaybackMetrics>;
-    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149>;
+    fn chip(&self) -> Option<&ym2149::Ym2149>;
     fn frame_count(&self) -> usize;
     fn subsong_count(&self) -> usize;
     fn current_subsong(&self) -> usize;
@@ -205,7 +205,7 @@ impl YmSongPlayer {
     }
 
     /// Returns a reference to the underlying YM2149 chip, if available.
-    pub fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+    pub fn chip(&self) -> Option<&ym2149::Ym2149> {
         delegate_to_inner!(self, chip)
     }
 
@@ -216,7 +216,7 @@ impl YmSongPlayer {
     /// Panics if the player doesn't have an associated chip (should not happen
     /// for normal playback).
     #[deprecated(since = "0.8.0", note = "Use chip() which returns Option instead")]
-    pub fn get_chip(&self) -> &ym2149::ym2149::Ym2149 {
+    pub fn get_chip(&self) -> &ym2149::Ym2149 {
         self.chip()
             .expect("Player should always expose at least one PSG")
     }
@@ -315,7 +315,7 @@ impl BevyPlayerTrait for YmBevyPlayer {
         Some(self.metrics)
     }
 
-    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+    fn chip(&self) -> Option<&ym2149::Ym2149> {
         Some(self.player.get_chip())
     }
 
@@ -538,7 +538,7 @@ impl BevyPlayerTrait for ArkosBevyPlayer {
         })
     }
 
-    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+    fn chip(&self) -> Option<&ym2149::Ym2149> {
         self.player.chip(0)
     }
 
@@ -686,7 +686,7 @@ impl BevyPlayerTrait for AyBevyPlayer {
         })
     }
 
-    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+    fn chip(&self) -> Option<&ym2149::Ym2149> {
         Some(self.player.chip())
     }
 
@@ -795,7 +795,7 @@ impl BevyPlayerTrait for SndhBevyPlayer {
         })
     }
 
-    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+    fn chip(&self) -> Option<&ym2149::Ym2149> {
         Some(self.player.ym2149())
     }
 
@@ -872,7 +872,7 @@ impl BevyPlayerTrait for YmSynthPlayer {
         Some(YmSynthPlayer::metrics(self))
     }
 
-    fn chip(&self) -> Option<&ym2149::ym2149::Ym2149> {
+    fn chip(&self) -> Option<&ym2149::Ym2149> {
         Some(YmSynthPlayer::chip(self))
     }
 

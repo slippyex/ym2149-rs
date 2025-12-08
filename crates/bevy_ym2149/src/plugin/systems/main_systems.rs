@@ -58,8 +58,7 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use ym2149::Ym2149Backend;
-use ym2149::util::PSG_MASTER_CLOCK_HZ;
-use ym2149::util::channel_frequencies;
+use ym2149_common::{PSG_MASTER_CLOCK_HZ, channel_frequencies};
 
 // Import from sibling modules
 use super::crossfade::{finalize_crossfade, process_pending_crossfade};

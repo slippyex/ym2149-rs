@@ -47,7 +47,7 @@ impl Default for RegisterWaveformState {
 
 impl RegisterWaveformState {
     /// Update waveforms and spectrum from YM2149 channel states.
-    pub fn update_from_channel_states(&mut self, channel_states: &ym2149::ChannelStates) {
+    pub fn update_from_channel_states(&mut self, channel_states: &ym2149_common::ChannelStates) {
         self.synthesizer.update(channel_states);
         self.spectrum.update(channel_states);
     }

@@ -30,25 +30,30 @@ graph TB
         SOFTSYNTH["ym2149-softsynth<br/>Alt Synth Backend"]
     end
 
-    subgraph "Layer 1: Backend Trait"
+    subgraph "Layer 1: Shared Types & Traits"
+        COMMON["ym2149-common<br/>Shared Utilities"]
         TRAIT["Ym2149Backend<br/>Common Interface"]
     end
 
     BEVY_EX --> BEVY_VIZ
     BEVY_EX --> BEVY
     BEVY_VIZ --> BEVY
+    BEVY_VIZ --> COMMON
     BEVY --> REPLAYER
     BEVY --> ARKOS
     BEVY --> AY
     BEVY --> SNDH
+    BEVY --> COMMON
     WASM --> REPLAYER
     WASM --> ARKOS
     WASM --> AY
     WASM --> SNDH
+    WASM --> COMMON
     CLI --> REPLAYER
     CLI --> ARKOS
     CLI --> AY
     CLI --> SNDH
+    CLI --> COMMON
     SNDH --> YM2149
     REPLAYER --> YM2149
     REPLAYER -.optional.-> SOFTSYNTH
@@ -56,13 +61,16 @@ graph TB
     ARKOS -.optional.-> SOFTSYNTH
     YM2149 --> TRAIT
     SOFTSYNTH --> TRAIT
+    SOFTSYNTH --> COMMON
+    COMMON --> TRAIT
 ```
 
 ## Crate Responsibilities
 
 | Crate | Layer | Purpose | Public API | Notes |
 |-------|-------|---------|------------|-------|
-| **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation (clk/8, 32-step vols/env) | `Ym2149`, `Ym2149Backend`, streaming helpers | Used by every higher layer |
+| **ym2149-common** | 1 | Shared types, traits, and utilities | `ChannelStates`, `PlaybackState`, `ChiptunePlayerBase`, `channel_period`, `period_to_frequency` | Foundation for all crates |
+| **ym2149-core** | 2 | Cycle-accurate YM2149 chip emulation (clk/8, 32-step vols/env) | `Ym2149`, `Ym2149Backend`, streaming helpers | Pure emulator, no shared types |
 | **ym2149-softsynth** | 2 | Experimental synthesizer backend | `SoftSynth` | Optional backend prototype |
 | **ym2149-ym-replayer** | 3 | YM file parsing and playback | `YmPlayer`, `load_song()` | Powers CLI/Bevy/WASM YM playback |
 | **ym2149-arkos-replayer** | 3 | Arkos Tracker `.aks` parsing and multi-PSG playback | `ArkosPlayer`, `load_aks()` | Supports multi-chip Arkos rips |
@@ -723,9 +731,9 @@ Match effect type:
 ```
 bevy_ym2149_examples
         │
-        ├──→ bevy_ym2149_viz
+        ├──→ bevy_ym2149_viz ──→ ym2149-common
         │           │
-        │           └──→ bevy_ym2149
+        │           └──→ bevy_ym2149 ──→ ym2149-common
         │                       ├──→ ym2149-ym-replayer
         │                       ├──→ ym2149-arkos-replayer
         │                       └──→ ym2149-ay-replayer
@@ -734,15 +742,17 @@ bevy_ym2149_examples
         │
         └──────────────────────────────────────────────┐
                                                        ↓
-ym2149-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer }
+ym2149-replayer-cli ──→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer, ym2149-common }
 
-ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer }
+ym2149-wasm ─────────────→ { ym2149-ym-replayer, ym2149-arkos-replayer, ym2149-ay-replayer, ym2149-sndh-replayer, ym2149-common }
 
 ym2149-arkos-replayer ──→ ym2149-core
 ym2149-ay-replayer ─────→ ym2149-core + iz80
 ym2149-sndh-replayer ───→ ym2149-core + m68000
 ym2149-ym-replayer ────→ ym2149-core
-ym2149-softsynth (opt) ─→ ym2149-core (implements Ym2149Backend)
+ym2149-softsynth (opt) ─→ ym2149-core + ym2149-common (implements Ym2149Backend)
+ym2149-core ────────────→ (standalone, no dependencies on other workspace crates)
+ym2149-common ──────────→ (foundation crate, no workspace dependencies)
 ```
 
 **Key Principles:**
