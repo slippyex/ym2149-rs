@@ -306,26 +306,6 @@ ym2149-rs/
 └── README.md                   # You are here
 ```
 
-### Deploying the Web Player
-
-The web player is automatically deployed to GitHub Pages via CI/CD:
-
-1. **Enable GitHub Pages** in your repository settings:
-   - Go to Settings → Pages
-   - Source: "GitHub Actions"
-
-2. **Push to main/master** - the workflow will:
-   - Build WASM with `wasm-pack`
-   - Copy files to `docs/`
-   - Deploy to GitHub Pages
-
-3. **Local testing**:
-   ```bash
-   cd crates/ym2149-wasm/examples
-   ./start-server.sh
-   # Open http://localhost:8000/
-   ```
-
 ## Contributing
 
 Contributions are welcome! Please ensure:
