@@ -343,12 +343,6 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "base64"
-version = "0.21.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
-
-[[package]]
-name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
@@ -408,7 +402,7 @@ dependencies = [
  "downcast-rs 2.0.2",
  "either",
  "petgraph",
- "ron 0.10.1",
+ "ron",
  "serde",
  "smallvec",
  "thiserror 2.0.17",
@@ -502,7 +496,7 @@ dependencies = [
  "futures-lite",
  "js-sys",
  "parking_lot",
- "ron 0.10.1",
+ "ron",
  "serde",
  "stackfuture",
  "thiserror 2.0.17",
@@ -771,7 +765,7 @@ version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13d67e954b20551818f7cdb33f169ab4db64506ada66eb4d60d3cb8861103411"
 dependencies = [
- "base64 0.22.1",
+ "base64",
  "bevy_animation",
  "bevy_app",
  "bevy_asset",
@@ -1567,13 +1561,13 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "bevy",
  "bevy_mesh",
  "parking_lot",
- "ron 0.8.1",
+ "ron",
  "serde",
  "thiserror 1.0.69",
  "ym2149",
@@ -1586,7 +1580,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_examples"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "bevy",
  "bevy_embedded_assets",
@@ -1600,7 +1594,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_viz"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "bevy",
  "bevy_ym2149",
@@ -4387,23 +4381,11 @@ dependencies = [
 
 [[package]]
 name = "ron"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91f7eff05f748767f183df4320a63d6936e9c6107d97c9e6bdd9784f4289c94"
-dependencies = [
- "base64 0.21.7",
- "bitflags 2.10.0",
- "serde",
- "serde_derive",
-]
-
-[[package]]
-name = "ron"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "beceb6f7bf81c73e73aeef6dd1356d9a1b2b4909e1f0fc3e59b034f9572d7b7f"
 dependencies = [
- "base64 0.22.1",
+ "base64",
  "bitflags 2.10.0",
  "serde",
  "serde_derive",
@@ -6280,7 +6262,7 @@ checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "ym2149"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "approx",
  "criterion",
@@ -6290,10 +6272,10 @@ dependencies = [
 
 [[package]]
 name = "ym2149-arkos-replayer"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64",
  "bitflags 2.10.0",
  "quick-xml 0.36.2",
  "serde",
@@ -6306,7 +6288,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-ay-replayer"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "iz80",
  "thiserror 1.0.69",
@@ -6316,20 +6298,21 @@ dependencies = [
 
 [[package]]
 name = "ym2149-common"
-version = "0.7.1"
+version = "0.8.0"
 
 [[package]]
 name = "ym2149-gist-replayer"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "cpal",
  "parking_lot",
  "ym2149",
+ "ym2149-common",
 ]
 
 [[package]]
 name = "ym2149-replayer-cli"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "crossterm",
  "parking_lot",
@@ -6345,7 +6328,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-sndh-replayer"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "m68000",
@@ -6356,7 +6339,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-softsynth"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "approx",
  "ym2149",
@@ -6365,7 +6348,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-wasm"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "bitflags 2.10.0",
  "console_error_panic_hook",
@@ -6386,7 +6369,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-ym-replayer"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "approx",
  "bitflags 2.10.0",

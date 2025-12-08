@@ -14,8 +14,8 @@ pub use audio_device::AudioDevice;
 pub use realtime::{PlaybackStats, RealtimePlayer};
 pub use ring_buffer::RingBuffer;
 
-/// Default sample rate (44.1 kHz)
-pub const DEFAULT_SAMPLE_RATE: u32 = 44100;
+// Re-export sample rate from common crate
+pub use ym2149_common::DEFAULT_SAMPLE_RATE;
 
 /// Visualization update interval in milliseconds
 pub const VISUALIZATION_UPDATE_MS: u64 = 50;

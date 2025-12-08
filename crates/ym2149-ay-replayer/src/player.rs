@@ -7,10 +7,13 @@ use crate::error::{AyError, Result};
 use crate::format::{AyFile, AyPoints, AySong};
 use crate::machine::AyMachine;
 use ym2149::Ym2149Backend;
-use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields, PlaybackState};
+use ym2149_common::{
+    ChiptunePlayer, ChiptunePlayerBase, DEFAULT_SAMPLE_RATE, FRAME_RATE_PAL, MetadataFields,
+    PlaybackState,
+};
 
-const SAMPLE_RATE: u32 = 44_100;
-const FRAME_RATE_HZ: f32 = 50.0;
+const SAMPLE_RATE: u32 = DEFAULT_SAMPLE_RATE;
+const FRAME_RATE_HZ: f32 = FRAME_RATE_PAL as f32;
 const RETURN_ADDRESS: u16 = 0x0000;
 const MAX_INSTRUCTIONS_PER_CALL: usize = 250_000;
 const ZX_CPU_CLOCK_HZ: f64 = 3_500_000.0;

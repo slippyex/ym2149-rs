@@ -327,7 +327,7 @@ fn tone_period_from_hz(freq_hz: f32) -> u16 {
     if freq_hz <= 0.0 {
         return 0;
     }
-    let period = (PSG_MASTER_CLOCK_HZ / (16.0 * freq_hz)).round();
+    let period = (PSG_MASTER_CLOCK_HZ as f32 / (16.0 * freq_hz)).round();
     period.clamp(1.0, 0x0FFF as f32).abs() as u16
 }
 

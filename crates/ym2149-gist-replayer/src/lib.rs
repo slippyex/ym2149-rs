@@ -73,4 +73,7 @@ pub use gist::driver::GistDriver;
 pub use gist::gist_sound::GistSound;
 
 // High-level player
-pub use player::{DEFAULT_SAMPLE_RATE, GistPlayer};
+pub use player::{DEFAULT_SAMPLE_RATE, GistMetadata, GistPlayer};
+
+// Re-export common traits for convenience
+pub use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, PlaybackState};

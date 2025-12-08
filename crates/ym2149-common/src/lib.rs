@@ -41,8 +41,8 @@ pub use channel_state::{ChannelState, ChannelStates, EnvelopeState, NoiseState};
 pub use metadata::{BasicMetadata, MetadataFields, PlaybackMetadata};
 pub use player::{ChiptunePlayer, ChiptunePlayerBase, PlaybackState};
 pub use util::{
-    PSG_MASTER_CLOCK_HZ, channel_frequencies, channel_frequencies_with_clock, channel_period,
-    period_to_frequency, period_to_frequency_with_clock,
+    channel_frequencies, channel_frequencies_with_clock, channel_period, period_to_frequency,
+    period_to_frequency_with_clock,
 };
 pub use visualization::{
     MAX_CHANNEL_COUNT, MAX_PSG_COUNT, SPECTRUM_BINS, SPECTRUM_DECAY, SpectrumAnalyzer,
@@ -62,8 +62,19 @@ pub const FRAME_RATE_PAL: u32 = 50;
 /// NTSC frame rate (60 Hz) - used by some American systems.
 pub const FRAME_RATE_NTSC: u32 = 60;
 
-/// Standard Atari ST master clock frequency (2 MHz).
-pub const ATARI_ST_CLOCK: u32 = 2_000_000;
+/// Standard YM2149 PSG master clock frequency (2 MHz).
+///
+/// This is the clock rate used on Atari ST, Amstrad CPC, ZX Spectrum 128, etc.
+pub const PSG_MASTER_CLOCK_HZ: u32 = 2_000_000;
+
+/// Alias for backwards compatibility.
+#[deprecated(since = "0.8.0", note = "Use PSG_MASTER_CLOCK_HZ instead")]
+pub const ATARI_ST_CLOCK: u32 = PSG_MASTER_CLOCK_HZ;
+
+/// Atari ST MFP (MC68901) clock frequency (2.4576 MHz).
+///
+/// Used for timer-based effects like SID voice emulation and sample playback.
+pub const ATARI_MFP_CLOCK_HZ: u32 = 2_457_600;
 
 /// Number of audio channels per YM2149 PSG chip.
 pub const CHANNELS_PER_PSG: usize = 3;

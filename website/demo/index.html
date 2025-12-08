@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YM2149 Web Player - Live Demo</title>
     <meta name="description" content="Play YM2149 chiptunes directly in your browser with real-time visualization">
+    <!-- OpenGraph Meta Tags -->
+    <meta property="og:title" content="YM2149 Web Player - Live Demo" />
+    <meta property="og:description" content="Play YM2149 chiptunes directly in your browser with real-time visualization" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ym2149-rs.org/demo/" />
+    <meta property="og:image" content="https://ym2149-rs.org/screenshots/demoscene.jpg" />
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="YM2149 Web Player - Live Demo" />
+    <meta name="twitter:description" content="Play YM2149 chiptunes directly in your browser with real-time visualization" />
+    <meta name="twitter:image" content="https://ym2149-rs.org/screenshots/demoscene.jpg" />
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://ym2149-rs.org/demo/" />
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -233,23 +248,23 @@
                             <div class="relative">
                                 <div class="absolute top-2 left-2 text-xs font-mono text-chip-purple/70 z-10">CH A</div>
                                 <div class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10" id="noteA">---</div>
-                                <canvas id="oscA" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"></canvas>
+                                <canvas id="oscA" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel A oscilloscope waveform"></canvas>
                             </div>
                             <div class="relative">
                                 <div class="absolute top-2 left-2 text-xs font-mono text-chip-cyan/70 z-10">CH B</div>
                                 <div class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10" id="noteB">---</div>
-                                <canvas id="oscB" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"></canvas>
+                                <canvas id="oscB" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel B oscilloscope waveform"></canvas>
                             </div>
                             <div class="relative">
                                 <div class="absolute top-2 left-2 text-xs font-mono text-chip-pink/70 z-10">CH C</div>
                                 <div class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10" id="noteC">---</div>
-                                <canvas id="oscC" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"></canvas>
+                                <canvas id="oscC" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel C oscilloscope waveform"></canvas>
                             </div>
                         </div>
                         <!-- Mono Output -->
                         <div class="relative">
                             <div class="absolute top-2 left-2 text-xs font-mono text-gray-400 z-10">MONO OUTPUT</div>
-                            <canvas id="oscMono" class="viz-canvas w-full h-32 bg-chip-darker rounded-lg"></canvas>
+                            <canvas id="oscMono" class="viz-canvas w-full h-32 bg-chip-darker rounded-lg" aria-label="Combined mono oscilloscope waveform"></canvas>
                         </div>
                     </div>
 
@@ -258,21 +273,21 @@
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                             <div class="relative">
                                 <div class="absolute top-2 left-2 text-xs font-mono text-chip-purple/70 z-10">CH A</div>
-                                <canvas id="specA" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"></canvas>
+                                <canvas id="specA" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel A spectrum analyzer"></canvas>
                             </div>
                             <div class="relative">
                                 <div class="absolute top-2 left-2 text-xs font-mono text-chip-cyan/70 z-10">CH B</div>
-                                <canvas id="specB" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"></canvas>
+                                <canvas id="specB" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel B spectrum analyzer"></canvas>
                             </div>
                             <div class="relative">
                                 <div class="absolute top-2 left-2 text-xs font-mono text-chip-pink/70 z-10">CH C</div>
-                                <canvas id="specC" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"></canvas>
+                                <canvas id="specC" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel C spectrum analyzer"></canvas>
                             </div>
                         </div>
                         <!-- Combined Spectrum -->
                         <div class="relative">
                             <div class="absolute top-2 left-2 text-xs font-mono text-gray-400 z-10">COMBINED SPECTRUM</div>
-                            <canvas id="specCombined" class="viz-canvas w-full h-32 bg-chip-darker rounded-lg"></canvas>
+                            <canvas id="specCombined" class="viz-canvas w-full h-32 bg-chip-darker rounded-lg" aria-label="Combined spectrum analyzer"></canvas>
                         </div>
                     </div>
                 </div>

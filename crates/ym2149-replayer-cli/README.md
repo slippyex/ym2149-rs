@@ -37,7 +37,7 @@ A feature-rich command-line player for YM2149/AY-3-8910 chiptune files with a mo
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/ym2149-rs.git
+git clone https://github.com/slippyex/ym2149-rs.git
 cd ym2149-rs
 
 # Build and install

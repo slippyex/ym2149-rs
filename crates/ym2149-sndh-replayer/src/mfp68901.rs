@@ -20,19 +20,18 @@
 //!
 //! The MFP is mapped at 0xFFFA00-0xFFFA25 on the Atari ST.
 
-/// MFP clock frequency (2.4576 MHz).
-const ATARI_MFP_CLOCK: u32 = 2457600;
+use ym2149_common::ATARI_MFP_CLOCK_HZ;
 
 /// Timer prescaler values (MFP clock divided by prescaler)
 const PRESCALE: [u32; 8] = [
     0,
-    ATARI_MFP_CLOCK / 4,
-    ATARI_MFP_CLOCK / 10,
-    ATARI_MFP_CLOCK / 16,
-    ATARI_MFP_CLOCK / 50,
-    ATARI_MFP_CLOCK / 64,
-    ATARI_MFP_CLOCK / 100,
-    ATARI_MFP_CLOCK / 200,
+    ATARI_MFP_CLOCK_HZ / 4,
+    ATARI_MFP_CLOCK_HZ / 10,
+    ATARI_MFP_CLOCK_HZ / 16,
+    ATARI_MFP_CLOCK_HZ / 50,
+    ATARI_MFP_CLOCK_HZ / 64,
+    ATARI_MFP_CLOCK_HZ / 100,
+    ATARI_MFP_CLOCK_HZ / 200,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

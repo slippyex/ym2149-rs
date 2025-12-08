@@ -11,7 +11,10 @@ pub mod raw;
 pub mod ym;
 pub mod ym6;
 
-pub use effects::{EffectCommand, MFP_CLOCK, Ym6EffectDecoder, decode_effects_ym5};
+pub use effects::{EffectCommand, Ym6EffectDecoder, decode_effects_ym5};
+// Re-export deprecated constant for backwards compatibility
+#[allow(deprecated)]
+pub use effects::MFP_CLOCK;
 pub use raw::RawParser;
 pub use ym::{YmMetadata, YmParser};
 pub use ym6::Ym6Parser;

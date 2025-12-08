@@ -8,6 +8,43 @@
             name="description"
             content="A comprehensive Rust ecosystem for YM2149/AY-3-8910 sound chip emulation, chiptune playback, and retro audio visualization."
         />
+        <!-- OpenGraph Meta Tags -->
+        <meta
+            property="og:title"
+            content="YM2149-rs | Chiptune Sound Synthesis in Rust"
+        />
+        <meta
+            property="og:description"
+            content="A comprehensive Rust ecosystem for YM2149/AY-3-8910 sound chip emulation, chiptune playback, and retro audio visualization."
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://ym2149-rs.org/" />
+        <meta
+            property="og:image"
+            content="https://ym2149-rs.org/screenshots/demoscene.jpg"
+        />
+        <!-- Twitter Card Meta Tags -->
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta
+            name="twitter:title"
+            content="YM2149-rs | Chiptune Sound Synthesis in Rust"
+        />
+        <meta
+            name="twitter:description"
+            content="A comprehensive Rust ecosystem for YM2149/AY-3-8910 sound chip emulation, chiptune playback, and retro audio visualization."
+        />
+        <meta
+            name="twitter:image"
+            content="https://ym2149-rs.org/screenshots/demoscene.jpg"
+        />
+        <!-- Canonical URL -->
+        <link rel="canonical" href="https://ym2149-rs.org/" />
+        <!-- Favicon -->
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>"
+        />
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
             tailwind.config = {
@@ -135,6 +172,45 @@
             .chip-pattern {
                 background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%238b5cf6' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
             }
+            /* Subtle noise texture overlay for retro tech feel */
+            .noise-overlay::before {
+                content: "";
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                opacity: 0.015;
+                pointer-events: none;
+                z-index: 9999;
+                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            }
+            /* Chip LED glow animation */
+            @keyframes led-pulse {
+                0%,
+                100% {
+                    opacity: 0.6;
+                    filter: drop-shadow(0 0 2px currentColor);
+                }
+                50% {
+                    opacity: 1;
+                    filter: drop-shadow(0 0 6px currentColor);
+                }
+            }
+            .chip-led {
+                animation: led-pulse 2s ease-in-out infinite;
+            }
+            /* Section divider gradient line */
+            .section-divider {
+                height: 1px;
+                background: linear-gradient(
+                    90deg,
+                    transparent,
+                    rgba(139, 92, 246, 0.3),
+                    rgba(6, 182, 212, 0.3),
+                    transparent
+                );
+            }
             /* Player styles */
             .viz-canvas {
                 image-rendering: pixelated;
@@ -185,7 +261,7 @@
             }
         </style>
     </head>
-    <body class="font-display text-gray-100 overflow-x-hidden">
+    <body class="font-display text-gray-100 overflow-x-hidden noise-overlay">
         <!-- Scanline overlay -->
         <div
             class="fixed inset-0 pointer-events-none z-50 opacity-30 scanline"
@@ -197,7 +273,7 @@
         >
             <div class="max-w-7xl mx-auto px-6 py-4">
                 <div class="flex items-center justify-between">
-                    <a href="#" class="flex items-center space-x-3">
+                    <a href="/" class="flex items-center space-x-3">
                         <div
                             class="w-10 h-10 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center"
                         >
@@ -540,6 +616,15 @@
                         >
                             YAMAHA
                         </text>
+                        <!-- Power LED -->
+                        <circle
+                            cx="72"
+                            cy="28"
+                            r="2"
+                            fill="#10b981"
+                            class="chip-led"
+                            style="color: #10b981"
+                        />
                         <defs>
                             <linearGradient
                                 id="chipGradient"
@@ -4697,6 +4782,11 @@
                             rel="noopener"
                             class="hover:text-white transition-colors"
                             >docs.rs</a
+                        >
+                        <a
+                            href="mailto:info@ym2149-rs.org"
+                            class="hover:text-white transition-colors"
+                            >Contact</a
                         >
                     </div>
                     <p class="text-gray-500 text-sm">

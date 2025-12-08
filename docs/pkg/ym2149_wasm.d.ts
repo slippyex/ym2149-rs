@@ -26,6 +26,10 @@ export class Ym2149Player {
    */
   frame_count(): number;
   /**
+   * Set the current subsong (1-based index). Returns true on success.
+   */
+  setSubsong(index: number): boolean;
+  /**
    * Get the current register values (for visualization).
    */
   get_registers(): Uint8Array;
@@ -34,9 +38,17 @@ export class Ym2149Player {
    */
   seek_to_frame(frame: number): void;
   /**
+   * Get the number of subsongs (1 for most formats, >1 for multi-song SNDH files).
+   */
+  subsongCount(): number;
+  /**
    * Get current frame position.
    */
   frame_position(): number;
+  /**
+   * Get the current subsong index (1-based).
+   */
+  currentSubsong(): number;
   /**
    * Generate audio samples.
    *
@@ -172,6 +184,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_ym2149player_free: (a: number, b: number) => void;
+  readonly ym2149player_currentSubsong: (a: number) => number;
   readonly ym2149player_frame_count: (a: number) => number;
   readonly ym2149player_frame_position: (a: number) => number;
   readonly ym2149player_generateSamples: (a: number, b: number) => [number, number];
@@ -188,11 +201,13 @@ export interface InitOutput {
   readonly ym2149player_restart: (a: number) => void;
   readonly ym2149player_seek_to_frame: (a: number, b: number) => void;
   readonly ym2149player_seek_to_percentage: (a: number, b: number) => void;
+  readonly ym2149player_setSubsong: (a: number, b: number) => number;
   readonly ym2149player_set_channel_mute: (a: number, b: number, c: number) => void;
   readonly ym2149player_set_color_filter: (a: number, b: number) => void;
   readonly ym2149player_set_volume: (a: number, b: number) => void;
   readonly ym2149player_state: (a: number) => [number, number];
   readonly ym2149player_stop: (a: number) => void;
+  readonly ym2149player_subsongCount: (a: number) => number;
   readonly ym2149player_volume: (a: number) => number;
   readonly init_panic_hook: () => void;
   readonly __wbg_ymmetadata_free: (a: number, b: number) => void;

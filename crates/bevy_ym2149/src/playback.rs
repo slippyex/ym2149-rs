@@ -37,9 +37,10 @@ use crate::synth::YmSynthController;
 use bevy::prelude::*;
 use parking_lot::RwLock;
 use std::sync::Arc;
+use ym2149_common::DEFAULT_SAMPLE_RATE;
 
 /// Fixed output sample rate used by the YM2149 mixer.
-pub const YM2149_SAMPLE_RATE: u32 = 44_100;
+pub const YM2149_SAMPLE_RATE: u32 = DEFAULT_SAMPLE_RATE;
 /// Convenience f32 representation of [`YM2149_SAMPLE_RATE`].
 pub const YM2149_SAMPLE_RATE_F32: f32 = YM2149_SAMPLE_RATE as f32;
 

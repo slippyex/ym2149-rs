@@ -186,8 +186,8 @@ cargo run -p ym2149-replayer-cli -- examples/sndh/Mad_Max/Buzzer.sndh
 # Play GIST sound effects (.snd)
 cargo run -p ym2149-gist-replayer --example player -- examples/gist/alien.snd
 
-# Interactive chip demo with audio output
-cargo run --example chip_demo -p ym2149 --features streaming
+# Interactive demo with Bevy visualization
+cargo run -p bevy_ym2149_examples --example basic_example
 ```
 
 <img src="docs/screenshots/cli.png" alt="CLI player" width="700">

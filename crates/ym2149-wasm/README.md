@@ -14,12 +14,6 @@
 
 ## Installation
 
-### NPM Package (Coming Soon)
-
-```bash
-npm install ym2149-wasm
-```
-
 ### Build from Source
 
 ```bash

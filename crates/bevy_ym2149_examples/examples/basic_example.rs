@@ -4,6 +4,10 @@
 //! - Create a Bevy app with the YM2149 plugin
 //! - Load and play a YM file
 //! - Control playback with basic keyboard input
+//!
+//! **Note:** This example uses helper functions from `bevy_ym2149_examples`
+//! (`embedded_asset_plugin()` and `example_plugins()`) to configure asset loading.
+//! In your own project, use standard Bevy `DefaultPlugins` with your asset path.
 
 use bevy::log::info;
 use bevy::prelude::*;

@@ -199,6 +199,15 @@ export class Ym2149Player {
         return ret >>> 0;
     }
     /**
+     * Set the current subsong (1-based index). Returns true on success.
+     * @param {number} index
+     * @returns {boolean}
+     */
+    setSubsong(index) {
+        const ret = wasm.ym2149player_setSubsong(this.__wbg_ptr, index);
+        return ret !== 0;
+    }
+    /**
      * Get the current register values (for visualization).
      * @returns {Uint8Array}
      */
@@ -216,11 +225,27 @@ export class Ym2149Player {
         wasm.ym2149player_seek_to_frame(this.__wbg_ptr, frame);
     }
     /**
+     * Get the number of subsongs (1 for most formats, >1 for multi-song SNDH files).
+     * @returns {number}
+     */
+    subsongCount() {
+        const ret = wasm.ym2149player_subsongCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Get current frame position.
      * @returns {number}
      */
     frame_position() {
         const ret = wasm.ym2149player_frame_position(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get the current subsong index (1-based).
+     * @returns {number}
+     */
+    currentSubsong() {
+        const ret = wasm.ym2149player_currentSubsong(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**

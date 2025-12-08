@@ -9,14 +9,14 @@ homepage.workspace = true
 description = "Cycle-accurate YM2149 PSG emulator"
 documentation = "https://docs.rs/ym2149"
 readme = "README.md"
-keywords = ["emulator", "ym2149", "psg", "atari", "sound"]
+keywords = ["emulator", "ym2149", "psg", "chiptune", "atari"]
 categories = ["emulators", "multimedia::audio"]
 
 [dependencies]
 # Error handling
 thiserror.workspace = true
 # Shared traits (Ym2149Backend)
-ym2149-common = { path = "../ym2149-common", version = "0.7" }
+ym2149-common = { path = "../ym2149-common", version = "0.8" }
 
 [dev-dependencies]
 # Testing utilities

@@ -6,11 +6,19 @@
 //! - Effect Slot 1: code in r1[7-4], prescaler in r6[7-5], counter in r14[7-0]
 //! - Effect Slot 2: code in r3[7-4], prescaler in r8[7-5], counter in r15[7-0]
 
+use ym2149_common::ATARI_MFP_CLOCK_HZ;
+
 /// MFP timer prescaler values
 const MFP_PREDIV: [u32; 8] = [0, 4, 10, 16, 50, 64, 100, 200];
 
-/// MFP clock frequency in Hz
-pub const MFP_CLOCK: u32 = 2_457_600;
+/// MFP clock frequency in Hz.
+///
+/// **Deprecated**: Use `ym2149_common::ATARI_MFP_CLOCK_HZ` instead.
+#[deprecated(
+    since = "0.7.2",
+    note = "Use ym2149_common::ATARI_MFP_CLOCK_HZ instead"
+)]
+pub const MFP_CLOCK: u32 = ATARI_MFP_CLOCK_HZ;
 
 /// Effect command decoded from YM6 frame registers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,8 +137,8 @@ impl Ym6EffectDecoder {
         }
 
         // Calculate timer frequency
-        // Safety: MFP_CLOCK / (prediv * counter) where both > 0
-        let timer_freq = MFP_CLOCK / (prediv * counter as u32);
+        // Safety: ATARI_MFP_CLOCK_HZ / (prediv * counter) where both > 0
+        let timer_freq = ATARI_MFP_CLOCK_HZ / (prediv * counter as u32);
 
         // Decode effect type from code bits 3-2 and voice from bits 1-0
         match effect_code {
@@ -207,7 +215,7 @@ pub fn decode_effects_ym5(registers: &[u8; 16]) -> Vec<EffectCommand> {
         let count = registers[14] as u32;
         let prediv = MFP_PREDIV[prediv_idx];
         if prediv != 0 && count != 0 {
-            let freq = MFP_CLOCK / (prediv * count);
+            let freq = ATARI_MFP_CLOCK_HZ / (prediv * count);
             let volume = registers[8 + voice as usize] & 0x0F;
             out.push(EffectCommand::SidStart {
                 voice,
@@ -226,7 +234,7 @@ pub fn decode_effects_ym5(registers: &[u8; 16]) -> Vec<EffectCommand> {
         let count = registers[15] as u32;
         let prediv = MFP_PREDIV[prediv_idx];
         if prediv != 0 && count != 0 {
-            let freq = MFP_CLOCK / (prediv * count);
+            let freq = ATARI_MFP_CLOCK_HZ / (prediv * count);
             out.push(EffectCommand::DigiDrumStart {
                 voice,
                 drum_num,
@@ -348,7 +356,7 @@ mod tests {
             assert_eq!(env_shape, 5);
             // Frequency: 2457600 / (200 * 64) = 191.69 Hz (truncated to 191)
             // prescaler idx 7 = 200
-            assert_eq!(freq, MFP_CLOCK / (200 * 64));
+            assert_eq!(freq, ATARI_MFP_CLOCK_HZ / (200 * 64));
         } else {
             panic!("Slot 2: Expected SyncBuzzerStart, got {:?}", effects[1]);
         }

@@ -83,6 +83,22 @@ Configure the plugin at runtime via `Ym2149PluginConfig`:
 
 Disable what you don’t need to keep your app lean.
 
+## Asset Paths
+
+Asset paths in `Ym2149Playback::new()` are resolved by Bevy's asset server relative to your project's `assets/` folder:
+
+```rust
+// Loads from: your_project/assets/music/song.ym
+commands.spawn(Ym2149Playback::new("music/song.ym"));
+
+// Also works with subdirectories
+commands.spawn(Ym2149Playback::new("sfx/explosion.ym"));
+```
+
+Supported file extensions: `.ym`, `.aks`, `.ay`, `.sndh`
+
+For the example commands (e.g., `cargo run -p bevy_ym2149_examples --example basic_example`), assets are located in the workspace's `examples/` folder. The examples use paths like `"examples/ym/ND-Toxygene.ym"`.
+
 ## Runtime Flow / Systems
 
 1. **Asset Loading** – `.ym`/`.aks`/`.ay`/`.sndh` files load via Bevy's asset system as `Ym2149AudioSource` (implements `Decodable`)

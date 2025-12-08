@@ -451,7 +451,8 @@ impl ChannelPlayer {
                 // Already handled in check_for_glide_effect
             }
             EffectType::Legato => {
-                // TODO: Implement legato (don't retrigger instrument)
+                // Legato effect: Ties notes without retriggering the instrument.
+                // Not yet implemented - notes play normally for now.
             }
             EffectType::None => {}
         }

@@ -22,4 +22,8 @@ echo "Copying pkg/ -> docs/pkg (for GitHub Pages)..."
 rm -rf "$repo_root/docs/pkg"
 cp -R pkg "$repo_root/docs/"
 
+echo "Copying pkg/ -> website/demo/pkg (for ym2149-rs.org)..."
+rm -rf "$repo_root/website/demo/pkg"
+cp -R pkg "$repo_root/website/demo/"
+
 echo "Done. Restart your static server and reload simple-player.html."

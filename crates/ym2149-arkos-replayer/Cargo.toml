@@ -14,10 +14,10 @@ categories = ["multimedia::audio", "parsing"]
 
 [dependencies]
 # Core YM2149 emulation
-ym2149 = { path = "../ym2149-core", version = "0.7", default-features = false }
+ym2149 = { path = "../ym2149-core", version = "0.8", default-features = false }
 
 # Common traits (PlaybackMetadata, ChiptunePlayer)
-ym2149-common = { path = "../ym2149-common", version = "0.7" }
+ym2149-common = { path = "../ym2149-common", version = "0.8" }
 
 # XML parsing for AKS format
 quick-xml = "0.36"
@@ -37,7 +37,7 @@ base64.workspace = true
 [dev-dependencies]
 # For tests
 anyhow.workspace = true
-ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.7" }
+ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.8" }
 
 [features]
 default = []

@@ -16,12 +16,12 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Core YM2149 emulation and playback
-ym2149 = { path = "../ym2149-core", version = "0.7", default-features = false }
-ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.7", default-features = false }
-ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-arkos-replayer", version = "0.7", default-features = false }
-ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.7", default-features = false }
-ym2149_sndh_replayer = { package = "ym2149-sndh-replayer", path = "../ym2149-sndh-replayer", version = "0.7", default-features = false }
-ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.7", default-features = false }
+ym2149 = { path = "../ym2149-core", version = "0.8", default-features = false }
+ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.8", default-features = false }
+ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-arkos-replayer", version = "0.8", default-features = false }
+ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.8", default-features = false }
+ym2149_sndh_replayer = { package = "ym2149-sndh-replayer", path = "../ym2149-sndh-replayer", version = "0.8", default-features = false }
+ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.8", default-features = false }
 
 # WASM bindings
 wasm-bindgen = "0.2"
@@ -56,7 +56,7 @@ wasm-bindgen-test = "0.3"
 wasm-opt = ["-O4", "--enable-bulk-memory"]
 
 [features]
-default = ["console_error_panic_hook"]
+default = ["console_error_panic_hook", "effects", "tracker", "digidrums"]
 # Enable YM6 effects (SID, Sync Buzzer)
 effects = ["ym2149_ym_replayer/effects"]
 # Enable tracker support

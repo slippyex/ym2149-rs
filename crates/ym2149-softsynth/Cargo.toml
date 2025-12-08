@@ -9,14 +9,14 @@ homepage.workspace = true
 description = "Experimental software synthesizer backend for YM2149 (proof-of-concept, workspace-only)"
 publish = false  # Not published to crates.io - workspace-only proof-of-concept
 readme = "README.md"
-keywords = ["synthesizer", "ym2149", "psg", "experimental", "audio"]
+keywords = ["synthesizer", "ym2149", "psg", "chiptune", "audio"]
 categories = ["multimedia::audio"]
 
 [dependencies]
 # Core YM2149 backend trait
-ym2149 = { path = "../ym2149-core", version = "0.7" }
+ym2149 = { path = "../ym2149-core", version = "0.8" }
 # Shared utilities
-ym2149-common = { path = "../ym2149-common", version = "0.7" }
+ym2149-common = { path = "../ym2149-common", version = "0.8" }
 
 [dev-dependencies]
 approx.workspace = true

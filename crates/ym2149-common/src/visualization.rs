@@ -92,6 +92,7 @@ impl Default for WaveformSynthesizer {
 
 impl WaveformSynthesizer {
     /// Create a new waveform synthesizer.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             waveform: std::array::from_fn(|_| VecDeque::with_capacity(WAVEFORM_SIZE)),
@@ -106,11 +107,13 @@ impl WaveformSynthesizer {
     }
 
     /// Get the number of active PSGs.
+    #[must_use]
     pub fn psg_count(&self) -> usize {
         self.psg_count
     }
 
     /// Get the number of active channels.
+    #[must_use]
     pub fn channel_count(&self) -> usize {
         self.psg_count * 3
     }
@@ -305,6 +308,7 @@ impl WaveformSynthesizer {
     /// Get waveform samples as a Vec for display (first 3 channels only for backward compat).
     ///
     /// Returns samples in the format `[amplitude_a, amplitude_b, amplitude_c]` per sample.
+    #[must_use]
     pub fn get_samples(&self) -> Vec<[f32; 3]> {
         let len = self.waveform[0]
             .len()
@@ -323,6 +327,7 @@ impl WaveformSynthesizer {
     }
 
     /// Get waveform for a specific channel (0-11 for multi-PSG).
+    #[must_use]
     pub fn channel_waveform(&self, channel: usize) -> &VecDeque<f32> {
         &self.waveform[channel.min(MAX_CHANNEL_COUNT - 1)]
     }
@@ -342,6 +347,7 @@ impl WaveformSynthesizer {
 /// - Bin 28: C8 (4186 Hz)
 /// - Bin 31: A#8 (~7458 Hz)
 #[inline]
+#[must_use]
 pub fn freq_to_bin(freq: f32) -> usize {
     if freq <= 0.0 {
         return 0;
@@ -377,6 +383,7 @@ impl Default for SpectrumAnalyzer {
 
 impl SpectrumAnalyzer {
     /// Create a new spectrum analyzer.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             spectrum: [[0.0; SPECTRUM_BINS]; MAX_CHANNEL_COUNT],
@@ -391,11 +398,13 @@ impl SpectrumAnalyzer {
     }
 
     /// Get the number of active PSGs.
+    #[must_use]
     pub fn psg_count(&self) -> usize {
         self.psg_count
     }
 
     /// Get the number of active channels.
+    #[must_use]
     pub fn channel_count(&self) -> usize {
         self.psg_count * 3
     }
@@ -543,16 +552,19 @@ impl SpectrumAnalyzer {
     }
 
     /// Get combined spectrum bins (max across all channels).
+    #[must_use]
     pub fn get_bins(&self) -> &[f32; SPECTRUM_BINS] {
         &self.combined
     }
 
     /// Get spectrum for a specific channel (0-11 for multi-PSG).
+    #[must_use]
     pub fn channel_spectrum(&self, channel: usize) -> &[f32; SPECTRUM_BINS] {
         &self.spectrum[channel.min(MAX_CHANNEL_COUNT - 1)]
     }
 
     /// Get all per-channel spectrums (all 12 channels).
+    #[must_use]
     pub fn all_channel_spectrums(&self) -> &[[f32; SPECTRUM_BINS]; MAX_CHANNEL_COUNT] {
         &self.spectrum
     }
@@ -560,6 +572,7 @@ impl SpectrumAnalyzer {
     /// Compute high frequency ratio (bins 8-15 vs total).
     ///
     /// Useful for badges indicating "bright" or "treble" content.
+    #[must_use]
     pub fn high_freq_ratio(&self, channel: usize) -> f32 {
         let ch = channel.min(2);
         let total_energy: f32 = self.spectrum[ch].iter().sum();

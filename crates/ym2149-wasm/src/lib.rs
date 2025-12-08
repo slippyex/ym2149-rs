@@ -50,9 +50,10 @@ use ym2149_ym_replayer::{PlaybackState, load_song};
 
 use metadata::{YmMetadata, metadata_from_summary};
 use players::{BrowserSongPlayer, arkos::ArkosWasmPlayer, ay::AyWasmPlayer, sndh::SndhWasmPlayer};
+use ym2149_common::DEFAULT_SAMPLE_RATE;
 
 /// Sample rate used for audio generation.
-pub const YM_SAMPLE_RATE_F32: f32 = 44_100.0;
+pub const YM_SAMPLE_RATE_F32: f32 = DEFAULT_SAMPLE_RATE as f32;
 
 /// Set panic hook for better error messages in the browser console.
 #[wasm_bindgen(start)]
@@ -95,8 +96,13 @@ impl Ym2149Player {
     pub fn new(data: &[u8]) -> Result<Ym2149Player, JsValue> {
         console_log!("Loading file ({} bytes)...", data.len());
 
-        let (player, metadata) = load_browser_player(data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to load YM/AKS/AY file: {}", e)))?;
+        let (player, metadata) = load_browser_player(data).map_err(|e| {
+            JsValue::from_str(&format!(
+                "Failed to load chiptune file ({} bytes): {}",
+                data.len(),
+                e
+            ))
+        })?;
 
         console_log!("Song loaded successfully");
         console_log!("  Title: {}", metadata.title);
@@ -326,6 +332,10 @@ impl Ym2149Player {
 
 /// Load a file and create the appropriate player.
 fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), String> {
+    if data.is_empty() {
+        return Err("empty file data".to_string());
+    }
+
     // SNDH needs to be detected first to avoid falling back to AY/other formats
     // when the header already looks like a packed SNDH.
     if is_sndh_data(data) {
@@ -342,7 +352,7 @@ fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), S
     // Try Arkos format
     if let Ok(song) = load_aks(data) {
         let arkos_player =
-            ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to init Arkos player: {e}"))?;
+            ArkosPlayer::new(song, 0).map_err(|e| format!("Arkos player init failed: {e}"))?;
         let (wrapper, metadata) = ArkosWasmPlayer::new(arkos_player);
         return Ok((BrowserSongPlayer::Arkos(Box::new(wrapper)), metadata));
     }
@@ -352,9 +362,9 @@ fn load_browser_player(data: &[u8]) -> Result<(BrowserSongPlayer, YmMetadata), S
         return Ok((BrowserSongPlayer::Sndh(Box::new(wrapper)), metadata));
     }
 
-    // Try AY format
-    let (player, meta) =
-        AyPlayer::load_from_bytes(data, 0).map_err(|e| format!("Failed to load AY file: {e}"))?;
+    // Try AY format as last resort
+    let (player, meta) = AyPlayer::load_from_bytes(data, 0)
+        .map_err(|e| format!("unrecognized format (AY parse error: {e})"))?;
     if player.requires_cpc_firmware() {
         return Err(CPC_UNSUPPORTED_MSG.to_string());
     }

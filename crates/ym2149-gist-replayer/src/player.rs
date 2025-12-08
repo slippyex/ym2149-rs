@@ -41,15 +41,10 @@ use crate::gist::TICK_RATE;
 use crate::gist::driver::GistDriver;
 use crate::gist::gist_sound::GistSound;
 use ym2149::{Ym2149, Ym2149Backend};
+use ym2149_common::{ChiptunePlayer, ChiptunePlayerBase, MetadataFields, PlaybackState};
 
-/// Default output sample rate in Hz.
-/// 44100 Hz is the standard CD-quality sample rate.
-///
-/// Design rationale:
-/// - Industry standard for audio playback
-/// - Compatible with most audio hardware and software
-/// - Provides good balance between quality and CPU usage
-pub const DEFAULT_SAMPLE_RATE: u32 = 44100;
+// Re-export the standard sample rate from ym2149-common
+pub use ym2149_common::DEFAULT_SAMPLE_RATE;
 
 /// High-level GIST sound effect player.
 ///
@@ -426,6 +421,116 @@ impl GistPlayer {
     pub fn sound_duration_samples(&self, sound: &GistSound) -> usize {
         let seconds = Self::sound_duration_seconds(sound);
         (seconds * self.sample_rate as f32) as usize
+    }
+}
+
+// ============================================================================
+// Metadata for ChiptunePlayer trait
+// ============================================================================
+
+/// Metadata for GIST sound effects.
+///
+/// GIST is primarily a sound effect system rather than a music player,
+/// so metadata is minimal. This struct provides compatibility with the
+/// unified `ChiptunePlayer` interface.
+#[derive(Debug, Clone, Default)]
+pub struct GistMetadata {
+    /// Sound effect name (if loaded from file)
+    pub name: String,
+}
+
+impl MetadataFields for GistMetadata {
+    fn title(&self) -> &str {
+        if self.name.is_empty() {
+            "GIST Sound Effect"
+        } else {
+            &self.name
+        }
+    }
+
+    fn author(&self) -> &str {
+        ""
+    }
+
+    fn comments(&self) -> &str {
+        ""
+    }
+
+    fn format(&self) -> &str {
+        "GIST"
+    }
+
+    fn frame_count(&self) -> Option<usize> {
+        None // Sound effects have variable duration
+    }
+
+    fn frame_rate(&self) -> u32 {
+        TICK_RATE // 200 Hz
+    }
+
+    fn duration_seconds(&self) -> Option<f32> {
+        None // Depends on which sound is playing
+    }
+}
+
+// ============================================================================
+// ChiptunePlayerBase implementation
+// ============================================================================
+
+impl ChiptunePlayerBase for GistPlayer {
+    fn play(&mut self) {
+        // GIST doesn't have a global play/pause - sounds play when triggered
+        // This is a no-op for API compatibility
+    }
+
+    fn pause(&mut self) {
+        // GIST doesn't support pause - sounds continue until complete
+        // This is a no-op for API compatibility
+    }
+
+    fn stop(&mut self) {
+        self.stop_all();
+    }
+
+    fn state(&self) -> PlaybackState {
+        if self.is_playing() {
+            PlaybackState::Playing
+        } else {
+            PlaybackState::Stopped
+        }
+    }
+
+    fn generate_samples_into(&mut self, buffer: &mut [f32]) {
+        GistPlayer::generate_samples_into(self, buffer);
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn set_channel_mute(&mut self, channel: usize, mute: bool) {
+        self.chip.set_channel_mute(channel, mute);
+    }
+
+    fn is_channel_muted(&self, channel: usize) -> bool {
+        self.chip.is_channel_muted(channel)
+    }
+
+    fn playback_position(&self) -> f32 {
+        // GIST sounds don't have a fixed duration/position
+        0.0
+    }
+}
+
+impl ChiptunePlayer for GistPlayer {
+    type Metadata = GistMetadata;
+
+    fn metadata(&self) -> &Self::Metadata {
+        // Return a static empty metadata since GIST doesn't track loaded sounds
+        static EMPTY_METADATA: GistMetadata = GistMetadata {
+            name: String::new(),
+        };
+        &EMPTY_METADATA
     }
 }
 

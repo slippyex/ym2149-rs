@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_ym2149player_free: (a: number, b: number) => void;
+export const ym2149player_currentSubsong: (a: number) => number;
 export const ym2149player_frame_count: (a: number) => number;
 export const ym2149player_frame_position: (a: number) => number;
 export const ym2149player_generateSamples: (a: number, b: number) => [number, number];
@@ -18,11 +19,13 @@ export const ym2149player_position_percentage: (a: number) => number;
 export const ym2149player_restart: (a: number) => void;
 export const ym2149player_seek_to_frame: (a: number, b: number) => void;
 export const ym2149player_seek_to_percentage: (a: number, b: number) => void;
+export const ym2149player_setSubsong: (a: number, b: number) => number;
 export const ym2149player_set_channel_mute: (a: number, b: number, c: number) => void;
 export const ym2149player_set_color_filter: (a: number, b: number) => void;
 export const ym2149player_set_volume: (a: number, b: number) => void;
 export const ym2149player_state: (a: number) => [number, number];
 export const ym2149player_stop: (a: number) => void;
+export const ym2149player_subsongCount: (a: number) => number;
 export const ym2149player_volume: (a: number) => number;
 export const init_panic_hook: () => void;
 export const __wbg_ymmetadata_free: (a: number, b: number) => void;

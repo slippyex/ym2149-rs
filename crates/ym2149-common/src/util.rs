@@ -3,13 +3,16 @@
 //! These functions are used by downstream crates (CLI, Bevy plugin, visualization)
 //! to derive channel periods and frequencies in a consistent way.
 
-/// Default YM2149 master clock frequency used on the Atari ST (in Hz).
-pub const PSG_MASTER_CLOCK_HZ: f32 = 2_000_000.0;
+use crate::PSG_MASTER_CLOCK_HZ as PSG_CLOCK_U32;
+
+/// Default YM2149 master clock frequency (as f32 for calculations).
+const PSG_MASTER_CLOCK_F32: f32 = PSG_CLOCK_U32 as f32;
 
 const PERIOD_DENOMINATOR: f32 = 16.0;
 
 /// Compute the 12-bit tone period from register low/high bytes.
 #[inline]
+#[must_use]
 pub fn channel_period(lo: u8, hi: u8) -> Option<u16> {
     let period = (((hi as u16) & 0x0F) << 8) | (lo as u16);
     if period == 0 { None } else { Some(period) }
@@ -17,12 +20,14 @@ pub fn channel_period(lo: u8, hi: u8) -> Option<u16> {
 
 /// Convert a tone period into a frequency using the default 2MHz master clock.
 #[inline]
+#[must_use]
 pub fn period_to_frequency(period: u16) -> f32 {
-    period_to_frequency_with_clock(PSG_MASTER_CLOCK_HZ, period)
+    period_to_frequency_with_clock(PSG_MASTER_CLOCK_F32, period)
 }
 
 /// Convert a tone period into a frequency for a specific master clock.
 #[inline]
+#[must_use]
 pub fn period_to_frequency_with_clock(master_clock_hz: f32, period: u16) -> f32 {
     if period == 0 {
         0.0
@@ -33,12 +38,14 @@ pub fn period_to_frequency_with_clock(master_clock_hz: f32, period: u16) -> f32 
 
 /// Convenience helper returning the three channel frequencies for the default clock.
 #[inline]
+#[must_use]
 pub fn channel_frequencies(registers: &[u8; 16]) -> [Option<f32>; 3] {
-    channel_frequencies_with_clock(registers, PSG_MASTER_CLOCK_HZ)
+    channel_frequencies_with_clock(registers, PSG_MASTER_CLOCK_F32)
 }
 
 /// Compute the frequency of each channel for a given master clock.
 #[inline]
+#[must_use]
 pub fn channel_frequencies_with_clock(
     registers: &[u8; 16],
     master_clock_hz: f32,

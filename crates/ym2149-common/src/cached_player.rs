@@ -62,6 +62,7 @@ pub struct SampleCache {
 
 impl SampleCache {
     /// Create a new sample cache with the specified size.
+    #[must_use]
     pub fn new(size: usize) -> Self {
         Self {
             samples: vec![0.0; size],
@@ -74,6 +75,7 @@ impl SampleCache {
 
     /// Check if the cache needs to be refilled.
     #[inline]
+    #[must_use]
     pub fn needs_refill(&self) -> bool {
         self.pos >= self.len
     }
@@ -110,6 +112,7 @@ impl SampleCache {
     }
 
     /// Get the channel outputs for the current/last sample.
+    #[must_use]
     pub fn channel_outputs(&self) -> [f32; 3] {
         if self.pos > 0 && self.pos <= self.len {
             self.channel_outputs[self.pos - 1]
@@ -127,6 +130,7 @@ impl SampleCache {
     }
 
     /// Get the cache size.
+    #[must_use]
     pub fn size(&self) -> usize {
         self.size
     }
