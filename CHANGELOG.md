@@ -2,7 +2,7 @@
 
 All notable changes to the ym2149-rs project.
 
-## 2025/12/08 - v0.7.2
+## 2025/12/08 - v0.8.0
 
 ### Added
 - **Directory playback with playlist selection** - Play all songs from a directory
