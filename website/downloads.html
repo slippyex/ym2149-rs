@@ -175,6 +175,21 @@
             .os-badge:hover {
                 transform: scale(1.05);
             }
+            /* Code overflow handling for mobile */
+            pre, code {
+                overflow-x: auto;
+                white-space: pre;
+                word-break: normal;
+                max-width: 100%;
+            }
+            .font-mono pre {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .bg-chip-darker\/50 {
+                overflow-x: auto;
+                max-width: 100%;
+            }
         </style>
     </head>
     <body class="font-display text-gray-100 overflow-x-hidden noise-overlay">
