@@ -681,6 +681,7 @@
                 const data = new Uint8Array(await response.arrayBuffer());
 
                 wasmPlayer = new wasmModule.Ym2149Player(data);
+                wasmPlayer.set_volume(elements.volumeSlider.value / 100);
                 updateMetadataUI();
                 enableControls();
                 resetVisualization();
@@ -708,6 +709,7 @@
 
                 const data = new Uint8Array(await file.arrayBuffer());
                 wasmPlayer = new wasmModule.Ym2149Player(data);
+                wasmPlayer.set_volume(elements.volumeSlider.value / 100);
                 updateMetadataUI();
                 enableControls();
                 resetVisualization();
