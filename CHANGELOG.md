@@ -142,7 +142,7 @@ All notable changes to the ym2149-rs project.
   - Visibility change handler for background/foreground transitions
 
 ### Changed
-- **YM2149 Core Emulation Rewrite** - Ported Leonard/Oxygene's cycle-accurate AtariAudio implementation:
+- **YM2149 Core Emulation Rewrite** - Ported Leonard/Oxygene's cycle-accurate [AtariAudio](https://github.com/arnaud-carre/sndh-player/tree/main/AtariAudio) implementation:
   - New `ym2149/chip.rs` with hardware-accurate 250kHz (2MHz/8) emulation
   - New `ym2149/tables.rs` with accurate envelope shapes and logarithmic DAC levels
   - DC-adjust sliding window for clean audio output

@@ -220,4 +220,4 @@ The following modules were deprecated and have been removed. Use the dedicated c
 
 ## Credits
 
-The YM2149 emulation is based on [AtariAudio](https://github.com/arnaud-carre/sndh-player) by Arnaud Carré (Leonard/Oxygene), the reference implementation used by psgplay and other accurate Atari ST emulators.
+The YM2149 emulation is based on [AtariAudio](https://github.com/arnaud-carre/sndh-player/tree/main/AtariAudio) by Arnaud Carré (Leonard/Oxygene), the reference implementation used by psgplay and other accurate Atari ST emulators.

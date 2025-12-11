@@ -84,7 +84,7 @@ Experience authentic Atari ST chiptune music directly in your browser! The WebAs
 - 🔊 Volume control and channel muting (A/B/C)
 - 📊 Real-time metadata display
 - 📦 Compact WASM module
-- 🎯 Cycle-accurate YM2149 emulation (ported from Leonard/Oxygene's AtariAudio)
+- 🎯 Cycle-accurate YM2149 emulation (ported from Leonard/Oxygene's [AtariAudio](https://github.com/arnaud-carre/sndh-player/tree/main/AtariAudio))
 
 <details>
 <summary>📸 Web Player Preview</summary>
@@ -119,7 +119,7 @@ Naming: Bevy-focused crates follow `bevy_ym2149_*`, while core/backends/replayer
 
 ## Highlights
 
-- ✅ **Hardware-faithful**: cycle-accurate YM2149 emulation (ported from Leonard/Oxygene's AtariAudio), precise envelope, noise, mixer, SID, Sync Buzzer, digi-drum behaviours
+- ✅ **Hardware-faithful**: cycle-accurate YM2149 emulation (ported from Leonard/Oxygene's [AtariAudio](https://github.com/arnaud-carre/sndh-player/tree/main/AtariAudio)), precise envelope, noise, mixer, SID, Sync Buzzer, digi-drum behaviours
 - 📁 **ZXAY/EMUL AY**: bundled replayer with Z80 CPU emulation for the Project AY catalogue
 - 🎹 **SNDH support**: native Atari ST music via 68000 CPU + MFP 68901 timer + STE DAC emulation
 - 🧰 **CLI ready**: stream YM/AKS/AY/SNDH files in the terminal with real-time visualization
@@ -319,6 +319,6 @@ MIT License – see [LICENSE](LICENSE).
 
 ## Credits
 
-- **Leonard/Oxygene (Arnaud Carré)** – YM format specification, ST-Sound reference material, and the AtariAudio C++ implementation that forms the basis of our YM2149 core emulation
+- **Leonard/Oxygene (Arnaud Carré)** – YM format specification, ST-Sound reference material, and the [AtariAudio](https://github.com/arnaud-carre/sndh-player/tree/main/AtariAudio) C++ implementation that forms the basis of our YM2149 core emulation
 - **Atari ST + demoscene community** – for the original tunes, SNDH archive, and documentation
 - **Rust audio and Bevy ecosystems** – rodio/cpal, Bevy ECS, and community inspiration
