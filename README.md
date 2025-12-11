@@ -43,24 +43,26 @@ Explore how classic sound chips work. The codebase is documented, tested, and de
 
 ---
 
-| Crate | crates.io | docs.rs |
-|-------|-----------|---------|
-| `ym2149` | [![ym2149](https://img.shields.io/crates/v/ym2149.svg?label=ym2149)](https://crates.io/crates/ym2149) | [![ym2149 docs](https://docs.rs/ym2149/badge.svg)](https://docs.rs/ym2149) |
-| `ym2149-common` | [![ym2149-common](https://img.shields.io/crates/v/ym2149-common.svg?label=ym2149-common)](https://crates.io/crates/ym2149-common) | [![ym2149-common docs](https://docs.rs/ym2149-common/badge.svg)](https://docs.rs/ym2149-common) |
-| `ym2149-ym-replayer` | [![ym2149-ym-replayer](https://img.shields.io/crates/v/ym2149-ym-replayer.svg?label=ym2149-ym-replayer)](https://crates.io/crates/ym2149-ym-replayer) | [![ym2149-ym-replayer docs](https://docs.rs/ym2149-ym-replayer/badge.svg)](https://docs.rs/ym2149-ym-replayer) |
-| `ym2149-arkos-replayer` | [![ym2149-arkos-replayer](https://img.shields.io/crates/v/ym2149-arkos-replayer.svg?label=ym2149-arkos-replayer)](https://crates.io/crates/ym2149-arkos-replayer) | [![ym2149-arkos-replayer docs](https://docs.rs/ym2149-arkos-replayer/badge.svg)](https://docs.rs/ym2149-arkos-replayer) |
-| `ym2149-ay-replayer` | [![ym2149-ay-replayer](https://img.shields.io/crates/v/ym2149-ay-replayer.svg?label=ym2149-ay-replayer)](https://crates.io/crates/ym2149-ay-replayer) | [![ym2149-ay-replayer docs](https://docs.rs/ym2149-ay-replayer/badge.svg)](https://docs.rs/ym2149-ay-replayer) |
-| `ym2149-sndh-replayer` | [![ym2149-sndh-replayer](https://img.shields.io/crates/v/ym2149-sndh-replayer.svg?label=ym2149-sndh-replayer)](https://crates.io/crates/ym2149-sndh-replayer) | [![ym2149-sndh-replayer docs](https://docs.rs/ym2149-sndh-replayer/badge.svg)](https://docs.rs/ym2149-sndh-replayer) |
-| `ym2149-gist-replayer` | [![ym2149-gist-replayer](https://img.shields.io/crates/v/ym2149-gist-replayer.svg?label=ym2149-gist-replayer)](https://crates.io/crates/ym2149-gist-replayer) | [![ym2149-gist-replayer docs](https://docs.rs/ym2149-gist-replayer/badge.svg)](https://docs.rs/ym2149-gist-replayer) |
-| `bevy_ym2149` | [![bevy_ym2149](https://img.shields.io/crates/v/bevy_ym2149.svg?label=bevy_ym2149)](https://crates.io/crates/bevy_ym2149) | [![bevy_ym2149 docs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149) |
-| `bevy_ym2149_viz` | [![bevy_ym2149_viz](https://img.shields.io/crates/v/bevy_ym2149_viz.svg?label=bevy_ym2149_viz)](https://crates.io/crates/bevy_ym2149_viz) | [![bevy_ym2149_viz docs](https://docs.rs/bevy_ym2149_viz/badge.svg)](https://docs.rs/bevy_ym2149_viz) |
-| `ym2149-bevy` | [![ym2149-bevy](https://img.shields.io/crates/v/ym2149-bevy.svg?label=ym2149-bevy)](https://crates.io/crates/ym2149-bevy) | – |
+| Crate | crates.io | docs.rs | npm |
+|-------|-----------|---------|-----|
+| `ym2149` | [![ym2149](https://img.shields.io/crates/v/ym2149.svg?label=ym2149)](https://crates.io/crates/ym2149) | [![ym2149 docs](https://docs.rs/ym2149/badge.svg)](https://docs.rs/ym2149) | – |
+| `ym2149-common` | [![ym2149-common](https://img.shields.io/crates/v/ym2149-common.svg?label=ym2149-common)](https://crates.io/crates/ym2149-common) | [![ym2149-common docs](https://docs.rs/ym2149-common/badge.svg)](https://docs.rs/ym2149-common) | – |
+| `ym2149-ym-replayer` | [![ym2149-ym-replayer](https://img.shields.io/crates/v/ym2149-ym-replayer.svg?label=ym2149-ym-replayer)](https://crates.io/crates/ym2149-ym-replayer) | [![ym2149-ym-replayer docs](https://docs.rs/ym2149-ym-replayer/badge.svg)](https://docs.rs/ym2149-ym-replayer) | – |
+| `ym2149-arkos-replayer` | [![ym2149-arkos-replayer](https://img.shields.io/crates/v/ym2149-arkos-replayer.svg?label=ym2149-arkos-replayer)](https://crates.io/crates/ym2149-arkos-replayer) | [![ym2149-arkos-replayer docs](https://docs.rs/ym2149-arkos-replayer/badge.svg)](https://docs.rs/ym2149-arkos-replayer) | – |
+| `ym2149-ay-replayer` | [![ym2149-ay-replayer](https://img.shields.io/crates/v/ym2149-ay-replayer.svg?label=ym2149-ay-replayer)](https://crates.io/crates/ym2149-ay-replayer) | [![ym2149-ay-replayer docs](https://docs.rs/ym2149-ay-replayer/badge.svg)](https://docs.rs/ym2149-ay-replayer) | – |
+| `ym2149-sndh-replayer` | [![ym2149-sndh-replayer](https://img.shields.io/crates/v/ym2149-sndh-replayer.svg?label=ym2149-sndh-replayer)](https://crates.io/crates/ym2149-sndh-replayer) | [![ym2149-sndh-replayer docs](https://docs.rs/ym2149-sndh-replayer/badge.svg)](https://docs.rs/ym2149-sndh-replayer) | – |
+| `ym2149-gist-replayer` | [![ym2149-gist-replayer](https://img.shields.io/crates/v/ym2149-gist-replayer.svg?label=ym2149-gist-replayer)](https://crates.io/crates/ym2149-gist-replayer) | [![ym2149-gist-replayer docs](https://docs.rs/ym2149-gist-replayer/badge.svg)](https://docs.rs/ym2149-gist-replayer) | – |
+| `ym2149-wasm` | – | – | [![npm](https://img.shields.io/npm/v/ym2149-wasm.svg?label=ym2149-wasm)](https://www.npmjs.com/package/ym2149-wasm) |
+| `bevy_ym2149` | [![bevy_ym2149](https://img.shields.io/crates/v/bevy_ym2149.svg?label=bevy_ym2149)](https://crates.io/crates/bevy_ym2149) | [![bevy_ym2149 docs](https://docs.rs/bevy_ym2149/badge.svg)](https://docs.rs/bevy_ym2149) | – |
+| `bevy_ym2149_viz` | [![bevy_ym2149_viz](https://img.shields.io/crates/v/bevy_ym2149_viz.svg?label=bevy_ym2149_viz)](https://crates.io/crates/bevy_ym2149_viz) | [![bevy_ym2149_viz docs](https://docs.rs/bevy_ym2149_viz/badge.svg)](https://docs.rs/bevy_ym2149_viz) | – |
+| `ym2149-bevy` | [![ym2149-bevy](https://img.shields.io/crates/v/ym2149-bevy.svg?label=ym2149-bevy)](https://crates.io/crates/ym2149-bevy) | – | – |
 
 > Cycle-accurate Yamaha YM2149 tooling for Rust — from raw PSG emulation and YM/YMT/SNDH importers to Arkos Tracker playback, CLI/export pipelines, Bevy integrations, visualization stacks, and a one-click WASM demo.
 
 | Quick Links | |
 |-------------|---|
 | ▶️ [Web Player](https://slippyex.github.io/ym2149-rs/) | Cycle-accurate YM/AKS demo in the browser |
+| 📦 [npm Package](https://www.npmjs.com/package/ym2149-wasm) | WebAssembly module for browser integration |
 | 🧱 [Architecture](ARCHITECTURE.md) | Layered breakdown of emulator, replayers, and integrations |
 | 🧭 [Quick Start](#quick-start) | Code snippets for core, CLI, Bevy, and exports |
 | 🆕 [Changelog](CHANGELOG.md) | Recent features and compatibility notes |
@@ -110,7 +112,7 @@ Try it live: **[slippyex.github.io/ym2149-rs](https://slippyex.github.io/ym2149-
 | [`bevy_ym2149`](crates/bevy_ym2149) | Bevy audio plugin (playback, playlists, diagnostics, audio bridge) | [crates.io/crates/bevy_ym2149](https://crates.io/crates/bevy_ym2149) | [docs.rs/bevy_ym2149](https://docs.rs/bevy_ym2149) |
 | [`bevy_ym2149_viz`](crates/bevy_ym2149_viz) | Optional visualization systems & UI builders | [crates.io/crates/bevy_ym2149_viz](https://crates.io/crates/bevy_ym2149_viz) | [docs.rs/bevy_ym2149_viz](https://docs.rs/bevy_ym2149_viz) |
 | [`bevy_ym2149_examples`](crates/bevy_ym2149_examples) | Runnable Bevy demos (basic, advanced, crossfade, feature showcase, demoscene, playlist UI) | Workspace-only | [crates/bevy_ym2149_examples/README.md](crates/bevy_ym2149_examples/README.md) |
-| [`ym2149-wasm`](crates/ym2149-wasm) | WebAssembly bindings for browser playback ([web demo](https://slippyex.github.io/ym2149-rs/)) | Workspace-only | [crates/ym2149-wasm/README.md](crates/ym2149-wasm/README.md) |
+| [`ym2149-wasm`](crates/ym2149-wasm) | WebAssembly bindings for browser playback ([web demo](https://slippyex.github.io/ym2149-rs/)) | [npmjs.com/package/ym2149-wasm](https://www.npmjs.com/package/ym2149-wasm) | [crates/ym2149-wasm/README.md](crates/ym2149-wasm/README.md) |
 | [`ym2149-bevy`](crates/ym2149-bevy) | Legacy re-export (shim to `bevy_ym2149`) | [crates.io/crates/ym2149-bevy](https://crates.io/crates/ym2149-bevy) | – |
 
 Naming: Bevy-focused crates follow `bevy_ym2149_*`, while core/backends/replayers use the `ym2149-*` prefix.
