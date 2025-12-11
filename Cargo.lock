@@ -1589,6 +1589,7 @@ dependencies = [
  "bevy_ym2149",
  "bevy_ym2149_viz",
  "ym2149",
+ "ym2149-gist-replayer",
  "ym2149-ym-replayer",
 ]
 

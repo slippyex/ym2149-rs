@@ -323,6 +323,7 @@ The `bevy_ym2149_examples` crate contains:
 | `advanced_example` | Full tracker-style UI + drag-and-drop + audio bridge knobs |
 | `feature_showcase` | Multiple playbacks, music state graph, diagnostics |
 | `demoscene` | Shader-heavy scene synchronized to YM playback |
+| `sndh_with_gist_sfx` | Dual YM2149 emulators: SNDH music + GIST sound effects |
 
 Run e.g. `cargo run --example advanced_example -p bevy_ym2149_examples`.
 

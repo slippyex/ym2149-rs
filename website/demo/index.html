@@ -130,28 +130,57 @@
     </style>
 </head>
 <body class="font-display text-gray-100 min-h-screen">
-    <!-- Header -->
-    <header class="border-b border-gray-800 bg-chip-darker/80 backdrop-blur-lg sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <a href="../" class="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center">
-                    <span class="font-mono font-bold text-xs">YM</span>
-                </div>
-                <span class="font-mono font-semibold hidden sm:inline">YM2149-rs</span>
-            </a>
-            <div class="flex items-center space-x-4">
-                <span class="text-sm text-gray-400 hidden sm:inline">WebAssembly Player</span>
-                <a href="https://github.com/slippyex/ym2149-rs" target="_blank" rel="noopener"
-                   class="text-gray-400 hover:text-white transition-colors">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>
-                    </svg>
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-40 bg-chip-darker/80 backdrop-blur-lg border-b border-purple-900/20">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <a href="../" class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center">
+                        <span class="font-mono font-bold text-sm">YM</span>
+                    </div>
+                    <span class="font-mono font-semibold text-lg">YM2149-rs</span>
                 </a>
+
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-6">
+                    <a href="../" class="text-gray-400 hover:text-white transition-colors">Home</a>
+                    <a href="../tutorials.html" class="text-gray-400 hover:text-white transition-colors">Tutorials</a>
+                    <a href="../downloads.html" class="text-gray-400 hover:text-white transition-colors">Downloads</a>
+                    <a href="./" class="text-white font-medium">Demo</a>
+                    <div class="flex items-center space-x-3">
+                        <a href="https://github.com/slippyex/ym2149-rs" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all" title="GitHub">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                        </a>
+                        <a href="https://docs.rs/ym2149" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all" title="docs.rs">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Mobile Menu Button -->
+                <button id="mobileMenuBtn" class="md:hidden p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all">
+                    <svg id="menuIconOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <svg id="menuIconClose" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Mobile Menu -->
+            <div id="mobileMenu" class="hidden md:hidden mt-4 pb-4 border-t border-gray-800 pt-4">
+                <div class="flex flex-col space-y-3">
+                    <a href="../" class="text-gray-400 hover:text-white transition-colors py-2">Home</a>
+                    <a href="../tutorials.html" class="text-gray-400 hover:text-white transition-colors py-2">Tutorials</a>
+                    <a href="../downloads.html" class="text-gray-400 hover:text-white transition-colors py-2">Downloads</a>
+                    <a href="./" class="text-white font-medium py-2">Demo</a>
+                </div>
             </div>
         </div>
-    </header>
+    </nav>
 
-    <main class="max-w-7xl mx-auto px-4 py-6">
+    <main class="max-w-7xl mx-auto px-4 py-6 pt-24">
         <!-- Loading overlay -->
         <div id="loadingOverlay" class="fixed inset-0 bg-chip-darker/90 flex items-center justify-center z-50">
             <div class="text-center">
@@ -350,6 +379,8 @@
         let wasmPlayer = null;
         let audioContext = null;
         let scriptProcessor = null;
+        let audioElement = null;
+        let mediaStreamDest = null;
         let isPlaying = false;
         let animationId = null;
         let currentSongIndex = -1;
@@ -427,11 +458,12 @@
 
                 elements.loadingText.textContent = 'Initializing...';
 
-                // Setup canvas contexts
-                for (const [key, canvas] of Object.entries(canvases)) {
-                    setupCanvas(canvas);
-                    contexts[key] = canvas.getContext('2d');
-                }
+                // Setup canvas contexts (only visible canvases initially - oscilloscope view is default)
+                // Spectrum canvases are hidden initially, so we setup them when switching to spectrum view
+                ['oscA', 'oscB', 'oscC', 'oscMono'].forEach(key => {
+                    setupCanvas(canvases[key]);
+                    contexts[key] = canvases[key].getContext('2d');
+                });
 
                 // Build song list
                 buildSongList();
@@ -475,9 +507,10 @@
 
         function setupEventListeners() {
             // Song list
-            elements.songList.addEventListener('click', (e) => {
+            elements.songList.addEventListener('click', async (e) => {
                 const btn = e.target.closest('.song-item');
                 if (btn) {
+                    await ensureAudioContext(); // Important for mobile: create AudioContext on user gesture
                     const index = parseInt(btn.dataset.index);
                     loadSong(index);
                 }
@@ -485,6 +518,7 @@
 
             // File input
             elements.fileInput.addEventListener('change', async (e) => {
+                await ensureAudioContext(); // Important for mobile
                 const file = e.target.files[0];
                 if (file) {
                     await loadFromFile(file);
@@ -529,6 +563,14 @@
                 elements.vizModeOsc.classList.add('bg-chip-purple/20', 'text-chip-purple');
                 elements.vizModeSpec.classList.remove('bg-chip-purple/20', 'text-chip-purple');
                 elements.vizModeSpec.classList.add('bg-gray-800', 'text-gray-400');
+                // Re-setup oscilloscope canvases after they become visible
+                requestAnimationFrame(() => {
+                    ['oscA', 'oscB', 'oscC', 'oscMono'].forEach(key => {
+                        setupCanvas(canvases[key]);
+                        contexts[key] = canvases[key].getContext('2d');
+                    });
+                    drawAllVisualization();
+                });
             });
 
             elements.vizModeSpec.addEventListener('click', () => {
@@ -538,13 +580,23 @@
                 elements.vizModeSpec.classList.add('bg-chip-purple/20', 'text-chip-purple');
                 elements.vizModeOsc.classList.remove('bg-chip-purple/20', 'text-chip-purple');
                 elements.vizModeOsc.classList.add('bg-gray-800', 'text-gray-400');
+                // Re-setup spectrum canvases after they become visible
+                requestAnimationFrame(() => {
+                    ['specA', 'specB', 'specC', 'specCombined'].forEach(key => {
+                        setupCanvas(canvases[key]);
+                        contexts[key] = canvases[key].getContext('2d');
+                    });
+                    drawAllVisualization();
+                });
             });
 
             // Resize handler
             window.addEventListener('resize', () => {
-                for (const canvas of Object.values(canvases)) {
+                for (const [key, canvas] of Object.entries(canvases)) {
                     setupCanvas(canvas);
+                    contexts[key] = canvas.getContext('2d');
                 }
+                drawAllVisualization();
             });
         }
 
@@ -576,7 +628,22 @@
                     output[i] = samples[i];
                 }
             };
-            scriptProcessor.connect(audioContext.destination);
+
+            // MediaStream approach for iOS/mobile
+            try {
+                mediaStreamDest = audioContext.createMediaStreamDestination();
+                scriptProcessor.connect(mediaStreamDest);
+                audioElement = new Audio();
+                audioElement.srcObject = mediaStreamDest.stream;
+                audioElement.play().catch(() => {
+                    // Fallback to direct connection if MediaStream fails
+                    scriptProcessor.disconnect();
+                    scriptProcessor.connect(audioContext.destination);
+                });
+            } catch (e) {
+                // Fallback for browsers without MediaStream support
+                scriptProcessor.connect(audioContext.destination);
+            }
         }
 
         function stopAudioProcessing() {
@@ -584,6 +651,12 @@
                 scriptProcessor.disconnect();
                 scriptProcessor = null;
             }
+            if (audioElement) {
+                audioElement.pause();
+                audioElement.srcObject = null;
+                audioElement = null;
+            }
+            mediaStreamDest = null;
         }
 
         // ============================================================================
@@ -592,6 +665,9 @@
         async function loadSong(index) {
             const song = DEMO_SONGS[index];
             if (!song) return;
+
+            const wasPlaying = isPlaying;
+            if (isPlaying) stop();
 
             currentSongIndex = index;
             updateSongListUI();
@@ -609,6 +685,11 @@
                 enableControls();
                 resetVisualization();
 
+                // Auto-play if previous song was playing
+                if (wasPlaying) {
+                    await ensureAudioContext();
+                    play();
+                }
             } catch (error) {
                 console.error('Load error:', error);
                 elements.songTitle.textContent = 'Error loading';
@@ -617,6 +698,9 @@
         }
 
         async function loadFromFile(file) {
+            const wasPlaying = isPlaying;
+            if (isPlaying) stop();
+
             try {
                 currentSongIndex = -1;
                 updateSongListUI();
@@ -628,6 +712,11 @@
                 enableControls();
                 resetVisualization();
 
+                // Auto-play if previous song was playing
+                if (wasPlaying) {
+                    await ensureAudioContext();
+                    play();
+                }
             } catch (error) {
                 console.error('Load error:', error);
                 elements.songTitle.textContent = 'Error loading';
@@ -901,10 +990,12 @@
         }
 
         function drawOscilloscope(ctx, data, color) {
+            if (!ctx) return;
             const canvas = ctx.canvas;
-            const rect = canvas.getBoundingClientRect();
-            const w = rect.width;
-            const h = rect.height;
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width / dpr;
+            const h = canvas.height / dpr;
+            if (w === 0 || h === 0) return;
 
             // Clear
             ctx.fillStyle = '#0a0a0f';
@@ -952,10 +1043,12 @@
         }
 
         function drawSpectrum(ctx, data, color) {
+            if (!ctx) return;
             const canvas = ctx.canvas;
-            const rect = canvas.getBoundingClientRect();
-            const w = rect.width;
-            const h = rect.height;
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width / dpr;
+            const h = canvas.height / dpr;
+            if (w === 0 || h === 0) return;
 
             // Clear
             ctx.fillStyle = '#0a0a0f';
@@ -972,15 +1065,11 @@
             }
 
             // Bars
-            const barWidth = (w / SPECTRUM_BINS) - 2;
-            const barGap = 2;
-
+            const barWidth = w / SPECTRUM_BINS - 2;
             for (let i = 0; i < SPECTRUM_BINS; i++) {
-                const x = i * (barWidth + barGap) + barGap;
+                const x = i * (barWidth + 2) + 1;
                 const barHeight = data[i] * h * 0.9;
                 const y = h - barHeight;
-
-                // Gradient fill
                 const gradient = ctx.createLinearGradient(x, h, x, y);
                 gradient.addColorStop(0, color + '40');
                 gradient.addColorStop(1, color);
@@ -1009,6 +1098,20 @@
         // ============================================================================
         // Start
         // ============================================================================
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const menuIconOpen = document.getElementById('menuIconOpen');
+        const menuIconClose = document.getElementById('menuIconClose');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                menuIconOpen.classList.toggle('hidden');
+                menuIconClose.classList.toggle('hidden');
+            });
+        }
+
         init();
     </script>
 </body>

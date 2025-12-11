@@ -1,0 +1,14 @@
+# Cross-compilation configuration
+# Only installs ALSA for CLI audio - not full GUI dependencies
+
+[target.x86_64-unknown-linux-gnu]
+pre-build = [
+    "dpkg --add-architecture amd64",
+    "apt-get update && apt-get install -y libasound2-dev:amd64"
+]
+
+[target.aarch64-unknown-linux-gnu]
+pre-build = [
+    "dpkg --add-architecture arm64",
+    "apt-get update && apt-get install -y libasound2-dev:arm64"
+]

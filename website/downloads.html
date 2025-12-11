@@ -1,0 +1,1209 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Downloads | YM2149-rs</title>
+        <meta
+            name="description"
+            content="Download YM2149-rs CLI player and Bevy examples for macOS, Linux, and Windows."
+        />
+        <!-- OpenGraph Meta Tags -->
+        <meta property="og:title" content="Downloads | YM2149-rs" />
+        <meta
+            property="og:description"
+            content="Download YM2149-rs CLI player and Bevy examples for macOS, Linux, and Windows."
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://ym2149-rs.org/downloads.html" />
+        <meta
+            property="og:image"
+            content="https://ym2149-rs.org/screenshots/demoscene.jpg"
+        />
+        <!-- Canonical URL -->
+        <link rel="canonical" href="https://ym2149-rs.org/downloads.html" />
+        <meta name="robots" content="index, follow" />
+        <!-- Favicon -->
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>"
+        />
+        <script src="assets/css/tailwind.js"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            chip: {
+                                dark: "#0a0a0f",
+                                darker: "#05050a",
+                                purple: "#8b5cf6",
+                                cyan: "#06b6d4",
+                                pink: "#ec4899",
+                                green: "#10b981",
+                            },
+                        },
+                        fontFamily: {
+                            mono: ["JetBrains Mono", "Fira Code", "monospace"],
+                            display: [
+                                "Space Grotesk",
+                                "system-ui",
+                                "sans-serif",
+                            ],
+                        },
+                        animation: {
+                            "pulse-slow":
+                                "pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                            gradient: "gradient 8s ease infinite",
+                            float: "float 6s ease-in-out infinite",
+                            scanline: "scanline 8s linear infinite",
+                        },
+                        keyframes: {
+                            gradient: {
+                                "0%, 100%": { backgroundPosition: "0% 50%" },
+                                "50%": { backgroundPosition: "100% 50%" },
+                            },
+                            float: {
+                                "0%, 100%": { transform: "translateY(0px)" },
+                                "50%": { transform: "translateY(-20px)" },
+                            },
+                            scanline: {
+                                "0%": { transform: "translateY(-100%)" },
+                                "100%": { transform: "translateY(100vh)" },
+                            },
+                        },
+                    },
+                },
+            };
+        </script>
+        <link rel="stylesheet" href="assets/css/fonts.css" />
+        <style>
+            html,
+            body {
+                overflow-x: hidden;
+                max-width: 100vw;
+            }
+            body {
+                background: #05050a;
+            }
+            .gradient-text {
+                background: linear-gradient(
+                    135deg,
+                    #8b5cf6 0%,
+                    #06b6d4 50%,
+                    #ec4899 100%
+                );
+                background-size: 200% 200%;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            .glow-purple {
+                box-shadow: 0 0 40px rgba(139, 92, 246, 0.3);
+            }
+            .glow-cyan {
+                box-shadow: 0 0 40px rgba(6, 182, 212, 0.3);
+            }
+            .card-glow:hover {
+                box-shadow:
+                    0 0 60px rgba(139, 92, 246, 0.2),
+                    0 0 100px rgba(6, 182, 212, 0.1);
+            }
+            .grid-bg {
+                background-image:
+                    linear-gradient(
+                        rgba(139, 92, 246, 0.03) 1px,
+                        transparent 1px
+                    ),
+                    linear-gradient(
+                        90deg,
+                        rgba(139, 92, 246, 0.03) 1px,
+                        transparent 1px
+                    );
+                background-size: 50px 50px;
+            }
+            .scanline::after {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background: linear-gradient(
+                    to bottom,
+                    rgba(139, 92, 246, 0.1),
+                    transparent
+                );
+                animation: scanline 8s linear infinite;
+                pointer-events: none;
+            }
+            .noise-overlay::before {
+                content: "";
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                opacity: 0.015;
+                pointer-events: none;
+                z-index: 9999;
+                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            }
+            .section-divider {
+                height: 1px;
+                background: linear-gradient(
+                    90deg,
+                    transparent,
+                    rgba(139, 92, 246, 0.3),
+                    rgba(6, 182, 212, 0.3),
+                    transparent
+                );
+            }
+            .download-card {
+                transition: all 0.3s ease;
+            }
+            .download-card:hover {
+                transform: translateY(-4px);
+                box-shadow:
+                    0 0 60px rgba(139, 92, 246, 0.2),
+                    0 0 100px rgba(6, 182, 212, 0.1);
+            }
+            .os-badge {
+                transition: all 0.2s ease;
+            }
+            .os-badge:hover {
+                transform: scale(1.05);
+            }
+        </style>
+    </head>
+    <body class="font-display text-gray-100 overflow-x-hidden noise-overlay">
+        <!-- Scanline overlay -->
+        <div
+            class="fixed inset-0 pointer-events-none z-50 opacity-30 scanline"
+        ></div>
+
+        <!-- Navigation -->
+        <nav
+            class="fixed top-0 left-0 right-0 z-40 bg-chip-darker/80 backdrop-blur-lg border-b border-purple-900/20"
+        >
+            <div class="max-w-7xl mx-auto px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <a href="/" class="flex items-center space-x-3">
+                        <div
+                            class="w-10 h-10 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center"
+                        >
+                            <span class="font-mono font-bold text-sm">YM</span>
+                        </div>
+                        <span class="font-mono font-semibold text-lg"
+                            >YM2149-rs</span
+                        >
+                    </a>
+
+                    <!-- Desktop Menu -->
+                    <div class="hidden md:flex items-center space-x-6">
+                        <a
+                            href="index.html#about"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >About</a
+                        >
+                        <a
+                            href="index.html#features"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >Features</a
+                        >
+                        <a
+                            href="index.html#bevy"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >Bevy</a
+                        >
+                        <a
+                            href="index.html#cli"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >CLI</a
+                        >
+                        <a
+                            href="tutorials.html"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >Tutorials</a
+                        >
+                        <a
+                            href="downloads.html"
+                            class="text-white font-medium"
+                            >Downloads</a
+                        >
+                        <a
+                            href="demo/"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >Demo</a
+                        >
+                        <div class="flex items-center space-x-3">
+                            <a
+                                href="https://github.com/slippyex/ym2149-rs"
+                                target="_blank"
+                                rel="noopener"
+                                class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all"
+                                title="GitHub"
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+                                    />
+                                </svg>
+                            </a>
+                            <a
+                                href="https://crates.io/crates/ym2149"
+                                target="_blank"
+                                rel="noopener"
+                                class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all"
+                                title="crates.io"
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    viewBox="0 0 512 512"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        d="M239.1 6.3l-208 78c-18.7 7-31.1 25-31.1 45v225.1c0 18.2 10.3 34.8 26.5 42.9l208 104c13.5 6.8 29.4 6.8 42.9 0l208-104c16.3-8.1 26.5-24.8 26.5-42.9V129.3c0-20-12.4-37.9-31.1-44.9l-208-78C262 2.2 250 2.2 239.1 6.3zM256 68.4l192 72v1.1l-192 78-192-78v-1.1l192-72zm32 356V275.5l160-65v160.4l-160 53.5z"
+                                    />
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Mobile Menu Button -->
+                    <button
+                        id="mobileMenuBtn"
+                        class="md:hidden p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all"
+                    >
+                        <svg
+                            id="menuIconOpen"
+                            class="w-6 h-6"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M4 6h16M4 12h16M4 18h16"
+                            />
+                        </svg>
+                        <svg
+                            id="menuIconClose"
+                            class="w-6 h-6 hidden"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                            />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Mobile Menu -->
+                <div
+                    id="mobileMenu"
+                    class="hidden md:hidden mt-4 pb-4 border-t border-gray-800 pt-4"
+                >
+                    <div class="flex flex-col space-y-3">
+                        <a
+                            href="index.html#about"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >About</a
+                        >
+                        <a
+                            href="index.html#features"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >Features</a
+                        >
+                        <a
+                            href="index.html#bevy"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >Bevy</a
+                        >
+                        <a
+                            href="index.html#cli"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >CLI</a
+                        >
+                        <a
+                            href="tutorials.html"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >Tutorials</a
+                        >
+                        <a
+                            href="downloads.html"
+                            class="text-white font-medium py-2"
+                            >Downloads</a
+                        >
+                        <a
+                            href="demo/"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >Demo</a
+                        >
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="pt-24 pb-16">
+            <!-- Hero Section -->
+            <section class="py-16 relative">
+                <div class="max-w-7xl mx-auto px-6">
+                    <div class="text-center mb-16">
+                        <h1 class="text-4xl md:text-5xl font-bold mb-6">
+                            <span class="gradient-text">Downloads</span>
+                        </h1>
+                        <p class="text-xl text-gray-400 max-w-2xl mx-auto">
+                            Pre-built binaries for the CLI player and Bevy
+                            examples. No Rust toolchain required.
+                        </p>
+                    </div>
+
+                    <!-- Version Badge -->
+                    <div class="flex justify-center mb-12">
+                        <div
+                            class="inline-flex items-center px-4 py-2 rounded-full bg-chip-purple/20 border border-chip-purple/30"
+                        >
+                            <span class="text-chip-purple font-mono text-sm"
+                                >Latest: v0.8.0</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Download Cards -->
+                    <div class="grid md:grid-cols-3 gap-8 mb-16">
+                        <!-- CLI Replayer -->
+                        <div
+                            class="download-card bg-chip-dark/50 border border-gray-800 rounded-2xl p-8 backdrop-blur-sm"
+                        >
+                            <div class="flex items-center mb-6">
+                                <div
+                                    class="w-12 h-12 rounded-xl bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center mr-4"
+                                >
+                                    <svg
+                                        class="w-6 h-6"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                        />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold">
+                                        CLI Replayer
+                                    </h3>
+                                    <p class="text-gray-500 text-sm">
+                                        ym2149-replayer-cli
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 mb-4">
+                                Terminal-based chiptune player with TUI
+                                visualization, oscilloscope, and spectrum
+                                display. Supports YM, AKS, AY, and SNDH formats.
+                            </p>
+
+                            <!-- Usage Examples -->
+                            <div
+                                class="bg-chip-darker/50 rounded-lg p-3 mb-4 font-mono text-xs"
+                            >
+                                <div class="text-gray-500 mb-1"># Usage</div>
+                                <div class="text-chip-cyan">
+                                    ym-replayer song.ym
+                                </div>
+                                <div class="text-chip-cyan">
+                                    ym-replayer ~/music/
+                                </div>
+                            </div>
+
+                            <!-- Controls -->
+                            <div
+                                class="flex flex-wrap gap-1 mb-4 text-xs text-gray-500"
+                            >
+                                <span
+                                    class="px-1.5 py-0.5 bg-gray-800 rounded"
+                                    title="Play/Pause"
+                                    >Space</span
+                                >
+                                <span
+                                    class="px-1.5 py-0.5 bg-gray-800 rounded"
+                                    title="Playlist"
+                                    >P</span
+                                >
+                                <span
+                                    class="px-1.5 py-0.5 bg-gray-800 rounded"
+                                    title="Mute channels"
+                                    >1-3</span
+                                >
+                                <span
+                                    class="px-1.5 py-0.5 bg-gray-800 rounded"
+                                    title="Volume"
+                                    >+/-</span
+                                >
+                                <span
+                                    class="px-1.5 py-0.5 bg-gray-800 rounded"
+                                    title="Prev/Next"
+                                    >[ ]</span
+                                >
+                                <span
+                                    class="px-1.5 py-0.5 bg-gray-800 rounded"
+                                    title="Quit"
+                                    >Q</span
+                                >
+                            </div>
+
+                            <div class="space-y-3">
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-cli-macos-arm64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-purple/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+                                            />
+                                        </svg>
+                                        <span>macOS (Apple Silicon)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-purple"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-cli-macos-x86_64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-purple/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+                                            />
+                                        </svg>
+                                        <span>macOS (Intel)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-purple"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-cli-linux-x86_64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-cyan/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139zm.529 3.405h.013c.213 0 .396.062.584.198.19.135.33.332.438.533.105.259.158.459.166.724 0-.02.006-.04.006-.06v.105a.086.086 0 01-.004-.021l-.004-.024a1.807 1.807 0 01-.15.706.953.953 0 01-.213.335.71.71 0 00-.088-.042c-.104-.045-.198-.064-.284-.133a1.312 1.312 0 00-.22-.066c.05-.06.146-.133.183-.198.053-.128.082-.264.088-.402v-.02a1.21 1.21 0 00-.061-.4c-.045-.134-.101-.2-.183-.333-.084-.066-.167-.132-.267-.132h-.016c-.093 0-.176.03-.262.132a.8.8 0 00-.205.334 1.18 1.18 0 00-.09.4v.019c.002.089.008.179.02.267-.193-.067-.438-.135-.607-.202a1.635 1.635 0 01-.018-.2v-.02a1.772 1.772 0 01.15-.768c.082-.22.232-.406.43-.534a.985.985 0 01.594-.2zm-2.962.059h.036c.142 0 .27.048.399.135.146.129.264.288.344.465.09.199.14.4.153.667v.004c.007.134.006.2-.002.266v.08c-.03.007-.056.018-.083.024-.152.055-.274.135-.393.2.012-.09.013-.18.003-.267v-.015c-.012-.133-.04-.2-.082-.333a.613.613 0 00-.166-.267.248.248 0 00-.183-.064h-.021c-.071.006-.13.04-.186.132a.552.552 0 00-.12.27.944.944 0 00-.023.33v.015c.012.135.037.2.08.334.046.134.098.2.166.268.01.009.02.018.034.024-.07.057-.117.07-.176.136a.304.304 0 01-.131.068 2.62 2.62 0 01-.275-.402 1.772 1.772 0 01-.155-.667 1.759 1.759 0 01.08-.668 1.43 1.43 0 01.283-.535c.128-.133.26-.2.418-.2zm1.37 1.706c.332 0 .733.065 1.216.399.293.2.523.269 1.052.468h.003c.255.136.405.266.478.399v-.131a.571.571 0 01.016.47c-.123.31-.516.643-1.063.842v.002c-.268.135-.501.333-.775.465-.276.135-.588.292-1.012.267a1.139 1.139 0 01-.448-.067 3.566 3.566 0 01-.322-.198c-.195-.135-.363-.332-.612-.465v-.005h-.005c-.4-.246-.616-.512-.686-.71-.07-.268-.005-.47.193-.6.224-.135.38-.271.483-.336.104-.074.143-.102.176-.131h.002v-.003c.169-.202.436-.47.839-.601.139-.036.294-.065.466-.065zm2.8 2.142c.358 1.417 1.196 3.475 1.735 4.473.286.534.855 1.659 1.102 3.024.156-.005.33.018.513.064.646-1.671-.546-3.467-1.089-3.966-.22-.2-.232-.335-.123-.335.59.534 1.365 1.572 1.646 2.757.13.535.16 1.104.021 1.67.067.028.135.06.205.067 1.032.534 1.413.938 1.23 1.537v-.043c-.06-.003-.12 0-.18 0h-.016c.151-.467-.182-.825-1.065-1.224-.915-.4-1.646-.336-1.77.465-.008.043-.013.066-.018.135-.068.023-.139.053-.209.064-.43.268-.662.669-.793 1.187-.13.533-.17 1.156-.205 1.869v.003c-.02.334-.17.838-.319 1.35-1.5 1.072-3.58 1.538-5.348.334a2.645 2.645 0 00-.402-.533 1.45 1.45 0 00-.275-.333c.182 0 .338-.03.465-.067a.615.615 0 00.314-.334c.108-.267 0-.697-.345-1.163-.345-.467-.931-.995-1.788-1.521-.63-.4-.986-.87-1.15-1.396-.165-.534-.143-1.085-.015-1.645.245-1.07.873-2.11 1.274-2.763.107-.065.037.135-.408.974-.396.751-1.14 2.497-.122 3.854a8.123 8.123 0 01.647-2.876c.564-1.278 1.743-3.504 1.836-5.268.048.036.217.135.289.202.218.133.38.333.59.465.21.201.477.335.876.335.039.003.075.006.11.006.412 0 .73-.134.997-.268.29-.134.52-.334.74-.4h.005c.467-.135.835-.402 1.044-.7zm2.185 8.958c.037.6.343 1.245.882 1.377.588.134 1.434-.333 1.791-.765l.211-.01c.315-.007.577.01.847.268l.003.003c.208.199.305.53.391.876.085.4.154.78.409 1.066.486.527.645.906.636 1.14l.003-.007v.018l-.003-.012c-.015.262-.185.396-.498.595-.63.401-1.746.712-2.457 1.57-.618.737-1.37 1.14-2.036 1.191-.664.053-1.237-.2-1.574-.898l-.005-.003c-.21-.4-.12-1.025.056-1.69.176-.668.428-1.344.463-1.897.037-.714.076-1.335.195-1.814.117-.468.32-.746.684-.933h.002c.126-.066.255-.133.36-.2z"
+                                            />
+                                        </svg>
+                                        <span>Linux (CLI only)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-cyan"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-cli-windows-x86_64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-pink/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"
+                                            />
+                                        </svg>
+                                        <span>Windows (x86_64)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-pink"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Advanced Example -->
+                        <div
+                            class="download-card bg-chip-dark/50 border border-gray-800 rounded-2xl p-8 backdrop-blur-sm"
+                        >
+                            <div class="flex items-center mb-6">
+                                <div
+                                    class="w-12 h-12 rounded-xl bg-gradient-to-br from-chip-cyan to-chip-green flex items-center justify-center mr-4"
+                                >
+                                    <svg
+                                        class="w-6 h-6"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                                        />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold">
+                                        Advanced Example
+                                    </h3>
+                                    <p class="text-gray-500 text-sm">
+                                        Bevy GUI Application
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 mb-6">
+                                Full-featured tracker-style UI with
+                                oscilloscope, spectrum analyzer, drag-and-drop,
+                                playback controls, and audio bridge
+                                visualization.
+                            </p>
+                            <div class="space-y-3">
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-advanced_example-macos-arm64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-purple/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+                                            />
+                                        </svg>
+                                        <span>macOS (Apple Silicon)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-purple"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-advanced_example-macos-x86_64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-purple/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+                                            />
+                                        </svg>
+                                        <span>macOS (Intel)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-purple"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-advanced_example-windows-x86_64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-pink/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"
+                                            />
+                                        </svg>
+                                        <span>Windows (x86_64)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-pink"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Demoscene Example -->
+                        <div
+                            class="download-card bg-chip-dark/50 border border-gray-800 rounded-2xl p-8 backdrop-blur-sm"
+                        >
+                            <div class="flex items-center mb-6">
+                                <div
+                                    class="w-12 h-12 rounded-xl bg-gradient-to-br from-chip-pink to-chip-purple flex items-center justify-center mr-4"
+                                >
+                                    <svg
+                                        class="w-6 h-6"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M7 4V20M17 4V20M3 8H7M17 8H21M3 12H21M3 16H7M17 16H21M4 20H20C20.5523 20 21 19.5523 21 19V5C21 4.44772 20.5523 4 20 4H4C3.44772 4 3 4.44772 3 5V19C3 19.5523 3.44772 20 4 20Z"
+                                        />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold">
+                                        Demoscene Example
+                                    </h3>
+                                    <p class="text-gray-500 text-sm">
+                                        Shader-Heavy Experience
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="text-gray-400 mb-6">
+                                Raymarched visuals, CRT post-processing,
+                                scanlines, and audio-reactive elements. A
+                                tribute to the demoscene synchronized to YM2149
+                                playback.
+                            </p>
+                            <div class="space-y-3">
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-demoscene-macos-arm64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-purple/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+                                            />
+                                        </svg>
+                                        <span>macOS (Apple Silicon)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-purple"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-demoscene-macos-x86_64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-purple/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"
+                                            />
+                                        </svg>
+                                        <span>macOS (Intel)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-purple"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                                <a
+                                    href="https://ym2149-rs.org/releases/ym2149-rs-v0.8.0-demoscene-windows-x86_64.zip"
+                                    class="os-badge flex items-center justify-between px-4 py-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg border border-gray-700 hover:border-chip-pink/50"
+                                >
+                                    <div class="flex items-center">
+                                        <svg
+                                            class="w-5 h-5 mr-3 text-gray-400"
+                                            fill="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"
+                                            />
+                                        </svg>
+                                        <span>Windows (x86_64)</span>
+                                    </div>
+                                    <svg
+                                        class="w-5 h-5 text-chip-pink"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                        />
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="section-divider my-16"></div>
+
+                    <!-- Build from Source Section -->
+                    <div class="max-w-4xl mx-auto">
+                        <h2
+                            class="text-2xl font-bold mb-6 text-center gradient-text"
+                        >
+                            Build from Source
+                        </h2>
+                        <p class="text-gray-400 text-center mb-8">
+                            Prefer to compile yourself? With Rust installed, you
+                            can build the latest version from source or install
+                            the CLI directly.
+                        </p>
+
+                        <!-- Quick Install CLI -->
+                        <div
+                            class="bg-gradient-to-r from-chip-purple/10 to-chip-cyan/10 border border-chip-purple/30 rounded-xl p-6 mb-8"
+                        >
+                            <h3 class="font-bold text-lg mb-3 text-chip-purple">
+                                Quick Install: CLI Replayer
+                            </h3>
+                            <p class="text-gray-400 mb-4">
+                                If you already have Rust installed, you can
+                                install the CLI replayer directly from crates.io
+                                with a single command:
+                            </p>
+                            <div
+                                class="bg-chip-darker/50 rounded-lg p-4 font-mono text-sm"
+                            >
+                                <pre class="text-chip-cyan"
+                                    >cargo install ym2149-replayer-cli</pre
+                                >
+                            </div>
+                            <p class="text-gray-500 text-sm mt-3">
+                                This installs the
+                                <code class="text-chip-cyan"
+                                    >ym-replayer</code
+                                >
+                                binary to your Cargo bin directory (usually
+                                <code class="text-gray-400">~/.cargo/bin</code
+                                >).
+                            </p>
+                        </div>
+
+                        <!-- Install Rust -->
+                        <div
+                            class="bg-chip-dark/50 border border-gray-800 rounded-xl p-6 mb-8"
+                        >
+                            <h3 class="font-bold text-lg mb-3 text-chip-cyan">
+                                Step 1: Install Rust
+                            </h3>
+                            <p class="text-gray-400 mb-4">
+                                If you don't have Rust installed yet, the
+                                easiest way is via
+                                <a
+                                    href="https://rustup.rs"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="text-chip-cyan hover:underline"
+                                    >rustup</a
+                                >
+                                - the official Rust toolchain installer:
+                            </p>
+                            <div class="font-mono text-sm space-y-4">
+                                <div>
+                                    <span class="text-gray-500"
+                                        ># macOS / Linux</span
+                                    >
+                                    <pre class="text-chip-cyan"
+                                        >curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh</pre
+                                    >
+                                </div>
+                                <div>
+                                    <span class="text-gray-500"># Windows</span>
+                                    <p class="text-gray-400 text-sm mt-1">
+                                        Download and run
+                                        <a
+                                            href="https://win.rustup.rs/x86_64"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="text-chip-cyan hover:underline"
+                                            >rustup-init.exe</a
+                                        >
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="text-gray-500 text-sm mt-4">
+                                After installation, restart your terminal and
+                                verify with
+                                <code class="text-chip-cyan"
+                                    >rustc --version</code
+                                >.
+                            </p>
+                        </div>
+
+                        <!-- Clone and Build -->
+                        <div
+                            class="bg-chip-dark/50 border border-gray-800 rounded-xl p-6"
+                        >
+                            <h3 class="font-bold text-lg mb-3 text-chip-green">
+                                Step 2: Clone and Build
+                            </h3>
+                            <p class="text-gray-400 mb-4">
+                                Clone the repository and build the binaries you
+                                need:
+                            </p>
+                            <div class="font-mono text-sm space-y-4">
+                                <div>
+                                    <span class="text-gray-500"
+                                        ># Clone the repository</span
+                                    >
+                                    <pre class="text-chip-cyan"
+                                        >git clone https://github.com/slippyex/ym2149-rs.git</pre
+                                    >
+                                    <pre class="text-chip-cyan"
+                                        >cd ym2149-rs</pre
+                                    >
+                                </div>
+                                <div>
+                                    <span class="text-gray-500"
+                                        ># Build CLI replayer</span
+                                    >
+                                    <pre class="text-chip-cyan"
+                                        >cargo build --release -p ym2149-replayer-cli</pre
+                                    >
+                                    <p class="text-gray-500 text-xs mt-1">
+                                        Binary:
+                                        target/release/ym-replayer
+                                    </p>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500"
+                                        ># Build Bevy examples</span
+                                    >
+                                    <pre class="text-chip-cyan"
+                                        >cargo build --release -p bevy_ym2149_examples --example advanced_example</pre
+                                    >
+                                    <pre class="text-chip-cyan"
+                                        >cargo build --release -p bevy_ym2149_examples --example demoscene</pre
+                                    >
+                                    <p class="text-gray-500 text-xs mt-1">
+                                        Binaries:
+                                        target/release/examples/advanced_example,
+                                        target/release/examples/demoscene
+                                    </p>
+                                </div>
+                                <div>
+                                    <span class="text-gray-500"
+                                        ># Or run directly without building
+                                        first</span
+                                    >
+                                    <pre class="text-chip-cyan"
+                                        >cargo run --release -p bevy_ym2149_examples --example advanced_example</pre
+                                    >
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-8 flex justify-center gap-4 flex-wrap">
+                            <a
+                                href="https://github.com/slippyex/ym2149-rs"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex items-center px-6 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-all border border-gray-700 hover:border-chip-purple/50"
+                            >
+                                <svg
+                                    class="w-5 h-5 mr-2"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+                                    />
+                                </svg>
+                                View on GitHub
+                            </a>
+                            <a
+                                href="https://rustup.rs"
+                                target="_blank"
+                                rel="noopener"
+                                class="inline-flex items-center px-6 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-all border border-gray-700 hover:border-chip-cyan/50"
+                            >
+                                <svg
+                                    class="w-5 h-5 mr-2"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M23.834 8.101a13.912 13.912 0 0 1-13.643 11.72 10.105 10.105 0 0 1-1.994-.12 6.111 6.111 0 0 1-5.082-5.761 5.934 5.934 0 0 1 11.867-.084c.025.983-.401 1.846-1.277 1.871-.936 0-1.374-.668-1.374-1.567v-2.5a1.531 1.531 0 0 0-1.52-1.533H8.715a3.648 3.648 0 1 0 2.695 6.08l.073-.11a2.794 2.794 0 0 0 2.361 1.304c1.866 0 3.27-1.483 3.27-3.534a5.932 5.932 0 0 0-5.937-5.937 5.935 5.935 0 0 0-5.936 5.937c0 4.035 3.164 7.344 7.465 7.344 4.906 0 9.037-3.592 10.035-8.449a13.903 13.903 0 0 0-2.043-8.86 13.91 13.91 0 0 0-19.463-3.64A13.91 13.91 0 0 0 .191 8.101a.85.85 0 0 0 .153.823c.168.2.436.3.707.255a.85.85 0 0 0 .684-.559 12.188 12.188 0 0 1 3.147-4.665 12.179 12.179 0 0 1 17.064 3.192 12.179 12.179 0 0 1 1.79 7.77.85.85 0 0 0 .099-.816z"
+                                    />
+                                </svg>
+                                Get Rust
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="section-divider my-16"></div>
+
+                    <!-- What's Included Section -->
+                    <div class="max-w-4xl mx-auto">
+                        <h2
+                            class="text-2xl font-bold mb-8 text-center gradient-text"
+                        >
+                            What's Included
+                        </h2>
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div
+                                class="bg-chip-dark/30 border border-gray-800 rounded-xl p-6"
+                            >
+                                <h3
+                                    class="font-bold text-lg mb-3 text-chip-purple"
+                                >
+                                    Each ZIP contains:
+                                </h3>
+                                <ul class="space-y-2 text-gray-400">
+                                    <li class="flex items-start">
+                                        <span class="text-chip-green mr-2"
+                                            >+</span
+                                        >
+                                        Pre-built binary for your platform
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-chip-green mr-2"
+                                            >+</span
+                                        >
+                                        Sample music files (YM, SNDH formats)
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-chip-green mr-2"
+                                            >+</span
+                                        >
+                                        README with usage instructions
+                                    </li>
+                                </ul>
+                            </div>
+                            <div
+                                class="bg-chip-dark/30 border border-gray-800 rounded-xl p-6"
+                            >
+                                <h3
+                                    class="font-bold text-lg mb-3 text-chip-cyan"
+                                >
+                                    System Requirements:
+                                </h3>
+                                <ul class="space-y-2 text-gray-400">
+                                    <li class="flex items-start">
+                                        <span class="text-chip-cyan mr-2"
+                                            >*</span
+                                        >
+                                        64-bit operating system
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-chip-cyan mr-2"
+                                            >*</span
+                                        >
+                                        GPU with Vulkan/Metal/DX12 support (Bevy
+                                        examples)
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-chip-cyan mr-2"
+                                            >*</span
+                                        >
+                                        Audio output device
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="py-16 border-t border-gray-800">
+            <div class="max-w-7xl mx-auto px-6">
+                <div
+                    class="flex flex-col md:flex-row items-center justify-between gap-8"
+                >
+                    <div class="flex items-center space-x-3">
+                        <div
+                            class="w-10 h-10 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center"
+                        >
+                            <span class="font-mono font-bold text-sm">YM</span>
+                        </div>
+                        <span class="font-mono font-semibold">YM2149-rs</span>
+                    </div>
+                    <div class="flex items-center space-x-8 text-gray-400">
+                        <a
+                            href="https://github.com/slippyex/ym2149-rs"
+                            target="_blank"
+                            rel="noopener"
+                            class="hover:text-white transition-colors"
+                            >GitHub</a
+                        >
+                        <a
+                            href="https://crates.io/crates/ym2149"
+                            target="_blank"
+                            rel="noopener"
+                            class="hover:text-white transition-colors"
+                            >crates.io</a
+                        >
+                        <a
+                            href="https://docs.rs/ym2149"
+                            target="_blank"
+                            rel="noopener"
+                            class="hover:text-white transition-colors"
+                            >docs.rs</a
+                        >
+                        <a
+                            href="mailto:info@ym2149-rs.org"
+                            class="hover:text-white transition-colors"
+                            >Contact</a
+                        >
+                    </div>
+                    <p class="text-gray-500 text-sm">
+                        Made with
+                        <span class="text-chip-pink">&hearts;</span> for the
+                        community
+                    </p>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Mobile Menu Script -->
+        <script>
+            const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+            const mobileMenu = document.getElementById("mobileMenu");
+            const menuIconOpen = document.getElementById("menuIconOpen");
+            const menuIconClose = document.getElementById("menuIconClose");
+
+            mobileMenuBtn.addEventListener("click", () => {
+                mobileMenu.classList.toggle("hidden");
+                menuIconOpen.classList.toggle("hidden");
+                menuIconClose.classList.toggle("hidden");
+            });
+
+            // Close mobile menu when clicking a link
+            mobileMenu.querySelectorAll("a").forEach((link) => {
+                link.addEventListener("click", () => {
+                    mobileMenu.classList.add("hidden");
+                    menuIconOpen.classList.remove("hidden");
+                    menuIconClose.classList.add("hidden");
+                });
+            });
+        </script>
+    </body>
+</html>

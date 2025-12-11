@@ -4578,5 +4578,890 @@
                 });
             }
         </script>
+
+        <!-- YM2149 WASM Player -->
+        <script type="module">
+            // ============================================================================
+            // Configuration & Constants
+            // ============================================================================
+            const SAMPLE_RATE = 44100;
+            const BUFFER_SIZE = 4096;
+            const WAVEFORM_SIZE = 256;
+            const SPECTRUM_BINS = 32;
+            const SPECTRUM_DECAY = 0.85;
+            const SPECTRUM_BASE_FREQ = 32.703;
+            const BINS_PER_OCTAVE = 4;
+
+            const COLORS = {
+                purple: "#8b5cf6",
+                cyan: "#06b6d4",
+                pink: "#ec4899",
+                green: "#10b981",
+                gridLight: "rgba(139, 92, 246, 0.05)",
+            };
+
+            const DEMO_SONGS = [
+                {
+                    file: "demo/Scout.ym",
+                    name: "Scout",
+                    format: "YM",
+                    icon: "1",
+                },
+                {
+                    file: "demo/Prelude.ym",
+                    name: "Prelude",
+                    format: "YM",
+                    icon: "2",
+                },
+                {
+                    file: "demo/Intensity_200hz.sndh",
+                    name: "Intensity (200Hz)",
+                    format: "SNDH",
+                    author: "Tao",
+                    icon: "3",
+                },
+                {
+                    file: "demo/Bullet_Sequence.sndh",
+                    name: "Bullet Sequence",
+                    format: "SNDH",
+                    author: "Cube",
+                    icon: "4",
+                },
+                {
+                    file: "demo/Elusive_Groove.sndh",
+                    name: "Elusive Groove",
+                    format: "SNDH",
+                    author: "Cube",
+                    icon: "5",
+                },
+                {
+                    file: "demo/Outpost.sndh",
+                    name: "Outpost",
+                    format: "SNDH",
+                    author: "Cube",
+                    icon: "6",
+                },
+                {
+                    file: "demo/Main_Menu.sndh",
+                    name: "OCWAS - Main Menu",
+                    format: "SNDH",
+                    author: "Mad Max",
+                    icon: "7",
+                },
+                {
+                    file: "demo/JustAddCream.aks",
+                    name: "Just Add Cream",
+                    format: "AKS",
+                    author: "XIA",
+                    icon: "8",
+                },
+                {
+                    file: "demo/LopEars.aks",
+                    name: "Lop Ears",
+                    format: "AKS",
+                    author: "Andy Severn",
+                    icon: "9",
+                },
+                {
+                    file: "demo/AcousticDreams.ay",
+                    name: "Acoustic Dreams",
+                    format: "AY",
+                    icon: "A",
+                },
+                { file: "demo/ZUB.AY", name: "ZUB", format: "AY", icon: "B" },
+            ];
+
+            // ============================================================================
+            // State
+            // ============================================================================
+            let wasmModule = null;
+            let wasmPlayer = null;
+            let audioContext = null;
+            let scriptProcessor = null;
+            let audioElement = null;
+            let mediaStreamDest = null;
+            let isPlaying = false;
+            let animationId = null;
+            let currentSongIndex = -1;
+
+            const waveforms = {
+                A: new Float32Array(WAVEFORM_SIZE),
+                B: new Float32Array(WAVEFORM_SIZE),
+                C: new Float32Array(WAVEFORM_SIZE),
+                mono: new Float32Array(WAVEFORM_SIZE),
+            };
+            const phases = [0, 0, 0];
+            const spectrums = {
+                A: new Float32Array(SPECTRUM_BINS),
+                B: new Float32Array(SPECTRUM_BINS),
+                C: new Float32Array(SPECTRUM_BINS),
+                combined: new Float32Array(SPECTRUM_BINS),
+            };
+
+            // ============================================================================
+            // DOM Elements
+            // ============================================================================
+            const el = {
+                playerLoading: document.getElementById("playerLoading"),
+                playerContainer: document.getElementById("playerContainer"),
+                loadingText: document.getElementById("loadingText"),
+                songList: document.getElementById("songList"),
+                fileInput: document.getElementById("fileInput"),
+                songTitle: document.getElementById("songTitle"),
+                songAuthor: document.getElementById("songAuthor"),
+                songFormat: document.getElementById("songFormat"),
+                songFrames: document.getElementById("songFrames"),
+                envelopeShape: document.getElementById("envelopeShape"),
+                progressBar: document.getElementById("progressBar"),
+                currentTime: document.getElementById("currentTime"),
+                totalTime: document.getElementById("totalTime"),
+                playBtn: document.getElementById("playBtn"),
+                playIcon: document.getElementById("playIcon"),
+                pauseIcon: document.getElementById("pauseIcon"),
+                stopBtn: document.getElementById("stopBtn"),
+                restartBtn: document.getElementById("restartBtn"),
+                volumeSlider: document.getElementById("volumeSlider"),
+                vizModeOsc: document.getElementById("vizModeOsc"),
+                vizModeSpec: document.getElementById("vizModeSpec"),
+                oscView: document.getElementById("oscView"),
+                specView: document.getElementById("specView"),
+                noteA: document.getElementById("noteA"),
+                noteB: document.getElementById("noteB"),
+                noteC: document.getElementById("noteC"),
+                subsongContainer: document.getElementById("subsongContainer"),
+                subsongInfo: document.getElementById("subsongInfo"),
+                prevSubsong: document.getElementById("prevSubsong"),
+                nextSubsong: document.getElementById("nextSubsong"),
+            };
+
+            const canvases = {
+                oscA: document.getElementById("oscA"),
+                oscB: document.getElementById("oscB"),
+                oscC: document.getElementById("oscC"),
+                oscMono: document.getElementById("oscMono"),
+                specA: document.getElementById("specA"),
+                specB: document.getElementById("specB"),
+                specC: document.getElementById("specC"),
+                specCombined: document.getElementById("specCombined"),
+            };
+
+            const contexts = {};
+
+            // ============================================================================
+            // Initialization
+            // ============================================================================
+            async function initPlayer() {
+                try {
+                    el.loadingText.textContent =
+                        "Loading WebAssembly module...";
+                    wasmModule = await import("./demo/pkg/ym2149_wasm.js");
+                    await wasmModule.default();
+
+                    el.loadingText.textContent = "Initializing...";
+
+                    buildSongList();
+                    setupEventListeners();
+
+                    el.playerLoading.classList.add("hidden");
+                    el.playerContainer.classList.remove("hidden");
+
+                    // Setup canvases AFTER container is visible (so getBoundingClientRect works)
+                    // Only initialize visible canvases (oscilloscope view is default)
+                    requestAnimationFrame(() => {
+                        ["oscA", "oscB", "oscC", "oscMono"].forEach((k) => {
+                            setupCanvas(canvases[k]);
+                            contexts[k] = canvases[k].getContext("2d");
+                        });
+                        drawAllVisualization();
+                    });
+
+                    if (DEMO_SONGS.length > 0) {
+                        loadSong(0);
+                    }
+                } catch (error) {
+                    console.error("Player init error:", error);
+                    el.loadingText.textContent = `Error: ${error.message}`;
+                }
+            }
+
+            function setupCanvas(canvas) {
+                const dpr = window.devicePixelRatio || 1;
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                const ctx = canvas.getContext("2d");
+                ctx.scale(dpr, dpr);
+            }
+
+            function buildSongList() {
+                el.songList.innerHTML = DEMO_SONGS.map(
+                    (song, i) => `
+                <button class="song-item w-full text-left px-3 py-2 rounded-lg border border-transparent flex items-center gap-3" data-index="${i}">
+                    <div class="w-8 h-8 rounded bg-chip-purple/20 flex items-center justify-center font-mono text-chip-purple text-sm flex-shrink-0">${song.icon}</div>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-medium text-sm truncate">${song.name}</div>
+                        <div class="text-xs text-gray-500">${song.format}${song.author ? " - " + song.author : ""}</div>
+                    </div>
+                </button>
+            `,
+                ).join("");
+            }
+
+            function setupEventListeners() {
+                el.songList.addEventListener("click", async (e) => {
+                    const btn = e.target.closest(".song-item");
+                    if (btn) {
+                        await ensureAudioContext(); // Important for mobile: create AudioContext on user gesture
+                        loadSong(parseInt(btn.dataset.index));
+                    }
+                });
+
+                el.fileInput.addEventListener("change", async (e) => {
+                    await ensureAudioContext(); // Important for mobile
+                    const file = e.target.files[0];
+                    if (file) await loadFromFile(file);
+                });
+
+                el.playBtn.addEventListener("click", togglePlayPause);
+                el.stopBtn.addEventListener("click", stop);
+                el.restartBtn.addEventListener("click", restart);
+
+                el.progressBar.addEventListener("input", (e) => {
+                    if (wasmPlayer)
+                        wasmPlayer.seek_to_percentage(e.target.value / 100);
+                });
+
+                el.volumeSlider.addEventListener("input", (e) => {
+                    if (wasmPlayer) wasmPlayer.set_volume(e.target.value / 100);
+                });
+
+                document.querySelectorAll(".channel-btn").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        if (!wasmPlayer) return;
+                        const ch = parseInt(btn.dataset.channel);
+                        const isMuted = wasmPlayer.is_channel_muted(ch);
+                        wasmPlayer.set_channel_mute(ch, !isMuted);
+                        btn.style.opacity = isMuted ? "1" : "0.3";
+                    });
+                });
+
+                el.vizModeOsc.addEventListener("click", () => {
+                    el.oscView.classList.remove("hidden");
+                    el.specView.classList.add("hidden");
+                    el.vizModeOsc.classList.remove(
+                        "bg-gray-800",
+                        "text-gray-400",
+                    );
+                    el.vizModeOsc.classList.add(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    el.vizModeSpec.classList.remove(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    el.vizModeSpec.classList.add(
+                        "bg-gray-800",
+                        "text-gray-400",
+                    );
+                    requestAnimationFrame(() => {
+                        ["oscA", "oscB", "oscC", "oscMono"].forEach((k) => {
+                            setupCanvas(canvases[k]);
+                            contexts[k] = canvases[k].getContext("2d");
+                        });
+                        drawAllVisualization();
+                    });
+                });
+
+                el.vizModeSpec.addEventListener("click", () => {
+                    el.specView.classList.remove("hidden");
+                    el.oscView.classList.add("hidden");
+                    el.vizModeSpec.classList.remove(
+                        "bg-gray-800",
+                        "text-gray-400",
+                    );
+                    el.vizModeSpec.classList.add(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    el.vizModeOsc.classList.remove(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    el.vizModeOsc.classList.add("bg-gray-800", "text-gray-400");
+                    requestAnimationFrame(() => {
+                        ["specA", "specB", "specC", "specCombined"].forEach(
+                            (k) => {
+                                setupCanvas(canvases[k]);
+                                contexts[k] = canvases[k].getContext("2d");
+                            },
+                        );
+                        drawAllVisualization();
+                    });
+                });
+
+                window.addEventListener("resize", () => {
+                    for (const [key, canvas] of Object.entries(canvases)) {
+                        setupCanvas(canvas);
+                        contexts[key] = canvas.getContext("2d");
+                    }
+                    drawAllVisualization();
+                });
+
+                el.prevSubsong.addEventListener("click", () =>
+                    changeSubsong(-1),
+                );
+                el.nextSubsong.addEventListener("click", () =>
+                    changeSubsong(1),
+                );
+            }
+
+            function changeSubsong(delta) {
+                if (!wasmPlayer) return;
+                const count = wasmPlayer.subsongCount();
+                if (count <= 1) return;
+
+                const current = wasmPlayer.currentSubsong();
+                let next = current + delta;
+                if (next < 1) next = count;
+                if (next > count) next = 1;
+
+                const wasPlaying = isPlaying;
+                if (isPlaying) stop();
+
+                if (wasmPlayer.setSubsong(next)) {
+                    updateSubsongUI();
+                    resetVisualization();
+                    if (wasPlaying) play();
+                }
+            }
+
+            function updateSubsongUI() {
+                if (!wasmPlayer) return;
+                const count = wasmPlayer.subsongCount();
+                if (count > 1) {
+                    el.subsongContainer.classList.remove("hidden");
+                    el.subsongInfo.textContent = `${wasmPlayer.currentSubsong()}/${count}`;
+                } else {
+                    el.subsongContainer.classList.add("hidden");
+                }
+            }
+
+            // ============================================================================
+            // Audio
+            // ============================================================================
+            async function ensureAudioContext() {
+                if (!audioContext) {
+                    try {
+                        audioContext = new (
+                            window.AudioContext || window.webkitAudioContext
+                        )({
+                            sampleRate: SAMPLE_RATE,
+                        });
+                    } catch (e) {
+                        // Fallback for browsers that don't support sampleRate option
+                        audioContext = new (
+                            window.AudioContext || window.webkitAudioContext
+                        )();
+                    }
+                }
+                if (audioContext.state === "suspended") {
+                    await audioContext.resume();
+                }
+                return audioContext.state === "running";
+            }
+
+            function startAudioProcessing() {
+                if (scriptProcessor) return;
+                scriptProcessor = audioContext.createScriptProcessor(
+                    BUFFER_SIZE,
+                    1,
+                    1,
+                );
+                scriptProcessor.onaudioprocess = (e) => {
+                    const output = e.outputBuffer.getChannelData(0);
+                    if (!isPlaying || !wasmPlayer) {
+                        output.fill(0);
+                        return;
+                    }
+                    const samples = wasmPlayer.generateSamples(output.length);
+                    for (
+                        let i = 0;
+                        i < output.length && i < samples.length;
+                        i++
+                    )
+                        output[i] = samples[i];
+                };
+
+                // MediaStream approach for iOS/mobile
+                try {
+                    mediaStreamDest =
+                        audioContext.createMediaStreamDestination();
+                    scriptProcessor.connect(mediaStreamDest);
+                    audioElement = new Audio();
+                    audioElement.srcObject = mediaStreamDest.stream;
+                    audioElement.play().catch(() => {
+                        // Fallback to direct connection if MediaStream fails
+                        scriptProcessor.disconnect();
+                        scriptProcessor.connect(audioContext.destination);
+                    });
+                } catch (e) {
+                    // Fallback for browsers without MediaStream support
+                    scriptProcessor.connect(audioContext.destination);
+                }
+            }
+
+            function stopAudioProcessing() {
+                if (scriptProcessor) {
+                    scriptProcessor.disconnect();
+                    scriptProcessor = null;
+                }
+                if (audioElement) {
+                    audioElement.pause();
+                    audioElement.srcObject = null;
+                    audioElement = null;
+                }
+                mediaStreamDest = null;
+            }
+
+            // ============================================================================
+            // Song Loading
+            // ============================================================================
+            async function loadSong(index) {
+                const song = DEMO_SONGS[index];
+                if (!song) return;
+
+                const wasPlaying = isPlaying;
+                if (isPlaying) stop();
+
+                currentSongIndex = index;
+                updateSongListUI();
+
+                try {
+                    el.songTitle.textContent = "Loading...";
+                    el.songAuthor.textContent = "";
+
+                    const response = await fetch(song.file);
+                    if (!response.ok)
+                        throw new Error(`HTTP ${response.status}`);
+                    const data = new Uint8Array(await response.arrayBuffer());
+
+                    wasmPlayer = new wasmModule.Ym2149Player(data);
+                    updateMetadataUI();
+                    enableControls();
+                    resetVisualization();
+
+                    // Auto-play if previous song was playing
+                    if (wasPlaying) {
+                        await ensureAudioContext();
+                        play();
+                    }
+                } catch (error) {
+                    console.error("Load error:", error);
+                    el.songTitle.textContent = "Error loading";
+                    el.songAuthor.textContent = error.message;
+                }
+            }
+
+            async function loadFromFile(file) {
+                const wasPlaying = isPlaying;
+                if (isPlaying) stop();
+
+                try {
+                    currentSongIndex = -1;
+                    updateSongListUI();
+                    el.songTitle.textContent = "Loading...";
+
+                    const data = new Uint8Array(await file.arrayBuffer());
+                    wasmPlayer = new wasmModule.Ym2149Player(data);
+                    updateMetadataUI();
+                    enableControls();
+                    resetVisualization();
+
+                    // Auto-play if previous song was playing
+                    if (wasPlaying) {
+                        await ensureAudioContext();
+                        play();
+                    }
+                } catch (error) {
+                    console.error("Load error:", error);
+                    el.songTitle.textContent = "Error loading";
+                    el.songAuthor.textContent = error.message;
+                }
+            }
+
+            function updateSongListUI() {
+                document.querySelectorAll(".song-item").forEach((item, i) => {
+                    item.classList.toggle("active", i === currentSongIndex);
+                });
+            }
+
+            function updateMetadataUI() {
+                if (!wasmPlayer) return;
+                const meta = wasmPlayer.metadata;
+                el.songTitle.textContent = meta.title || "Unknown";
+                el.songAuthor.textContent = meta.author || "Unknown Artist";
+                el.songFormat.textContent = meta.format || "-";
+                el.songFrames.textContent = `${meta.frame_count} frames`;
+                el.totalTime.textContent = formatTime(meta.duration_seconds);
+                el.progressBar.value = 0;
+                el.currentTime.textContent = "0:00";
+                updateSubsongUI();
+            }
+
+            function enableControls() {
+                el.playBtn.disabled = false;
+                el.stopBtn.disabled = false;
+                el.restartBtn.disabled = false;
+                el.progressBar.disabled = false;
+            }
+
+            // ============================================================================
+            // Playback
+            // ============================================================================
+            async function togglePlayPause() {
+                if (!wasmPlayer) return;
+                await ensureAudioContext();
+                if (isPlaying) pause();
+                else play();
+            }
+
+            function play() {
+                if (!wasmPlayer) return;
+                wasmPlayer.play();
+                isPlaying = true;
+                startAudioProcessing();
+                startVisualization();
+                el.playIcon.classList.add("hidden");
+                el.pauseIcon.classList.remove("hidden");
+            }
+
+            function pause() {
+                if (!wasmPlayer) return;
+                wasmPlayer.pause();
+                isPlaying = false;
+                el.playIcon.classList.remove("hidden");
+                el.pauseIcon.classList.add("hidden");
+            }
+
+            function stop() {
+                if (!wasmPlayer) return;
+                wasmPlayer.stop();
+                isPlaying = false;
+                stopAudioProcessing();
+                stopVisualization();
+                el.playIcon.classList.remove("hidden");
+                el.pauseIcon.classList.add("hidden");
+                el.progressBar.value = 0;
+                el.currentTime.textContent = "0:00";
+                resetVisualization();
+            }
+
+            function restart() {
+                if (!wasmPlayer) return;
+                const wasPlaying = isPlaying;
+                stop();
+                if (wasPlaying) play();
+            }
+
+            // ============================================================================
+            // Visualization
+            // ============================================================================
+            function startVisualization() {
+                if (animationId) return;
+                animationId = requestAnimationFrame(visualizationLoop);
+            }
+
+            function stopVisualization() {
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+            }
+
+            function resetVisualization() {
+                for (const arr of Object.values(waveforms)) arr.fill(0);
+                for (const arr of Object.values(spectrums)) arr.fill(0);
+                phases.fill(0);
+                drawAllVisualization();
+            }
+
+            function visualizationLoop() {
+                if (wasmPlayer && isPlaying) {
+                    updateVisualizationData();
+                    updateProgressUI();
+                }
+                drawAllVisualization();
+                animationId = requestAnimationFrame(visualizationLoop);
+            }
+
+            function updateVisualizationData() {
+                if (!wasmPlayer) return;
+                const states = wasmPlayer.getChannelStates();
+
+                el.noteA.textContent = states.channels[0].note || "---";
+                el.noteB.textContent = states.channels[1].note || "---";
+                el.noteC.textContent = states.channels[2].note || "---";
+                if (states.envelope)
+                    el.envelopeShape.textContent =
+                        states.envelope.shapeName || "-";
+
+                synthesizeWaveforms(states);
+                updateSpectrum(states);
+            }
+
+            function synthesizeWaveforms(states) {
+                const samplesPerFrame = 64;
+                const chArrays = [waveforms.A, waveforms.B, waveforms.C];
+
+                for (let ch = 0; ch < 3; ch++) {
+                    const chState = states.channels[ch];
+                    const waveform = chArrays[ch];
+                    const freq = chState.frequency || 0;
+                    const amplitude = chState.amplitude || 0;
+                    const hasOutput =
+                        chState.toneEnabled ||
+                        chState.noiseEnabled ||
+                        chState.envelopeEnabled;
+                    const phaseIncrement = freq > 0 ? freq / SAMPLE_RATE : 0;
+
+                    for (let i = 0; i < WAVEFORM_SIZE - samplesPerFrame; i++)
+                        waveform[i] = waveform[i + samplesPerFrame];
+
+                    for (let i = 0; i < samplesPerFrame; i++) {
+                        const idx = WAVEFORM_SIZE - samplesPerFrame + i;
+                        let sample = 0;
+                        if (hasOutput && amplitude > 0) {
+                            if (chState.envelopeEnabled && freq > 0) {
+                                sample = synthesizeEnvelope(
+                                    states.envelope?.shape || 0,
+                                    phases[ch],
+                                    amplitude,
+                                );
+                            } else if (chState.toneEnabled && freq > 0) {
+                                sample =
+                                    phases[ch] < 0.5 ? amplitude : -amplitude;
+                            } else if (chState.noiseEnabled) {
+                                sample =
+                                    (Math.random() * 2 - 1) * amplitude * 0.7;
+                            }
+                        }
+                        waveform[idx] = sample;
+                        phases[ch] = (phases[ch] + phaseIncrement) % 1;
+                    }
+                }
+
+                for (let i = 0; i < WAVEFORM_SIZE; i++) {
+                    waveforms.mono[i] =
+                        (waveforms.A[i] + waveforms.B[i] + waveforms.C[i]) / 3;
+                }
+            }
+
+            function synthesizeEnvelope(shape, phase, amplitude) {
+                let sample;
+                switch (shape & 0x0f) {
+                    case 0:
+                    case 1:
+                    case 2:
+                    case 3:
+                    case 9:
+                        sample = 1.0 - phase * 2.0;
+                        break;
+                    case 4:
+                    case 5:
+                    case 6:
+                    case 7:
+                    case 15:
+                        sample = phase * 2.0 - 1.0;
+                        break;
+                    case 8:
+                        sample = 1.0 - phase * 2.0;
+                        break;
+                    case 10:
+                        sample =
+                            phase < 0.5 ? phase * 4.0 - 1.0 : 3.0 - phase * 4.0;
+                        break;
+                    case 11:
+                        sample = phase < 0.5 ? 1.0 - phase * 4.0 : 1.0;
+                        break;
+                    case 12:
+                        sample = phase * 2.0 - 1.0;
+                        break;
+                    case 13:
+                        sample = phase < 0.5 ? phase * 4.0 - 1.0 : 1.0;
+                        break;
+                    case 14:
+                        sample =
+                            phase < 0.5 ? 1.0 - phase * 4.0 : phase * 4.0 - 3.0;
+                        break;
+                    default:
+                        sample = 0;
+                }
+                return sample * amplitude;
+            }
+
+            function updateSpectrum(states) {
+                for (const spectrum of Object.values(spectrums)) {
+                    for (let i = 0; i < SPECTRUM_BINS; i++)
+                        spectrum[i] *= SPECTRUM_DECAY;
+                }
+
+                const specArrays = [spectrums.A, spectrums.B, spectrums.C];
+                for (let ch = 0; ch < 3; ch++) {
+                    const chState = states.channels[ch];
+                    const spectrum = specArrays[ch];
+                    const hasOutput =
+                        chState.toneEnabled ||
+                        chState.noiseEnabled ||
+                        chState.envelopeEnabled;
+                    const amplitude = chState.amplitude || 0;
+                    if (hasOutput && amplitude > 0) {
+                        const freq = chState.frequency || 0;
+                        if (freq > 0) {
+                            const bin = freqToBin(freq);
+                            spectrum[bin] = Math.max(spectrum[bin], amplitude);
+                        }
+                    }
+                }
+
+                for (let i = 0; i < SPECTRUM_BINS; i++) {
+                    spectrums.combined[i] = Math.max(
+                        spectrums.A[i],
+                        spectrums.B[i],
+                        spectrums.C[i],
+                    );
+                }
+            }
+
+            function freqToBin(freq) {
+                if (freq <= 0) return 0;
+                const octavesAboveC1 = Math.log2(freq / SPECTRUM_BASE_FREQ);
+                return Math.max(
+                    0,
+                    Math.min(
+                        SPECTRUM_BINS - 1,
+                        Math.round(octavesAboveC1 * BINS_PER_OCTAVE),
+                    ),
+                );
+            }
+
+            function drawAllVisualization() {
+                // Only draw if contexts exist
+                if (contexts.oscA)
+                    drawOscilloscope(contexts.oscA, waveforms.A, COLORS.purple);
+                if (contexts.oscB)
+                    drawOscilloscope(contexts.oscB, waveforms.B, COLORS.cyan);
+                if (contexts.oscC)
+                    drawOscilloscope(contexts.oscC, waveforms.C, COLORS.pink);
+                if (contexts.oscMono)
+                    drawOscilloscope(
+                        contexts.oscMono,
+                        waveforms.mono,
+                        COLORS.green,
+                    );
+                if (contexts.specA)
+                    drawSpectrum(contexts.specA, spectrums.A, COLORS.purple);
+                if (contexts.specB)
+                    drawSpectrum(contexts.specB, spectrums.B, COLORS.cyan);
+                if (contexts.specC)
+                    drawSpectrum(contexts.specC, spectrums.C, COLORS.pink);
+                if (contexts.specCombined)
+                    drawSpectrum(
+                        contexts.specCombined,
+                        spectrums.combined,
+                        COLORS.green,
+                    );
+            }
+
+            function drawOscilloscope(ctx, data, color) {
+                if (!ctx) return;
+                const canvas = ctx.canvas;
+                const dpr = window.devicePixelRatio || 1;
+                const w = canvas.width / dpr,
+                    h = canvas.height / dpr;
+                if (w === 0 || h === 0) return;
+
+                ctx.fillStyle = "#0a0a0f";
+                ctx.fillRect(0, 0, w, h);
+
+                ctx.strokeStyle = COLORS.gridLight;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, h / 2);
+                ctx.lineTo(w, h / 2);
+                ctx.stroke();
+                for (let i = 1; i < 4; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo((w * i) / 4, 0);
+                    ctx.lineTo((w * i) / 4, h);
+                    ctx.stroke();
+                }
+
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                const step = w / data.length;
+                for (let i = 0; i < data.length; i++) {
+                    const x = i * step,
+                        y = h / 2 - data[i] * (h / 2) * 0.8;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                ctx.strokeStyle = color + "40";
+                ctx.lineWidth = 6;
+                ctx.stroke();
+            }
+
+            function drawSpectrum(ctx, data, color) {
+                if (!ctx) return;
+                const canvas = ctx.canvas;
+                const dpr = window.devicePixelRatio || 1;
+                const w = canvas.width / dpr,
+                    h = canvas.height / dpr;
+                if (w === 0 || h === 0) return;
+
+                ctx.fillStyle = "#0a0a0f";
+                ctx.fillRect(0, 0, w, h);
+
+                ctx.strokeStyle = COLORS.gridLight;
+                ctx.lineWidth = 1;
+                for (let i = 1; i < 4; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, (h * i) / 4);
+                    ctx.lineTo(w, (h * i) / 4);
+                    ctx.stroke();
+                }
+
+                const barWidth = w / SPECTRUM_BINS - 2;
+                for (let i = 0; i < SPECTRUM_BINS; i++) {
+                    const x = i * (barWidth + 2) + 1;
+                    const barHeight = data[i] * h * 0.9;
+                    const y = h - barHeight;
+                    const gradient = ctx.createLinearGradient(x, h, x, y);
+                    gradient.addColorStop(0, color + "40");
+                    gradient.addColorStop(1, color);
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x, y, barWidth, barHeight);
+                }
+            }
+
+            function updateProgressUI() {
+                if (!wasmPlayer) return;
+                const position = wasmPlayer.position_percentage();
+                const duration = wasmPlayer.metadata.duration_seconds;
+                el.progressBar.value = position * 100;
+                el.currentTime.textContent = formatTime(position * duration);
+            }
+
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, "0")}`;
+            }
+
+            // Start player when page loads
+            initPlayer();
+        </script>
     </body>
 </html>

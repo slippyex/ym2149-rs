@@ -14,6 +14,7 @@ This crate contains comprehensive runnable examples showing how to use the YM214
 | `feature_showcase` | Multiple playbacks, playlists, music states, diagnostics |
 | `demoscene` | Shader-heavy CRT pipeline + synchronized overlays |
 | `playlist_crossfade_example` | Selectable playlist UI with crossfades |
+| `sndh_with_gist_sfx` | Dual YM2149 emulators: SNDH music + GIST sound effects |
 
 ## Examples
 
@@ -82,6 +83,34 @@ Demoscene-style example featuring:
 - `F` - Toggle fullscreen mode
 - `Esc` – Exit the application
 
+### sndh_with_gist_sfx
+Dual YM2149 emulator example demonstrating:
+- **Background music:** SNDH file playback via `Ym2149Playback` (68000 CPU emulation)
+- **Sound effects:** Separate `GistPlayer` instance for GIST .snd files
+- **Independent audio streams:** Music and SFX run on separate YM2149 emulators, mixed by Bevy's audio system
+- **Keyboard-triggered SFX:** Keys 1-9 trigger different sound effects (laser, explosion, gunshot, etc.)
+
+This demonstrates a common game audio pattern: background music on one chip, sound effects on another — just like arcade cabinets with multiple sound chips.
+
+**Run:** `cargo run --example sndh_with_gist_sfx -p bevy_ym2149_examples`
+
+**Controls**
+- `1-9` – Trigger GIST sound effects
+- `SPACE` – Play/Pause music
+- `R` – Restart music
+- `UP/DOWN` – Volume control
+
+**Architecture:**
+```rust
+// Music: via bevy_ym2149 plugin (handles SNDH/68000 emulation)
+let asset_handle = asset_server.load("music/Wings_Of_Death.sndh");
+commands.spawn(Ym2149Playback::from_asset(asset_handle));
+
+// SFX: standalone GistPlayer with custom Bevy audio source
+let gist_player = Arc::new(Mutex::new(GistPlayer::new()));
+// ... register as Bevy Decodable audio source
+```
+
 
 ## Crate Structure
 
@@ -96,9 +125,11 @@ bevy_ym2149_examples/
 │   ├── crossfade_example.rs
 │   ├── advanced_example.rs
 │   ├── feature_showcase.rs
-│   └── demoscene.rs
+│   ├── demoscene.rs
+│   └── sndh_with_gist_sfx.rs
 ├── assets/                       # Shared assets for examples
-│   ├── music/
+│   ├── music/                    # YM/AKS/SNDH music files
+│   ├── sfx/gist/                 # GIST sound effect files (.snd)
 │   ├── fonts/
 │   └── shaders/
 ├── Cargo.toml

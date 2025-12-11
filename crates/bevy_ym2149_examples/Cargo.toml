@@ -21,6 +21,7 @@ bevy_mesh = "0.17"
 bevy_embedded_assets = "0.14"
 ym2149 = { path = "../ym2149-core", version = "0.8" }
 ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer" }
+ym2149_gist_replayer = { package = "ym2149-gist-replayer", path = "../ym2149-gist-replayer" }
 
 [[example]]
 name = "basic_example"
@@ -37,3 +38,7 @@ path = "examples/feature_showcase.rs"
 [[example]]
 name = "demoscene"
 path = "examples/demoscene.rs"
+
+[[example]]
+name = "sndh_with_gist_sfx"
+path = "examples/sndh_with_gist_sfx.rs"
