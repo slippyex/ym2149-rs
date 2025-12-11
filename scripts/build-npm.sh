@@ -3,9 +3,13 @@
 # Build and prepare ym2149-wasm for npm publishing
 #
 # Usage:
-#   ./scripts/build-npm.sh           # Build only
-#   ./scripts/build-npm.sh --publish # Build and publish to npm
-#   ./scripts/build-npm.sh --dry-run # Build and run npm publish --dry-run
+#   ./scripts/build-npm.sh                    # Build only
+#   ./scripts/build-npm.sh --bump patch       # Bump patch version (0.8.0 -> 0.8.1)
+#   ./scripts/build-npm.sh --bump minor       # Bump minor version (0.8.0 -> 0.9.0)
+#   ./scripts/build-npm.sh --bump major       # Bump major version (0.8.0 -> 1.0.0)
+#   ./scripts/build-npm.sh --publish          # Build and publish to npm
+#   ./scripts/build-npm.sh --dry-run          # Build and run npm publish --dry-run
+#   ./scripts/build-npm.sh --bump patch --publish  # Bump + publish
 #
 # Requirements:
 #   - wasm-pack: cargo install wasm-pack
@@ -19,6 +23,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WASM_CRATE="$PROJECT_ROOT/crates/ym2149-wasm"
 PKG_DIR="$WASM_CRATE/pkg"
 NPM_DIR="$PROJECT_ROOT/npm-package"
+CARGO_TOML="$PROJECT_ROOT/Cargo.toml"
 
 # Colors
 RED='\033[0;31m'
@@ -32,6 +37,50 @@ success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
+# Bump version in Cargo.toml
+bump_version() {
+    local bump_type="$1"
+    local current_version
+    current_version=$(grep '^version' "$CARGO_TOML" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+
+    # Parse version components
+    local major minor patch
+    IFS='.' read -r major minor patch <<< "$current_version"
+
+    case "$bump_type" in
+        patch)
+            patch=$((patch + 1))
+            ;;
+        minor)
+            minor=$((minor + 1))
+            patch=0
+            ;;
+        major)
+            major=$((major + 1))
+            minor=0
+            patch=0
+            ;;
+        *)
+            error "Invalid bump type: $bump_type (use: patch, minor, major)"
+            ;;
+    esac
+
+    local new_version="$major.$minor.$patch"
+
+    info "Bumping version: $current_version -> $new_version"
+
+    # Update version in Cargo.toml (workspace version)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS sed requires empty string for -i
+        sed -i '' "s/^version = \"$current_version\"/version = \"$new_version\"/" "$CARGO_TOML"
+    else
+        # Linux sed
+        sed -i "s/^version = \"$current_version\"/version = \"$new_version\"/" "$CARGO_TOML"
+    fi
+
+    success "Updated Cargo.toml to v$new_version"
+}
+
 # Check for wasm-pack
 if ! command -v wasm-pack &> /dev/null; then
     error "wasm-pack not found. Install with: cargo install wasm-pack"
@@ -40,22 +89,40 @@ fi
 # Parse arguments
 PUBLISH=false
 DRY_RUN=false
-for arg in "$@"; do
-    case $arg in
+BUMP=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
         --publish)
             PUBLISH=true
+            shift
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --bump)
+            if [[ -n "${2:-}" ]]; then
+                BUMP="$2"
+                shift 2
+            else
+                error "--bump requires an argument (patch, minor, major)"
+            fi
             ;;
         *)
-            warn "Unknown argument: $arg"
+            warn "Unknown argument: $1"
+            shift
             ;;
     esac
 done
 
+# Bump version if requested
+if [[ -n "$BUMP" ]]; then
+    bump_version "$BUMP"
+fi
+
 # Get version from workspace Cargo.toml
-VERSION=$(grep '^version' "$PROJECT_ROOT/Cargo.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+VERSION=$(grep '^version' "$CARGO_TOML" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 info "Building ym2149-wasm v$VERSION for npm..."
 
 # Step 1: Build WASM with wasm-pack
@@ -147,8 +214,8 @@ cat > "$NPM_DIR/package.json" << EOF
 }
 EOF
 
-# Step 5: Copy README
-cp "$PKG_DIR/README.md" "$NPM_DIR/"
+# Step 5: Copy custom npm README (not the wasm-pack generated one)
+cp "$WASM_CRATE/npm-README.md" "$NPM_DIR/README.md"
 
 # Step 6: Show package contents
 info "Package contents:"
