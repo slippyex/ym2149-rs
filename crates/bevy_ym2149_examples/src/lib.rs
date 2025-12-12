@@ -5,6 +5,7 @@
 
 use bevy::app::PluginGroup;
 use bevy::asset::AssetPlugin;
+use bevy::image::ImagePlugin;
 use bevy::prelude::DefaultPlugins;
 use bevy_embedded_assets::{EmbeddedAssetPlugin, PluginMode};
 
@@ -55,8 +56,10 @@ pub fn embedded_asset_plugin() -> EmbeddedAssetPlugin {
 ///     .run();
 /// ```
 pub fn example_plugins() -> impl PluginGroup {
-    DefaultPlugins.set(AssetPlugin {
-        file_path: ASSET_BASE.into(),
-        ..Default::default()
-    })
+    DefaultPlugins
+        .set(AssetPlugin {
+            file_path: ASSET_BASE.into(),
+            ..Default::default()
+        })
+        .set(ImagePlugin::default_nearest()) // Pixel-perfect rendering for retro graphics
 }

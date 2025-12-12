@@ -22,15 +22,17 @@ use ym2149_gist_replayer::{GistPlayer, GistSound};
 
 // Constants
 const PLAYER_SPEED: f32 = 400.0;
-const PLAYER_SIZE: Vec2 = Vec2::new(40.0, 30.0);
+const PLAYER_SIZE: Vec2 = Vec2::new(48.0, 48.0); // 16x16 sprite scaled 3x
 const BULLET_SPEED: f32 = 600.0;
-const BULLET_SIZE: Vec2 = Vec2::new(4.0, 12.0);
-const ENEMY_SIZE: Vec2 = Vec2::new(32.0, 24.0);
+const BULLET_SIZE: Vec2 = Vec2::new(24.0, 24.0); // 16x16 sprite scaled 1.5x
+const ENEMY_SIZE: Vec2 = Vec2::new(48.0, 48.0); // 16x16 sprite scaled 3x
 const ENEMY_BULLET_SPEED: f32 = 300.0;
-const ENEMY_SPACING: Vec2 = Vec2::new(50.0, 40.0);
+const ENEMY_SPACING: Vec2 = Vec2::new(56.0, 52.0);
 const STARTING_LIVES: u32 = 3;
 const EXTRA_LIFE_SCORE: u32 = 3000;
 const FADE_DURATION: f32 = 2.0;
+const SPRITE_SCALE: f32 = 3.0;
+const ANIM_FPS: f32 = 8.0;
 
 // ============================================================================
 // States & Messages
@@ -165,6 +167,37 @@ struct Sfx {
 #[derive(Resource, Clone)]
 struct GistRes(Arc<Mutex<GistPlayer>>);
 
+/// All sprite sheet assets for the game
+#[derive(Resource)]
+struct SpriteAssets {
+    player_texture: Handle<Image>,
+    player_layout: Handle<TextureAtlasLayout>,
+    booster_texture: Handle<Image>,
+    booster_layout: Handle<TextureAtlasLayout>,
+    enemy_alan_texture: Handle<Image>,
+    enemy_alan_layout: Handle<TextureAtlasLayout>,
+    enemy_bonbon_texture: Handle<Image>,
+    enemy_bonbon_layout: Handle<TextureAtlasLayout>,
+    enemy_lips_texture: Handle<Image>,
+    enemy_lips_layout: Handle<TextureAtlasLayout>,
+    player_bullet_texture: Handle<Image>,
+    player_bullet_layout: Handle<TextureAtlasLayout>,
+    enemy_bullet_texture: Handle<Image>,
+    enemy_bullet_layout: Handle<TextureAtlasLayout>,
+    explosion_texture: Handle<Image>,
+    explosion_layout: Handle<TextureAtlasLayout>,
+    life_icon_texture: Handle<Image>,
+    number_font_texture: Handle<Image>,
+    number_font_layout: Handle<TextureAtlasLayout>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum EnemyType {
+    Alan,
+    BonBon,
+    Lips,
+}
+
 // ============================================================================
 // Components
 // ============================================================================
@@ -184,6 +217,25 @@ struct EnemyBullet;
 struct Enemy {
     points: u32,
 }
+
+/// Animation frame indices (first..=last)
+#[derive(Component)]
+struct AnimationIndices {
+    first: usize,
+    last: usize,
+}
+
+/// Timer for sprite animation
+#[derive(Component, Deref, DerefMut)]
+struct AnimationTimer(Timer);
+
+/// Booster flame attached to player
+#[derive(Component)]
+struct Booster;
+
+/// Explosion effect
+#[derive(Component)]
+struct Explosion;
 
 #[derive(Component)]
 struct Star {
@@ -228,6 +280,27 @@ struct GameEntity;
 
 #[derive(Component)]
 struct CrtQuad;
+
+/// Individual life icon sprite
+#[derive(Component)]
+struct LifeIcon;
+
+/// Individual digit sprite with position index
+#[derive(Component)]
+struct DigitSprite {
+    position: usize,
+}
+
+/// Score type marker for digit sprites
+#[derive(Component, Clone, Copy, PartialEq)]
+enum ScoreType {
+    Score,
+    HighScore,
+}
+
+/// Wave digit sprite marker
+#[derive(Component)]
+struct WaveDigit;
 
 #[derive(Component, Clone, Copy, PartialEq)]
 enum UiMarker {
@@ -425,10 +498,21 @@ fn main() {
                 game_input.in_set(GameSet::Input),
                 music_toggle,
                 crt_toggle,
-                update_ui.run_if(resource_changed::<GameData>),
+                (
+                    update_ui,
+                    update_life_icons,
+                    update_score_digits,
+                    update_wave_digits,
+                )
+                    .run_if(resource_changed::<GameData>),
+                animate_sprites,
+                explosion_update,
             ),
         )
-        .add_systems(Update, (update_crt_material, sync_render_target, music_crossfade))
+        .add_systems(
+            Update,
+            (update_crt_material, sync_render_target, music_crossfade),
+        )
         .run();
 }
 
@@ -442,6 +526,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut images: ResMut<Assets<Image>>,
     mut crt_materials: ResMut<Assets<CrtMaterial>>,
+    mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     server: Res<AssetServer>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) {
@@ -537,6 +622,104 @@ fn setup(
         death: GistSound::load(format!("{dir}/falling.snd")).unwrap(),
     });
 
+    // Load sprite assets
+    let sprite_dir = "Mini Pixel Pack 3";
+    cmd.insert_resource(SpriteAssets {
+        // Player ship: 3 frames (16x16 each)
+        player_texture: server.load(format!(
+            "{sprite_dir}/Player ship/Player_ship (16 x 16).png"
+        )),
+        player_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16),
+            3,
+            1,
+            None,
+            None,
+        )),
+        // Boosters: 2 frames (16x16 each)
+        booster_texture: server.load(format!("{sprite_dir}/Player ship/Boosters (16 x 16).png")),
+        booster_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16),
+            2,
+            1,
+            None,
+            None,
+        )),
+        // Enemy Alan: 6 frames (custom layout - avoid 1px artifact on right)
+        enemy_alan_texture: server.load(format!("{sprite_dir}/Enemies/Alan (16 x 16).png")),
+        enemy_alan_layout: {
+            let mut layout = TextureAtlasLayout::new_empty(UVec2::new(96, 16));
+            for i in 0..6 {
+                layout.add_texture(URect::new(i * 16, 0, i * 16 + 15, 16));
+            }
+            atlas_layouts.add(layout)
+        },
+        // Enemy Bon_Bon: 4 frames (custom layout - last frame has 1px artifact on right)
+        enemy_bonbon_texture: server.load(format!("{sprite_dir}/Enemies/Bon_Bon (16 x 16).png")),
+        enemy_bonbon_layout: {
+            let mut layout = TextureAtlasLayout::new_empty(UVec2::new(64, 16));
+            for i in 0..4 {
+                // Use 15px width to avoid rightmost pixel artifact
+                layout.add_texture(URect::new(i * 16, 0, i * 16 + 15, 16));
+            }
+            atlas_layouts.add(layout)
+        },
+        // Enemy Lips: 5 frames (80px / 16px)
+        enemy_lips_texture: server.load(format!("{sprite_dir}/Enemies/Lips (16 x 16).png")),
+        enemy_lips_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16),
+            5,
+            1,
+            None,
+            None,
+        )),
+        // Player bullet: 2 frames
+        player_bullet_texture: server.load(format!(
+            "{sprite_dir}/Projectiles/Player_beam (16 x 16).png"
+        )),
+        player_bullet_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16),
+            2,
+            1,
+            None,
+            None,
+        )),
+        // Enemy bullet: 3 variants (use first one)
+        enemy_bullet_texture: server.load(format!(
+            "{sprite_dir}/Projectiles/Enemy_projectile (16 x 16).png"
+        )),
+        enemy_bullet_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16),
+            3,
+            1,
+            None,
+            None,
+        )),
+        // Explosion: 5 frames
+        explosion_texture: server.load(format!("{sprite_dir}/Effects/Explosion (16 x 16).png")),
+        explosion_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16),
+            5,
+            1,
+            None,
+            None,
+        )),
+        // Life icon
+        life_icon_texture: server.load(format!(
+            "{sprite_dir}/UI objects/Player_life_icon (16 x 16).png"
+        )),
+        // Number font: 5 columns x 2 rows (digits 0-4 top, 5-9 bottom)
+        number_font_texture: server
+            .load(format!("{sprite_dir}/UI objects/Number_font (8 x 8).png")),
+        number_font_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(8),
+            5,
+            2,
+            None,
+            None,
+        )),
+    });
+
     // Starfield
     let mut rng = SmallRng::from_os_rng();
     for _ in 0..100 {
@@ -561,14 +744,86 @@ fn setup(
 
 fn spawn_ui(cmd: &mut Commands) {
     let ui_elements = [
-        ("SCORE: 0", 24.0, Color::WHITE, Val::Px(15.0), Some(Val::Px(20.0)), None, false, UiMarker::Score),
-        ("HIGH: 0", 24.0, Color::srgb(1.0, 0.8, 0.0), Val::Px(15.0), None, None, false, UiMarker::High),
-        ("LIVES: 3", 24.0, Color::srgb(0.2, 1.0, 0.2), Val::Px(15.0), None, Some(Val::Px(20.0)), false, UiMarker::Lives),
-        ("WAVE 1", 18.0, Color::srgb(0.6, 0.6, 1.0), Val::Px(45.0), Some(Val::Px(20.0)), None, false, UiMarker::Wave),
-        ("GAME OVER\n\nPress R to Restart", 48.0, Color::srgb(1.0, 0.2, 0.2), Val::Percent(45.0), None, None, false, UiMarker::GameOver),
-        ("SPACE SHOOTER", 64.0, Color::srgb(0.2, 0.8, 1.0), Val::Percent(25.0), None, None, true, UiMarker::Title),
-        ("Press ENTER to Start", 32.0, Color::srgb(1.0, 1.0, 0.2), Val::Percent(50.0), None, None, true, UiMarker::PressEnter),
-        ("Music: Mad Max - Lethal Xcess (STe) | C: Toggle CRT", 18.0, Color::srgba(0.7, 0.7, 0.7, 0.9), Val::Percent(65.0), None, None, true, UiMarker::Subtitle),
+        (
+            "",
+            24.0,
+            Color::WHITE,
+            Val::Px(15.0),
+            Some(Val::Px(20.0)),
+            None,
+            false,
+            UiMarker::Score,
+        ), // Placeholder - rendered with sprites
+        (
+            "",
+            24.0,
+            Color::srgb(1.0, 0.8, 0.0),
+            Val::Px(15.0),
+            None,
+            None,
+            false,
+            UiMarker::High,
+        ), // Placeholder - rendered with sprites
+        (
+            "",
+            0.0,
+            Color::NONE,
+            Val::Px(0.0),
+            None,
+            None,
+            false,
+            UiMarker::Lives,
+        ), // Not used anymore
+        (
+            "WAVE 1",
+            18.0,
+            Color::srgb(0.6, 0.6, 1.0),
+            Val::Px(45.0),
+            Some(Val::Px(20.0)),
+            None,
+            false,
+            UiMarker::Wave,
+        ),
+        (
+            "GAME OVER\n\nPress R to Restart",
+            48.0,
+            Color::srgb(1.0, 0.2, 0.2),
+            Val::Percent(45.0),
+            None,
+            None,
+            false,
+            UiMarker::GameOver,
+        ),
+        (
+            "SPACE SHOOTER",
+            64.0,
+            Color::srgb(0.2, 0.8, 1.0),
+            Val::Percent(25.0),
+            None,
+            None,
+            true,
+            UiMarker::Title,
+        ),
+        (
+            "Press ENTER to Start",
+            32.0,
+            Color::srgb(1.0, 1.0, 0.2),
+            Val::Percent(50.0),
+            None,
+            None,
+            true,
+            UiMarker::PressEnter,
+        ),
+        (
+            "Music: Mad Max - Lethal Xcess (STe) | C: Toggle CRT",
+            18.0,
+            Color::srgba(0.7, 0.7, 0.7, 0.9),
+            Val::Percent(65.0),
+            None,
+            None,
+            true,
+            UiMarker::Subtitle,
+        ),
     ];
 
     for (txt, size, color, top, left, right, vis, marker) in ui_elements {
@@ -589,11 +844,18 @@ fn spawn_ui(cmd: &mut Commands) {
         }
         cmd.spawn((
             Text::new(txt),
-            TextFont { font_size: size, ..default() },
+            TextFont {
+                font_size: size,
+                ..default()
+            },
             TextColor(color),
             TextLayout::new_with_justify(bevy::text::Justify::Center),
             node,
-            if vis { Visibility::Visible } else { Visibility::Hidden },
+            if vis {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            },
             marker,
         ));
     }
@@ -603,51 +865,108 @@ fn spawn_ui(cmd: &mut Commands) {
 // Spawning Helpers
 // ============================================================================
 
-fn spawn_player(cmd: &mut Commands, hh: f32) {
+fn spawn_player(cmd: &mut Commands, hh: f32, sprites: &SpriteAssets) {
+    // Spawn player ship (sprite frame controlled by movement: 0=left, 1=center, 2=right)
+    let player_id = cmd
+        .spawn((
+            Sprite::from_atlas_image(
+                sprites.player_texture.clone(),
+                TextureAtlas {
+                    layout: sprites.player_layout.clone(),
+                    index: 1, // Start with center sprite
+                },
+            ),
+            Transform::from_xyz(0.0, -hh + 60.0, 1.0).with_scale(Vec3::splat(SPRITE_SCALE)),
+            Player,
+            GameEntity,
+        ))
+        .id();
+
+    // Spawn booster flame as child of player
     cmd.spawn((
-        Sprite {
-            color: Color::srgb(0.2, 0.8, 0.2),
-            custom_size: Some(PLAYER_SIZE),
-            ..default()
-        },
-        Transform::from_xyz(0.0, -hh + 60.0, 1.0),
-        Player,
-        GameEntity,
+        Sprite::from_atlas_image(
+            sprites.booster_texture.clone(),
+            TextureAtlas {
+                layout: sprites.booster_layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_xyz(0.0, -12.0, -0.1), // Position below ship (in local coords)
+        ChildOf(player_id),
+        Booster,
+        AnimationIndices { first: 0, last: 1 },
+        AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
     ));
 }
 
-fn spawn_enemies(cmd: &mut Commands) {
+fn spawn_enemies(cmd: &mut Commands, sprites: &SpriteAssets) {
     let start_x = -(7.0 * ENEMY_SPACING.x) / 2.0;
-    let rows = [
-        (40, Color::srgb(1.0, 0.2, 0.2)),
-        (30, Color::srgb(1.0, 0.6, 0.2)),
-        (20, Color::srgb(1.0, 1.0, 0.2)),
-        (10, Color::srgb(0.2, 0.6, 1.0)),
+    // Row config: (points, enemy_type)
+    let rows: [(u32, EnemyType); 4] = [
+        (40, EnemyType::Lips),   // Top row - pink lips (hardest)
+        (30, EnemyType::BonBon), // Yellow candy
+        (20, EnemyType::Alan),   // Green alien
+        (10, EnemyType::Alan),   // Bottom row - green alien (easiest)
     ];
-    for (row, (pts, color)) in rows.iter().enumerate() {
+    for (row, (pts, enemy_type)) in rows.iter().enumerate() {
+        let (texture, layout, last_frame) = match enemy_type {
+            EnemyType::Alan => (
+                sprites.enemy_alan_texture.clone(),
+                sprites.enemy_alan_layout.clone(),
+                5,
+            ), // 6 frames
+            EnemyType::BonBon => (
+                sprites.enemy_bonbon_texture.clone(),
+                sprites.enemy_bonbon_layout.clone(),
+                3,
+            ), // 4 frames
+            EnemyType::Lips => (
+                sprites.enemy_lips_texture.clone(),
+                sprites.enemy_lips_layout.clone(),
+                4,
+            ), // 5 frames
+        };
         for col in 0..8 {
             cmd.spawn((
-                Sprite {
-                    color: *color,
-                    custom_size: Some(ENEMY_SIZE),
-                    ..default()
-                },
+                Sprite::from_atlas_image(
+                    texture.clone(),
+                    TextureAtlas {
+                        layout: layout.clone(),
+                        index: 0,
+                    },
+                ),
                 Transform::from_xyz(
                     start_x + col as f32 * ENEMY_SPACING.x,
                     200.0 - row as f32 * ENEMY_SPACING.y,
                     1.0,
-                ),
+                )
+                .with_scale(Vec3::splat(SPRITE_SCALE)),
                 Enemy { points: *pts },
                 GameEntity,
+                AnimationIndices {
+                    first: 0,
+                    last: last_frame,
+                },
+                AnimationTimer(Timer::from_seconds(1.0 / ANIM_FPS, TimerMode::Repeating)),
             ));
         }
     }
 }
 
-fn spawn_fading_text(cmd: &mut Commands, text: &str, duration: f32, color: Color, spawn_enemies: bool) {
+fn spawn_fading_text(
+    cmd: &mut Commands,
+    text: &str,
+    duration: f32,
+    color: Color,
+    spawn_enemies: bool,
+) {
     if spawn_enemies {
         cmd.spawn((
-            Sprite { color: Color::NONE, custom_size: Some(Vec2::ZERO), ..default() },
+            Sprite {
+                color: Color::NONE,
+                custom_size: Some(Vec2::ZERO),
+                ..default()
+            },
             Transform::default(),
             FadingText {
                 timer: Timer::from_seconds(duration, TimerMode::Once),
@@ -659,7 +978,10 @@ fn spawn_fading_text(cmd: &mut Commands, text: &str, duration: f32, color: Color
     }
     cmd.spawn((
         Text::new(text),
-        TextFont { font_size: if spawn_enemies { 72.0 } else { 48.0 }, ..default() },
+        TextFont {
+            font_size: if spawn_enemies { 72.0 } else { 48.0 },
+            ..default()
+        },
         TextColor(color),
         TextLayout::new_with_justify(bevy::text::Justify::Center),
         Node {
@@ -675,6 +997,107 @@ fn spawn_fading_text(cmd: &mut Commands, text: &str, duration: f32, color: Color
             spawn_enemies: false,
         },
     ));
+}
+
+const LIFE_ICON_SCALE: f32 = 2.0;
+const LIFE_ICON_SPACING: f32 = 36.0; // 16 * 2 + 4px gap
+const DIGIT_SCALE: f32 = 3.0;
+const DIGIT_SPACING: f32 = 26.0; // 8 * 3 + 2px gap
+const WAVE_DIGIT_SCALE: f32 = 2.5;
+
+/// Spawn life icon sprites (world-space, top-right corner, right-aligned)
+fn spawn_life_icons(cmd: &mut Commands, sprites: &SpriteAssets, screen: &ScreenSize, lives: u32) {
+    // Position in top-right corner (world space coordinates)
+    let base_x = screen.half_width - 30.0; // Right edge with margin
+    let y = screen.half_height - 30.0; // Top edge with margin
+
+    for i in 0..lives {
+        // Right-aligned: newest lives appear to the left
+        let x = base_x - (i as f32) * LIFE_ICON_SPACING;
+        cmd.spawn((
+            Sprite::from_image(sprites.life_icon_texture.clone()),
+            Transform::from_xyz(x, y, 10.0).with_scale(Vec3::splat(LIFE_ICON_SCALE)),
+            LifeIcon,
+            GameEntity,
+        ));
+    }
+}
+
+/// Get the atlas index for a digit (0-9)
+/// Number font layout: 1-5 in top row (indices 0-4), 6-9,0 in bottom row (indices 5-9)
+fn digit_to_atlas_index(digit: u8) -> usize {
+    if digit == 0 {
+        9 // 0 is at the last position
+    } else {
+        (digit - 1) as usize // 1-9 map to indices 0-8
+    }
+}
+
+/// Spawn score digit sprites (world-space)
+fn spawn_score_digits(
+    cmd: &mut Commands,
+    sprites: &SpriteAssets,
+    screen: &ScreenSize,
+    score_type: ScoreType,
+    value: u32,
+) {
+    // Position based on score type
+    let (base_x, y) = match score_type {
+        ScoreType::Score => (-screen.half_width + 30.0, screen.half_height - 25.0), // Top-left
+        ScoreType::HighScore => (-40.0, screen.half_height - 25.0), // Top-center (offset left to center the digits)
+    };
+
+    // Convert score to digits (pad to 6 digits for consistent display)
+    let digits: Vec<u8> = format!("{:06}", value.min(999999))
+        .chars()
+        .map(|c| c.to_digit(10).unwrap() as u8)
+        .collect();
+
+    for (i, &digit) in digits.iter().enumerate() {
+        let x = base_x + (i as f32) * DIGIT_SPACING;
+        cmd.spawn((
+            Sprite::from_atlas_image(
+                sprites.number_font_texture.clone(),
+                TextureAtlas {
+                    layout: sprites.number_font_layout.clone(),
+                    index: digit_to_atlas_index(digit),
+                },
+            ),
+            Transform::from_xyz(x, y, 10.0).with_scale(Vec3::splat(DIGIT_SCALE)),
+            DigitSprite { position: i },
+            score_type,
+            GameEntity,
+        ));
+    }
+}
+
+/// Spawn wave number digits (world-space, below score on left)
+fn spawn_wave_digits(cmd: &mut Commands, sprites: &SpriteAssets, screen: &ScreenSize, wave: u32) {
+    let base_x = -screen.half_width + 30.0; // Same x as score
+    let y = screen.half_height - 60.0; // Below the score
+    let digit_spacing = 22.0; // 8 * 2.5 + 2px gap
+
+    // Convert wave to 2-digit string (waves 1-99)
+    let digits: Vec<u8> = format!("{:02}", wave.min(99))
+        .chars()
+        .map(|c| c.to_digit(10).unwrap() as u8)
+        .collect();
+
+    for (i, &digit) in digits.iter().enumerate() {
+        let x = base_x + (i as f32) * digit_spacing;
+        cmd.spawn((
+            Sprite::from_atlas_image(
+                sprites.number_font_texture.clone(),
+                TextureAtlas {
+                    layout: sprites.number_font_layout.clone(),
+                    index: digit_to_atlas_index(digit),
+                },
+            ),
+            Transform::from_xyz(x, y, 10.0).with_scale(Vec3::splat(WAVE_DIGIT_SCALE)),
+            WaveDigit,
+            GameEntity,
+        ));
+    }
 }
 
 // ============================================================================
@@ -704,7 +1127,11 @@ fn sync_render_target(
     if let Some(img) = images.get_mut(&rt.0) {
         let (ww, wh) = (screen.width.max(1.0) as u32, screen.height.max(1.0) as u32);
         if img.texture_descriptor.size.width != ww || img.texture_descriptor.size.height != wh {
-            img.resize(Extent3d { width: ww, height: wh, depth_or_array_layers: 1 });
+            img.resize(Extent3d {
+                width: ww,
+                height: wh,
+                depth_or_array_layers: 1,
+            });
         }
     }
     for mut t in crt_q.iter_mut() {
@@ -742,7 +1169,10 @@ fn crt_toggle(kb: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
 
 fn hide_title_ui(mut q: Query<(&mut Visibility, &UiMarker)>) {
     for (mut v, m) in q.iter_mut() {
-        if matches!(m, UiMarker::Title | UiMarker::PressEnter | UiMarker::Subtitle) {
+        if matches!(
+            m,
+            UiMarker::Title | UiMarker::PressEnter | UiMarker::Subtitle
+        ) {
             *v = Visibility::Hidden;
         }
     }
@@ -753,18 +1183,35 @@ fn enter_playing(
     mut gd: ResMut<GameData>,
     mut fade: ResMut<MusicFade>,
     screen: Res<ScreenSize>,
+    sprites: Res<SpriteAssets>,
     mut uiq: Query<(&mut Visibility, &UiMarker)>,
 ) {
     request_subsong(&mut fade, 2);
     gd.reset();
-    spawn_player(&mut cmd, screen.half_height);
-    spawn_fading_text(&mut cmd, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
-    for (mut v, m) in uiq.iter_mut() {
-        *v = if matches!(m, UiMarker::Score | UiMarker::High | UiMarker::Lives | UiMarker::Wave) {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
+    spawn_player(&mut cmd, screen.half_height, &sprites);
+    spawn_fading_text(
+        &mut cmd,
+        "WAVE 1",
+        2.0,
+        Color::srgba(1.0, 1.0, 0.2, 1.0),
+        true,
+    );
+
+    // Spawn sprite-based UI elements
+    spawn_life_icons(&mut cmd, &sprites, &screen, gd.lives);
+    spawn_score_digits(&mut cmd, &sprites, &screen, ScoreType::Score, gd.score);
+    spawn_score_digits(
+        &mut cmd,
+        &sprites,
+        &screen,
+        ScoreType::HighScore,
+        gd.high_score,
+    );
+    spawn_wave_digits(&mut cmd, &sprites, &screen, gd.wave);
+
+    // Hide all text-based UI elements (now all sprite-based)
+    for (mut v, _) in uiq.iter_mut() {
+        *v = Visibility::Hidden;
     }
 }
 
@@ -773,10 +1220,17 @@ fn enter_gameover(
     mut fade: ResMut<MusicFade>,
     mut uiq: Query<(Entity, &mut Visibility, &UiMarker)>,
     eq: Query<(Entity, &Transform), With<Enemy>>,
+    player_bullets: Query<Entity, With<PlayerBullet>>,
+    enemy_bullets: Query<Entity, With<EnemyBullet>>,
     mut rng: Local<Option<SmallRng>>,
 ) {
     let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
     request_subsong(&mut fade, 3);
+
+    // Despawn all projectiles
+    for e in player_bullets.iter().chain(enemy_bullets.iter()) {
+        cmd.entity(e).despawn();
+    }
 
     for (entity, mut v, m) in uiq.iter_mut() {
         if *m == UiMarker::GameOver {
@@ -792,14 +1246,16 @@ fn enter_gameover(
         enemies.swap(i, j);
     }
     for (i, (entity, t)) in enemies.into_iter().enumerate() {
-        cmd.entity(entity).remove::<DivingEnemy>().insert(GameOverEnemy {
-            phase: rng.random_range(0.0..std::f32::consts::TAU),
-            amplitude: rng.random_range(80.0..180.0),
-            frequency: rng.random_range(0.5..1.5),
-            base_pos: t.translation.truncate(),
-            delay: i as f32 * 0.08,
-            started: false,
-        });
+        cmd.entity(entity)
+            .remove::<DivingEnemy>()
+            .insert(GameOverEnemy {
+                phase: rng.random_range(0.0..std::f32::consts::TAU),
+                amplitude: rng.random_range(80.0..180.0),
+                frequency: rng.random_range(0.5..1.5),
+                base_pos: t.translation.truncate(),
+                delay: i as f32 * 0.08,
+                started: false,
+            });
     }
 }
 
@@ -847,7 +1303,13 @@ fn handle_wave_complete(
         gd.wave += 1;
         gd.enemy_direction = 1.0;
         gd.dive_timer = Timer::from_seconds(gd.dive_interval(), TimerMode::Once);
-        spawn_fading_text(&mut cmd, &format!("WAVE {}", gd.wave), 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
+        spawn_fading_text(
+            &mut cmd,
+            &format!("WAVE {}", gd.wave),
+            2.0,
+            Color::srgba(1.0, 1.0, 0.2, 1.0),
+            true,
+        );
     }
 }
 
@@ -858,6 +1320,7 @@ fn handle_player_hit(
     mut ns: ResMut<NextState<GameState>>,
     pq: Query<Entity, With<Player>>,
     screen: Res<ScreenSize>,
+    sprites: Res<SpriteAssets>,
     mut sfx: MessageWriter<PlaySfxMsg>,
 ) {
     for _ in events.read() {
@@ -869,7 +1332,7 @@ fn handle_player_hit(
         if gd.lives == 0 {
             ns.set(GameState::GameOver);
         } else {
-            spawn_player(&mut cmd, screen.half_height);
+            spawn_player(&mut cmd, screen.half_height, &sprites);
         }
     }
 }
@@ -898,7 +1361,13 @@ fn handle_extra_life(
 ) {
     for _ in events.read() {
         gd.lives += 1;
-        spawn_fading_text(&mut cmd, "LIVES +1", 1.0, Color::srgba(0.2, 1.0, 0.2, 1.0), false);
+        spawn_fading_text(
+            &mut cmd,
+            "LIVES +1",
+            1.0,
+            Color::srgba(0.2, 1.0, 0.2, 1.0),
+            false,
+        );
     }
 }
 
@@ -930,6 +1399,7 @@ fn title_anim(time: Res<Time>, mut q: Query<(&mut TextColor, &UiMarker)>) {
 fn fading_text_update(
     mut cmd: Commands,
     time: Res<Time>,
+    sprites: Res<SpriteAssets>,
     mut q: Query<(Entity, &mut FadingText, Option<&mut TextColor>)>,
 ) {
     for (entity, mut ft, color) in q.iter_mut() {
@@ -940,7 +1410,7 @@ fn fading_text_update(
         if ft.timer.is_finished() {
             cmd.entity(entity).despawn();
             if ft.spawn_enemies {
-                spawn_enemies(&mut cmd);
+                spawn_enemies(&mut cmd, &sprites);
             }
         }
     }
@@ -949,13 +1419,25 @@ fn fading_text_update(
 fn player_movement(
     kb: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut q: Query<&mut Transform, With<Player>>,
+    mut q: Query<(&mut Transform, &mut Sprite), With<Player>>,
     screen: Res<ScreenSize>,
 ) {
-    let Ok(mut t) = q.single_mut() else { return };
+    let Ok((mut t, mut sprite)) = q.single_mut() else {
+        return;
+    };
     let hw = screen.half_width - PLAYER_SIZE.x / 2.0;
     let dir = kb.pressed(KeyCode::ArrowRight) as i32 - kb.pressed(KeyCode::ArrowLeft) as i32;
-    t.translation.x = (t.translation.x + dir as f32 * PLAYER_SPEED * time.delta_secs()).clamp(-hw, hw);
+    t.translation.x =
+        (t.translation.x + dir as f32 * PLAYER_SPEED * time.delta_secs()).clamp(-hw, hw);
+
+    // Update sprite based on movement direction: 0=left, 1=center, 2=right
+    if let Some(atlas) = &mut sprite.texture_atlas {
+        atlas.index = match dir {
+            -1 => 0, // Moving left
+            1 => 2,  // Moving right
+            _ => 1,  // Standing still (center)
+        };
+    }
 }
 
 fn player_shooting(
@@ -964,6 +1446,7 @@ fn player_shooting(
     time: Res<Time>,
     mut gd: ResMut<GameData>,
     pq: Query<&Transform, With<Player>>,
+    sprites: Res<SpriteAssets>,
     mut sfx: MessageWriter<PlaySfxMsg>,
 ) {
     gd.shoot_timer.tick(time.delta());
@@ -972,14 +1455,23 @@ fn player_shooting(
         && let Ok(pt) = pq.single()
     {
         cmd.spawn((
-            Sprite {
-                color: Color::srgb(1.0, 1.0, 0.2),
-                custom_size: Some(BULLET_SIZE),
-                ..default()
-            },
-            Transform::from_xyz(pt.translation.x, pt.translation.y + PLAYER_SIZE.y / 2.0, 1.0),
+            Sprite::from_atlas_image(
+                sprites.player_bullet_texture.clone(),
+                TextureAtlas {
+                    layout: sprites.player_bullet_layout.clone(),
+                    index: 0,
+                },
+            ),
+            Transform::from_xyz(
+                pt.translation.x,
+                pt.translation.y + PLAYER_SIZE.y / 2.0,
+                1.0,
+            )
+            .with_scale(Vec3::splat(SPRITE_SCALE * 0.5)),
             PlayerBullet,
             GameEntity,
+            AnimationIndices { first: 0, last: 1 },
+            AnimationTimer(Timer::from_seconds(0.05, TimerMode::Repeating)),
         ));
         sfx.write(PlaySfxMsg(SfxType::Laser));
         gd.shoot_timer = Timer::from_seconds(0.25, TimerMode::Once);
@@ -1034,6 +1526,7 @@ fn enemy_shooting(
     mut cmd: Commands,
     time: Res<Time>,
     mut gd: ResMut<GameData>,
+    sprites: Res<SpriteAssets>,
     q: Query<&Transform, With<Enemy>>,
     mut rng: Local<Option<SmallRng>>,
 ) {
@@ -1043,13 +1536,18 @@ fn enemy_shooting(
         let enemies: Vec<_> = q.iter().collect();
         if !enemies.is_empty() {
             let t = enemies[rng.random_range(0..enemies.len())];
+            // Pick a random bullet variant (0, 1, or 2)
+            let bullet_idx = rng.random_range(0..3);
             cmd.spawn((
-                Sprite {
-                    color: Color::srgb(1.0, 0.3, 0.3),
-                    custom_size: Some(BULLET_SIZE),
-                    ..default()
-                },
-                Transform::from_xyz(t.translation.x, t.translation.y - ENEMY_SIZE.y / 2.0, 1.0),
+                Sprite::from_atlas_image(
+                    sprites.enemy_bullet_texture.clone(),
+                    TextureAtlas {
+                        layout: sprites.enemy_bullet_layout.clone(),
+                        index: bullet_idx,
+                    },
+                ),
+                Transform::from_xyz(t.translation.x, t.translation.y - ENEMY_SIZE.y / 2.0, 1.0)
+                    .with_scale(Vec3::splat(SPRITE_SCALE * 0.5)),
                 EnemyBullet,
                 GameEntity,
             ));
@@ -1083,7 +1581,10 @@ fn initiate_dives(
         if candidates.is_empty() {
             return;
         }
-        for _ in 0..(max - current).min(1 + gd.wave as usize / 3).min(candidates.len()) {
+        for _ in 0..(max - current)
+            .min(1 + gd.wave as usize / 3)
+            .min(candidates.len())
+        {
             let (e, t) = candidates[rng.random_range(0..candidates.len())];
             cmd.entity(e).insert(DivingEnemy {
                 target_x: pt.translation.x + rng.random_range(-50.0..50.0),
@@ -1147,6 +1648,7 @@ fn collisions(
     eq: Query<(Entity, &Transform, &Enemy)>,
     pq: Query<&Transform, With<Player>>,
     dq: Query<(Entity, &Transform), With<DivingEnemy>>,
+    sprites: Res<SpriteAssets>,
     mut enemy_killed: MessageWriter<EnemyKilledMsg>,
     mut player_hit: MessageWriter<PlayerHitMsg>,
 ) {
@@ -1157,6 +1659,8 @@ fn collisions(
             if bp.distance(et.translation.truncate()) < BULLET_SIZE.y / 2.0 + ENEMY_SIZE.x / 2.0 {
                 cmd.entity(be).despawn();
                 cmd.entity(ee).despawn();
+                // Spawn explosion at enemy position
+                spawn_explosion(&mut cmd, et.translation, &sprites);
                 enemy_killed.write(EnemyKilledMsg(enemy.points));
                 break;
             }
@@ -1178,10 +1682,29 @@ fn collisions(
     for (de, dt) in dq.iter() {
         if dt.translation.truncate().distance(pp) < ENEMY_SIZE.x / 2.0 + PLAYER_SIZE.x / 2.0 {
             cmd.entity(de).despawn();
+            // Spawn explosion when diving enemy hits player
+            spawn_explosion(&mut cmd, dt.translation, &sprites);
             player_hit.write(PlayerHitMsg);
             return;
         }
     }
+}
+
+fn spawn_explosion(cmd: &mut Commands, pos: Vec3, sprites: &SpriteAssets) {
+    cmd.spawn((
+        Sprite::from_atlas_image(
+            sprites.explosion_texture.clone(),
+            TextureAtlas {
+                layout: sprites.explosion_layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_translation(pos).with_scale(Vec3::splat(SPRITE_SCALE)),
+        Explosion,
+        GameEntity,
+        AnimationIndices { first: 0, last: 4 },
+        AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
+    ));
 }
 
 fn check_wave_complete(
@@ -1191,6 +1714,48 @@ fn check_wave_complete(
 ) {
     if eq.is_empty() && aq.is_empty() {
         events.write(WaveCompleteMsg);
+    }
+}
+
+// ============================================================================
+// Animation Systems
+// ============================================================================
+
+/// Animate all sprites with AnimationIndices and AnimationTimer components
+fn animate_sprites(
+    time: Res<Time>,
+    mut q: Query<(&AnimationIndices, &mut AnimationTimer, &mut Sprite)>,
+) {
+    for (indices, mut timer, mut sprite) in q.iter_mut() {
+        timer.tick(time.delta());
+        if timer.just_finished() {
+            if let Some(atlas) = &mut sprite.texture_atlas {
+                atlas.index = if atlas.index >= indices.last {
+                    indices.first
+                } else {
+                    atlas.index + 1
+                };
+            }
+        }
+    }
+}
+
+/// Update explosions - despawn when animation completes one cycle
+fn explosion_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut q: Query<(Entity, &AnimationIndices, &mut AnimationTimer, &Sprite), With<Explosion>>,
+) {
+    for (entity, indices, mut timer, sprite) in q.iter_mut() {
+        timer.tick(time.delta());
+        if timer.just_finished() {
+            if let Some(atlas) = &sprite.texture_atlas {
+                // If we've reached the last frame, despawn the explosion
+                if atlas.index >= indices.last {
+                    cmd.entity(entity).despawn();
+                }
+            }
+        }
     }
 }
 
@@ -1210,14 +1775,77 @@ fn starfield(time: Res<Time>, mut q: Query<(&mut Transform, &Star)>, screen: Res
 
 fn update_ui(gd: Res<GameData>, mut q: Query<(&mut Text, &UiMarker)>) {
     for (mut t, m) in q.iter_mut() {
-        t.0 = match m {
-            UiMarker::Score => format!("SCORE: {}", gd.score),
-            UiMarker::High => format!("HIGH: {}", gd.high_score),
-            UiMarker::Lives => format!("LIVES: {}", gd.lives),
-            UiMarker::Wave => format!("WAVE {}", gd.wave),
-            _ => continue,
-        };
+        // Only update Wave text - Score/High/Lives are sprite-based now
+        if *m == UiMarker::Wave {
+            t.0 = format!("WAVE {}", gd.wave);
+        }
     }
+}
+
+/// Update life icon sprites when lives count changes
+fn update_life_icons(
+    mut cmd: Commands,
+    gd: Res<GameData>,
+    sprites: Res<SpriteAssets>,
+    screen: Res<ScreenSize>,
+    life_icons: Query<Entity, With<LifeIcon>>,
+) {
+    let current_count = life_icons.iter().count() as u32;
+
+    if current_count != gd.lives {
+        // Despawn all existing life icons
+        for entity in life_icons.iter() {
+            cmd.entity(entity).despawn();
+        }
+        // Respawn with correct count
+        spawn_life_icons(&mut cmd, &sprites, &screen, gd.lives);
+    }
+}
+
+/// Update score digit sprites when score changes
+fn update_score_digits(
+    gd: Res<GameData>,
+    mut score_digits: Query<(&mut Sprite, &DigitSprite, &ScoreType)>,
+) {
+    // Get score and high_score as 6-digit strings
+    let score_str = format!("{:06}", gd.score.min(999999));
+    let high_str = format!("{:06}", gd.high_score.min(999999));
+
+    for (mut sprite, digit_sprite, score_type) in score_digits.iter_mut() {
+        let value_str = match score_type {
+            ScoreType::Score => &score_str,
+            ScoreType::HighScore => &high_str,
+        };
+
+        if let Some(digit_char) = value_str.chars().nth(digit_sprite.position) {
+            if let Some(atlas) = &mut sprite.texture_atlas {
+                let digit = digit_char.to_digit(10).unwrap_or(0) as u8;
+                atlas.index = digit_to_atlas_index(digit);
+            }
+        }
+    }
+}
+
+/// Update wave digit sprites when wave changes
+fn update_wave_digits(
+    mut cmd: Commands,
+    gd: Res<GameData>,
+    sprites: Res<SpriteAssets>,
+    screen: Res<ScreenSize>,
+    wave_digits: Query<Entity, With<WaveDigit>>,
+) {
+    // Respawn wave digits when wave changes
+    // (simpler than tracking individual digit positions for 2 digits)
+    let current_digits: Vec<_> = wave_digits.iter().collect();
+    if current_digits.len() != 2 {
+        return; // Not yet spawned or something weird
+    }
+
+    // Despawn and respawn on wave change
+    for entity in current_digits {
+        cmd.entity(entity).despawn();
+    }
+    spawn_wave_digits(&mut cmd, &sprites, &screen, gd.wave);
 }
 
 fn game_input(
@@ -1231,7 +1859,11 @@ fn game_input(
     enemy_bullets: Query<Entity, With<EnemyBullet>>,
     pq: Query<Entity, With<Player>>,
     aq: Query<Entity, With<FadingText>>,
+    life_icons: Query<Entity, With<LifeIcon>>,
+    digit_sprites: Query<Entity, With<DigitSprite>>,
+    wave_digits: Query<Entity, With<WaveDigit>>,
     screen: Res<ScreenSize>,
+    sprites: Res<SpriteAssets>,
     mut fade: ResMut<MusicFade>,
 ) {
     if kb.just_pressed(KeyCode::KeyR) {
@@ -1239,14 +1871,39 @@ fn game_input(
             .iter()
             .chain(player_bullets.iter())
             .chain(enemy_bullets.iter())
-            .chain(pq.iter())
             .chain(aq.iter())
+            .chain(life_icons.iter())
+            .chain(digit_sprites.iter())
+            .chain(wave_digits.iter())
         {
             cmd.entity(e).despawn();
         }
+        // Player has child booster, so despawn recursively
+        for e in pq.iter() {
+            cmd.entity(e).despawn();
+        }
         gd.reset();
-        spawn_player(&mut cmd, screen.half_height);
-        spawn_fading_text(&mut cmd, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
+        spawn_player(&mut cmd, screen.half_height, &sprites);
+        spawn_fading_text(
+            &mut cmd,
+            "WAVE 1",
+            2.0,
+            Color::srgba(1.0, 1.0, 0.2, 1.0),
+            true,
+        );
+
+        // Respawn sprite UI
+        spawn_life_icons(&mut cmd, &sprites, &screen, gd.lives);
+        spawn_score_digits(&mut cmd, &sprites, &screen, ScoreType::Score, gd.score);
+        spawn_score_digits(
+            &mut cmd,
+            &sprites,
+            &screen,
+            ScoreType::HighScore,
+            gd.high_score,
+        );
+        spawn_wave_digits(&mut cmd, &sprites, &screen, gd.wave);
+
         request_subsong(&mut fade, 2);
         if *state.get() == GameState::GameOver {
             ns.set(GameState::Playing);
@@ -1279,7 +1936,11 @@ fn request_subsong(fade: &mut MusicFade, subsong: usize) {
     fade.timer = 0.0;
 }
 
-fn music_crossfade(time: Res<Time>, mut fade: ResMut<MusicFade>, mut q: Query<&mut Ym2149Playback>) {
+fn music_crossfade(
+    time: Res<Time>,
+    mut fade: ResMut<MusicFade>,
+    mut q: Query<&mut Ym2149Playback>,
+) {
     if fade.phase == FadePhase::Idle {
         return;
     }
