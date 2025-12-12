@@ -1588,6 +1588,7 @@ dependencies = [
  "bevy_sprite",
  "bevy_ym2149",
  "bevy_ym2149_viz",
+ "rand",
  "ym2149",
  "ym2149-gist-replayer",
  "ym2149-ym-replayer",
