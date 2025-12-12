@@ -15,7 +15,8 @@ use bevy::window::PrimaryWindow;
 use bevy_mesh::Mesh2d;
 use bevy_ym2149::{Ym2149Playback, Ym2149Plugin};
 use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins};
-use rand::Rng;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use std::sync::{Arc, Mutex};
 use ym2149_gist_replayer::{GistPlayer, GistSound};
 
@@ -28,8 +29,12 @@ const ENEMY_SIZE: Vec2 = Vec2::new(32.0, 24.0);
 const ENEMY_BULLET_SPEED: f32 = 300.0;
 const ENEMY_SPACING: Vec2 = Vec2::new(50.0, 40.0);
 const STARTING_LIVES: u32 = 3;
-const DIVE_SPEED: f32 = 250.0;
-const WAVE_ANNOUNCE_DURATION: f32 = 2.0;
+const EXTRA_LIFE_SCORE: u32 = 3000;
+const FADE_DURATION: f32 = 2.0;
+
+// ============================================================================
+// States & Messages
+// ============================================================================
 
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 enum GameState {
@@ -39,7 +44,6 @@ enum GameState {
     GameOver,
 }
 
-// Messages for decoupled ECS communication
 #[derive(bevy::ecs::message::Message)]
 struct PlaySfxMsg(SfxType);
 #[derive(bevy::ecs::message::Message)]
@@ -58,7 +62,29 @@ enum SfxType {
     Death,
 }
 
-const EXTRA_LIFE_SCORE: u32 = 3000;
+// ============================================================================
+// Resources
+// ============================================================================
+
+/// Cached window dimensions - updated on resize, avoids per-frame Window queries
+#[derive(Resource)]
+struct ScreenSize {
+    width: f32,
+    height: f32,
+    half_width: f32,
+    half_height: f32,
+}
+
+impl ScreenSize {
+    fn from_window(w: &Window) -> Self {
+        Self {
+            width: w.width(),
+            height: w.height(),
+            half_width: w.width() / 2.0,
+            half_height: w.height() / 2.0,
+        }
+    }
+}
 
 #[derive(Resource)]
 struct GameData {
@@ -66,33 +92,30 @@ struct GameData {
     high_score: u32,
     lives: u32,
     wave: u32,
-    shoot_timer: f32,
-    enemy_shoot_timer: f32,
+    shoot_timer: Timer,
+    enemy_shoot_timer: Timer,
     enemy_direction: f32,
-    dive_timer: f32,
+    dive_timer: Timer,
     next_extra_life: u32,
 }
 
-impl Default for GameData {
-    fn default() -> Self {
+impl GameData {
+    fn new() -> Self {
         Self {
-            score: 0,
-            high_score: 0,
             lives: STARTING_LIVES,
             wave: 1,
-            shoot_timer: 0.0,
-            enemy_shoot_timer: 1.5,
             enemy_direction: 1.0,
-            dive_timer: 3.0,
             next_extra_life: EXTRA_LIFE_SCORE,
+            shoot_timer: Timer::from_seconds(0.0, TimerMode::Once),
+            enemy_shoot_timer: Timer::from_seconds(1.5, TimerMode::Once),
+            dive_timer: Timer::from_seconds(3.0, TimerMode::Once),
+            score: 0,
+            high_score: 0,
         }
     }
-}
-
-impl GameData {
     fn reset(&mut self) {
         let hs = self.high_score;
-        *self = Self::default();
+        *self = Self::new();
         self.high_score = hs;
     }
     fn dive_interval(&self) -> f32 {
@@ -106,38 +129,105 @@ impl GameData {
     }
 }
 
+#[derive(Resource, Default)]
+struct MusicFade {
+    target_subsong: Option<usize>,
+    phase: FadePhase,
+    timer: f32,
+}
+
+#[derive(Default, Clone, Copy, PartialEq)]
+enum FadePhase {
+    #[default]
+    Idle,
+    FadeOut,
+    FadeIn,
+}
+
+#[derive(Resource)]
+struct CrtState {
+    enabled: bool,
+}
+
+#[derive(Resource)]
+struct CrtMaterialHandle(Handle<CrtMaterial>);
+
+#[derive(Resource)]
+struct SceneRenderTarget(Handle<Image>);
+
+#[derive(Resource)]
+struct Sfx {
+    laser: GistSound,
+    explode: GistSound,
+    death: GistSound,
+}
+
+#[derive(Resource, Clone)]
+struct GistRes(Arc<Mutex<GistPlayer>>);
+
+// ============================================================================
 // Components
+// ============================================================================
+
 #[derive(Component)]
 struct Player;
+
+/// Marker: bullet fired by player
 #[derive(Component)]
-struct Bullet {
-    from_player: bool,
-}
+struct PlayerBullet;
+
+/// Marker: bullet fired by enemy
+#[derive(Component)]
+struct EnemyBullet;
+
 #[derive(Component)]
 struct Enemy {
     points: u32,
 }
+
 #[derive(Component)]
 struct Star {
     speed: f32,
 }
+
 #[derive(Component)]
 struct DivingEnemy {
     target_x: f32,
     returning: bool,
     start_y: f32,
     original_x: f32,
+    progress: f32,
+    amplitude: f32,
+    curve_dir: f32,
 }
+
 #[derive(Component)]
-struct WaveAnnouncement {
+struct GameOverEnemy {
+    phase: f32,
+    amplitude: f32,
+    frequency: f32,
+    base_pos: Vec2,
+    delay: f32,
+    started: bool,
+}
+
+#[derive(Component)]
+struct GameOverUi {
+    base_top: f32,
+}
+
+#[derive(Component)]
+struct FadingText {
     timer: Timer,
+    color: Color,
+    spawn_enemies: bool,
 }
+
 #[derive(Component)]
-struct ExtraLifeNotification {
-    timer: Timer,
-}
+struct GameEntity;
+
 #[derive(Component)]
-struct GameEntity; // Marker for game entities (rendered to offscreen target)
+struct CrtQuad;
 
 #[derive(Component, Clone, Copy, PartialEq)]
 enum UiMarker {
@@ -151,7 +241,10 @@ enum UiMarker {
     Subtitle,
 }
 
+// ============================================================================
 // CRT Material
+// ============================================================================
+
 #[derive(AsBindGroup, TypePath, Debug, Clone, Asset)]
 struct CrtMaterial {
     #[texture(0)]
@@ -175,29 +268,17 @@ struct CrtParams {
     crt_enabled: u32,
 }
 
-#[derive(Resource)]
-struct CrtState {
-    enabled: bool,
-}
-#[derive(Resource)]
-struct CrtMaterialHandle(Handle<CrtMaterial>);
-#[derive(Resource)]
-struct SceneRenderTarget(Handle<Image>);
-#[derive(Component)]
-struct CrtQuad;
-
-// Audio resources
-#[derive(Resource)]
-struct Sfx {
-    laser: GistSound,
-    explode: GistSound,
-    death: GistSound,
-}
-#[derive(Resource, Clone)]
-struct GistRes(Arc<Mutex<GistPlayer>>);
+// ============================================================================
+// Audio
+// ============================================================================
 
 #[derive(Asset, TypePath, Clone)]
 struct GistAudio {
+    player: Arc<Mutex<GistPlayer>>,
+    volume: f32,
+}
+
+struct GistDec {
     player: Arc<Mutex<GistPlayer>>,
     volume: f32,
 }
@@ -213,16 +294,13 @@ impl Decodable for GistAudio {
     }
 }
 
-struct GistDec {
-    player: Arc<Mutex<GistPlayer>>,
-    volume: f32,
-}
 impl Iterator for GistDec {
     type Item = f32;
     fn next(&mut self) -> Option<f32> {
         Some(self.player.lock().unwrap().generate_samples(1)[0] * self.volume)
     }
 }
+
 impl Source for GistDec {
     fn current_frame_len(&self) -> Option<usize> {
         None
@@ -241,6 +319,23 @@ impl Source for GistDec {
     }
 }
 
+// ============================================================================
+// System Sets for Ordering
+// ============================================================================
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+enum GameSet {
+    Input,
+    Movement,
+    Collision,
+    Spawn,
+    Cleanup,
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
 fn main() {
     App::new()
         .add_plugins((
@@ -252,87 +347,94 @@ fn main() {
         .init_asset::<GistAudio>()
         .add_audio_source::<GistAudio>()
         .init_state::<GameState>()
-        .init_resource::<GameData>()
+        .insert_resource(GameData::new())
         .insert_resource(CrtState { enabled: true })
+        .insert_resource(MusicFade::default())
         .add_message::<PlaySfxMsg>()
         .add_message::<WaveCompleteMsg>()
         .add_message::<PlayerHitMsg>()
         .add_message::<EnemyKilledMsg>()
         .add_message::<ExtraLifeMsg>()
+        // Configure system ordering
+        .configure_sets(
+            Update,
+            (
+                GameSet::Input,
+                GameSet::Movement,
+                GameSet::Collision,
+                GameSet::Spawn,
+                GameSet::Cleanup,
+            )
+                .chain(),
+        )
         .add_systems(Startup, setup)
-        // Title
+        .add_systems(Update, update_screen_size)
+        // Title screen
         .add_systems(
             Update,
-            (title_input, starfield, title_anim).run_if(in_state(GameState::TitleScreen)),
+            (title_input.in_set(GameSet::Input), title_anim)
+                .run_if(in_state(GameState::TitleScreen)),
         )
         .add_systems(
             OnEnter(GameState::TitleScreen),
-            |mut q: Query<&mut Ym2149Playback>| {
-                if let Ok(mut p) = q.single_mut() {
-                    p.set_subsong(1);
-                    p.play();
-                }
-            },
+            |mut fade: ResMut<MusicFade>| request_subsong(&mut fade, 1),
         )
         .add_systems(OnExit(GameState::TitleScreen), hide_title_ui)
-        // Playing
+        // Playing state
+        .add_systems(OnEnter(GameState::Playing), enter_playing)
         .add_systems(
             Update,
             (
-                player_movement,
-                player_shooting,
-                bullet_movement,
-                enemy_formation_movement,
-                enemy_shooting,
-                diving_movement,
-                initiate_dives,
-                wave_announcement_update,
-                bullet_enemy_collision,
-                bullet_player_collision,
+                (player_movement, player_shooting).in_set(GameSet::Input),
+                (
+                    bullet_movement,
+                    enemy_formation_movement,
+                    diving_movement,
+                    fading_text_update,
+                )
+                    .in_set(GameSet::Movement),
+                collisions.in_set(GameSet::Collision),
+                (enemy_shooting, initiate_dives, check_wave_complete).in_set(GameSet::Spawn),
             )
                 .run_if(in_state(GameState::Playing)),
         )
         .add_systems(
             Update,
             (
-                diving_player_collision,
-                check_wave_complete,
-                update_ui,
-                starfield,
-                game_input,
-                music_toggle,
-                crt_toggle,
                 handle_sfx_events,
                 handle_wave_complete,
                 handle_player_hit,
                 handle_enemy_killed,
                 handle_extra_life,
-                extra_life_notification_update,
             )
+                .in_set(GameSet::Cleanup)
                 .run_if(in_state(GameState::Playing)),
         )
-        .add_systems(OnEnter(GameState::Playing), enter_playing)
-        // Game Over
-        .add_systems(
-            Update,
-            (game_input, update_ui, starfield, music_toggle, crt_toggle)
-                .run_if(in_state(GameState::GameOver)),
-        )
+        // Game over state
         .add_systems(OnEnter(GameState::GameOver), enter_gameover)
         .add_systems(
-            OnExit(GameState::GameOver),
-            |mut q: Query<(&mut Visibility, &UiMarker)>| {
-                for (mut v, m) in q.iter_mut() {
-                    if *m == UiMarker::GameOver {
-                        *v = Visibility::Hidden;
-                    }
-                }
-            },
+            Update,
+            (gameover_enemy_movement, gameover_ui_animation).run_if(in_state(GameState::GameOver)),
         )
-        // CRT update (always running)
-        .add_systems(Update, (update_crt_material, sync_render_target))
+        .add_systems(OnExit(GameState::GameOver), exit_gameover)
+        // Global systems (all states)
+        .add_systems(
+            Update,
+            (
+                starfield,
+                game_input.in_set(GameSet::Input),
+                music_toggle,
+                crt_toggle,
+                update_ui.run_if(resource_changed::<GameData>),
+            ),
+        )
+        .add_systems(Update, (update_crt_material, sync_render_target, music_crossfade))
         .run();
 }
+
+// ============================================================================
+// Setup
+// ============================================================================
 
 fn setup(
     mut cmd: Commands,
@@ -341,19 +443,21 @@ fn setup(
     mut images: ResMut<Assets<Image>>,
     mut crt_materials: ResMut<Assets<CrtMaterial>>,
     server: Res<AssetServer>,
-    wq: Query<&Window, With<PrimaryWindow>>,
+    window: Single<&Window, With<PrimaryWindow>>,
 ) {
-    let w = wq.single().unwrap();
-    let (ww, wh) = (w.width(), w.height());
+    let (ww, wh) = (window.width(), window.height());
     let (hw, hh) = (ww / 2.0, wh / 2.0);
 
-    // Create offscreen render target
+    // Cache screen size
+    cmd.insert_resource(ScreenSize::from_window(&window));
+
+    // Render target for CRT effect
     let extent = Extent3d {
         width: ww.max(1.0) as u32,
         height: wh.max(1.0) as u32,
         depth_or_array_layers: 1,
     };
-    let mut render_target_image = Image {
+    let mut rt_img = Image {
         texture_descriptor: TextureDescriptor {
             label: Some("game_scene"),
             size: extent,
@@ -368,11 +472,11 @@ fn setup(
         },
         ..default()
     };
-    render_target_image.resize(extent);
-    let render_target = images.add(render_target_image);
+    rt_img.resize(extent);
+    let render_target = images.add(rt_img);
     cmd.insert_resource(SceneRenderTarget(render_target.clone()));
 
-    // Game camera (renders to texture)
+    // Cameras: game renders to texture, display camera shows CRT effect
     cmd.spawn((
         Camera2d,
         Camera {
@@ -383,8 +487,6 @@ fn setup(
         },
         Name::new("GameCamera"),
     ));
-
-    // Display camera (renders CRT quad to screen)
     cmd.spawn((
         Camera2d,
         Camera {
@@ -396,29 +498,29 @@ fn setup(
         Name::new("DisplayCamera"),
     ));
 
-    // CRT quad
-    let quad_mesh = meshes.add(Mesh::from(Rectangle::new(2.0, 2.0)));
+    // CRT fullscreen quad
     let crt_mat = crt_materials.add(CrtMaterial {
-        scene_texture: render_target.clone(),
+        scene_texture: render_target,
         params: CrtParams {
-            time: 0.0,
             width: ww,
             height: wh,
             crt_enabled: 1,
+            ..default()
         },
     });
     cmd.insert_resource(CrtMaterialHandle(crt_mat.clone()));
     cmd.spawn((
-        Mesh2d(quad_mesh),
+        Mesh2d(meshes.add(Mesh::from(Rectangle::new(2.0, 2.0)))),
         MeshMaterial2d(crt_mat),
         Transform::from_scale(Vec3::new(hw, hh, 1.0)),
         CrtQuad,
-        Name::new("CrtQuad"),
     ));
 
     // Music
     let mut playback = Ym2149Playback::from_asset(server.load("sndh/Lethal_Xcess_(STe).sndh"));
     playback.set_volume(1.0);
+    playback.set_subsong(1);
+    playback.play();
     cmd.spawn(playback);
 
     // SFX
@@ -435,8 +537,8 @@ fn setup(
         death: GistSound::load(format!("{dir}/falling.snd")).unwrap(),
     });
 
-    // Starfield (rendered to game camera)
-    let mut rng = rand::rng();
+    // Starfield
+    let mut rng = SmallRng::from_os_rng();
     for _ in 0..100 {
         let b = rng.random_range(0.3..1.0);
         cmd.spawn((
@@ -453,152 +555,62 @@ fn setup(
         ));
     }
 
-    // Game UI (hidden initially)
-    spawn_text(
-        &mut cmd,
-        "SCORE: 0",
-        24.0,
-        Color::WHITE,
-        Val::Px(15.0),
-        Some(Val::Px(20.0)),
-        None,
-        false,
-        UiMarker::Score,
-    );
-    spawn_text(
-        &mut cmd,
-        "HIGH: 0",
-        24.0,
-        Color::srgb(1.0, 0.8, 0.0),
-        Val::Px(15.0),
-        None,
-        None,
-        false,
-        UiMarker::High,
-    );
-    spawn_text(
-        &mut cmd,
-        "LIVES: 3",
-        24.0,
-        Color::srgb(0.2, 1.0, 0.2),
-        Val::Px(15.0),
-        None,
-        Some(Val::Px(20.0)),
-        false,
-        UiMarker::Lives,
-    );
-    spawn_text(
-        &mut cmd,
-        "WAVE 1",
-        18.0,
-        Color::srgb(0.6, 0.6, 1.0),
-        Val::Px(45.0),
-        Some(Val::Px(20.0)),
-        None,
-        false,
-        UiMarker::Wave,
-    );
-    spawn_text(
-        &mut cmd,
-        "GAME OVER\n\nPress R to Restart",
-        48.0,
-        Color::srgb(1.0, 0.2, 0.2),
-        Val::Percent(45.0),
-        None,
-        None,
-        false,
-        UiMarker::GameOver,
-    );
-
-    // Title UI (visible)
-    spawn_text(
-        &mut cmd,
-        "SPACE SHOOTER",
-        64.0,
-        Color::srgb(0.2, 0.8, 1.0),
-        Val::Percent(25.0),
-        None,
-        None,
-        true,
-        UiMarker::Title,
-    );
-    spawn_text(
-        &mut cmd,
-        "Press ENTER to Start",
-        32.0,
-        Color::srgb(1.0, 1.0, 0.2),
-        Val::Percent(50.0),
-        None,
-        None,
-        true,
-        UiMarker::PressEnter,
-    );
-    spawn_text(
-        &mut cmd,
-        "Music: Mad Max - Lethal Xcess (STe) | C: Toggle CRT",
-        18.0,
-        Color::srgba(0.7, 0.7, 0.7, 0.9),
-        Val::Percent(65.0),
-        None,
-        None,
-        true,
-        UiMarker::Subtitle,
-    );
+    // UI elements
+    spawn_ui(&mut cmd);
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_text(
-    cmd: &mut Commands,
-    txt: &str,
-    size: f32,
-    color: Color,
-    top: Val,
-    left: Option<Val>,
-    right: Option<Val>,
-    visible: bool,
-    marker: UiMarker,
-) {
-    let mut node = Node {
-        position_type: PositionType::Absolute,
-        top,
-        width: Val::Percent(100.0),
-        justify_content: JustifyContent::Center,
-        ..default()
-    };
-    if let Some(l) = left {
-        node.left = l;
-        node.width = Val::Auto;
-    }
-    if let Some(r) = right {
-        node.right = r;
-        node.width = Val::Auto;
-    }
-    cmd.spawn((
-        Text::new(txt),
-        TextFont {
-            font_size: size,
+fn spawn_ui(cmd: &mut Commands) {
+    let ui_elements = [
+        ("SCORE: 0", 24.0, Color::WHITE, Val::Px(15.0), Some(Val::Px(20.0)), None, false, UiMarker::Score),
+        ("HIGH: 0", 24.0, Color::srgb(1.0, 0.8, 0.0), Val::Px(15.0), None, None, false, UiMarker::High),
+        ("LIVES: 3", 24.0, Color::srgb(0.2, 1.0, 0.2), Val::Px(15.0), None, Some(Val::Px(20.0)), false, UiMarker::Lives),
+        ("WAVE 1", 18.0, Color::srgb(0.6, 0.6, 1.0), Val::Px(45.0), Some(Val::Px(20.0)), None, false, UiMarker::Wave),
+        ("GAME OVER\n\nPress R to Restart", 48.0, Color::srgb(1.0, 0.2, 0.2), Val::Percent(45.0), None, None, false, UiMarker::GameOver),
+        ("SPACE SHOOTER", 64.0, Color::srgb(0.2, 0.8, 1.0), Val::Percent(25.0), None, None, true, UiMarker::Title),
+        ("Press ENTER to Start", 32.0, Color::srgb(1.0, 1.0, 0.2), Val::Percent(50.0), None, None, true, UiMarker::PressEnter),
+        ("Music: Mad Max - Lethal Xcess (STe) | C: Toggle CRT", 18.0, Color::srgba(0.7, 0.7, 0.7, 0.9), Val::Percent(65.0), None, None, true, UiMarker::Subtitle),
+    ];
+
+    for (txt, size, color, top, left, right, vis, marker) in ui_elements {
+        let mut node = Node {
+            position_type: PositionType::Absolute,
+            top,
+            width: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
             ..default()
-        },
-        TextColor(color),
-        TextLayout::new_with_justify(bevy::text::Justify::Center),
-        node,
-        if visible {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        },
-        marker,
-    ));
+        };
+        if let Some(l) = left {
+            node.left = l;
+            node.width = Val::Auto;
+        }
+        if let Some(r) = right {
+            node.right = r;
+            node.width = Val::Auto;
+        }
+        cmd.spawn((
+            Text::new(txt),
+            TextFont { font_size: size, ..default() },
+            TextColor(color),
+            TextLayout::new_with_justify(bevy::text::Justify::Center),
+            node,
+            if vis { Visibility::Visible } else { Visibility::Hidden },
+            marker,
+        ));
+    }
 }
 
-fn spawn_player(cmd: &mut Commands, half_height: f32) {
+// ============================================================================
+// Spawning Helpers
+// ============================================================================
+
+fn spawn_player(cmd: &mut Commands, hh: f32) {
     cmd.spawn((
         Sprite {
             color: Color::srgb(0.2, 0.8, 0.2),
             custom_size: Some(PLAYER_SIZE),
             ..default()
         },
-        Transform::from_xyz(0.0, -half_height + 60.0, 1.0),
+        Transform::from_xyz(0.0, -hh + 60.0, 1.0),
         Player,
         GameEntity,
     ));
@@ -606,17 +618,17 @@ fn spawn_player(cmd: &mut Commands, half_height: f32) {
 
 fn spawn_enemies(cmd: &mut Commands) {
     let start_x = -(7.0 * ENEMY_SPACING.x) / 2.0;
-    for row in 0..4 {
-        let (pts, color) = [
-            (40, Color::srgb(1.0, 0.2, 0.2)),
-            (30, Color::srgb(1.0, 0.6, 0.2)),
-            (20, Color::srgb(1.0, 1.0, 0.2)),
-            (10, Color::srgb(0.2, 0.6, 1.0)),
-        ][row];
+    let rows = [
+        (40, Color::srgb(1.0, 0.2, 0.2)),
+        (30, Color::srgb(1.0, 0.6, 0.2)),
+        (20, Color::srgb(1.0, 1.0, 0.2)),
+        (10, Color::srgb(0.2, 0.6, 1.0)),
+    ];
+    for (row, (pts, color)) in rows.iter().enumerate() {
         for col in 0..8 {
             cmd.spawn((
                 Sprite {
-                    color,
+                    color: *color,
                     custom_size: Some(ENEMY_SIZE),
                     ..default()
                 },
@@ -625,94 +637,97 @@ fn spawn_enemies(cmd: &mut Commands) {
                     200.0 - row as f32 * ENEMY_SPACING.y,
                     1.0,
                 ),
-                Enemy { points: pts },
+                Enemy { points: *pts },
                 GameEntity,
             ));
         }
     }
 }
 
-fn spawn_wave_announcement(cmd: &mut Commands, wave: u32) {
+fn spawn_fading_text(cmd: &mut Commands, text: &str, duration: f32, color: Color, spawn_enemies: bool) {
+    if spawn_enemies {
+        cmd.spawn((
+            Sprite { color: Color::NONE, custom_size: Some(Vec2::ZERO), ..default() },
+            Transform::default(),
+            FadingText {
+                timer: Timer::from_seconds(duration, TimerMode::Once),
+                color,
+                spawn_enemies: true,
+            },
+            GameEntity,
+        ));
+    }
     cmd.spawn((
-        Sprite {
-            color: Color::NONE,
-            custom_size: Some(Vec2::ZERO),
-            ..default()
-        },
-        Transform::default(),
-        WaveAnnouncement {
-            timer: Timer::from_seconds(WAVE_ANNOUNCE_DURATION, TimerMode::Once),
-        },
-        GameEntity,
-    ));
-    // Text shown via UI (rendered by display camera)
-    cmd.spawn((
-        Text::new(format!("WAVE {}", wave)),
-        TextFont {
-            font_size: 72.0,
-            ..default()
-        },
-        TextColor(Color::srgba(1.0, 1.0, 0.2, 1.0)),
+        Text::new(text),
+        TextFont { font_size: if spawn_enemies { 72.0 } else { 48.0 }, ..default() },
+        TextColor(color),
         TextLayout::new_with_justify(bevy::text::Justify::Center),
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Percent(45.0),
+            top: Val::Percent(if spawn_enemies { 45.0 } else { 40.0 }),
             width: Val::Percent(100.0),
             justify_content: JustifyContent::Center,
             ..default()
         },
-        WaveAnnouncement {
-            timer: Timer::from_seconds(WAVE_ANNOUNCE_DURATION, TimerMode::Once),
+        FadingText {
+            timer: Timer::from_seconds(duration, TimerMode::Once),
+            color,
+            spawn_enemies: false,
         },
     ));
 }
 
-// CRT systems
+// ============================================================================
+// Screen Size Management
+// ============================================================================
+
+fn update_screen_size(
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut screen: ResMut<ScreenSize>,
+) {
+    if screen.width != window.width() || screen.height != window.height() {
+        *screen = ScreenSize::from_window(&window);
+    }
+}
+
+// ============================================================================
+// CRT Systems
+// ============================================================================
+
 fn sync_render_target(
-    wq: Query<&Window, With<PrimaryWindow>>,
+    screen: Res<ScreenSize>,
     mut images: ResMut<Assets<Image>>,
     rt: Option<Res<SceneRenderTarget>>,
     mut crt_q: Query<&mut Transform, With<CrtQuad>>,
 ) {
     let Some(rt) = rt else { return };
-    let Ok(w) = wq.single() else { return };
-    let Some(img) = images.get_mut(&rt.0) else {
-        return;
-    };
-
-    let (ww, wh) = (w.width().max(1.0) as u32, w.height().max(1.0) as u32);
-    let size = img.texture_descriptor.size;
-    if size.width != ww || size.height != wh {
-        img.resize(Extent3d {
-            width: ww,
-            height: wh,
-            depth_or_array_layers: 1,
-        });
+    if let Some(img) = images.get_mut(&rt.0) {
+        let (ww, wh) = (screen.width.max(1.0) as u32, screen.height.max(1.0) as u32);
+        if img.texture_descriptor.size.width != ww || img.texture_descriptor.size.height != wh {
+            img.resize(Extent3d { width: ww, height: wh, depth_or_array_layers: 1 });
+        }
     }
-
-    // Update quad scale
     for mut t in crt_q.iter_mut() {
-        t.scale = Vec3::new(w.width() / 2.0, w.height() / 2.0, 1.0);
+        t.scale = Vec3::new(screen.half_width, screen.half_height, 1.0);
     }
 }
 
 fn update_crt_material(
     time: Res<Time>,
-    wq: Query<&Window, With<PrimaryWindow>>,
+    screen: Res<ScreenSize>,
     mut mats: ResMut<Assets<CrtMaterial>>,
     mat_h: Option<Res<CrtMaterialHandle>>,
     crt: Res<CrtState>,
 ) {
     let Some(h) = mat_h else { return };
-    let Ok(w) = wq.single() else { return };
-    let Some(mat) = mats.get_mut(&h.0) else {
-        return;
-    };
-
-    mat.params.time = time.elapsed_secs();
-    mat.params.width = w.width();
-    mat.params.height = w.height();
-    mat.params.crt_enabled = if crt.enabled { 1 } else { 0 };
+    if let Some(mat) = mats.get_mut(&h.0) {
+        mat.params = CrtParams {
+            time: time.elapsed_secs(),
+            width: screen.width,
+            height: screen.height,
+            crt_enabled: if crt.enabled { 1 } else { 0 },
+        };
+    }
 }
 
 fn crt_toggle(kb: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
@@ -721,13 +736,13 @@ fn crt_toggle(kb: Res<ButtonInput<KeyCode>>, mut crt: ResMut<CrtState>) {
     }
 }
 
-// State transitions
+// ============================================================================
+// State Transitions
+// ============================================================================
+
 fn hide_title_ui(mut q: Query<(&mut Visibility, &UiMarker)>) {
     for (mut v, m) in q.iter_mut() {
-        if matches!(
-            m,
-            UiMarker::Title | UiMarker::PressEnter | UiMarker::Subtitle
-        ) {
+        if matches!(m, UiMarker::Title | UiMarker::PressEnter | UiMarker::Subtitle) {
             *v = Visibility::Hidden;
         }
     }
@@ -736,23 +751,16 @@ fn hide_title_ui(mut q: Query<(&mut Visibility, &UiMarker)>) {
 fn enter_playing(
     mut cmd: Commands,
     mut gd: ResMut<GameData>,
-    mut pq: Query<&mut Ym2149Playback>,
-    wq: Query<&Window, With<PrimaryWindow>>,
+    mut fade: ResMut<MusicFade>,
+    screen: Res<ScreenSize>,
     mut uiq: Query<(&mut Visibility, &UiMarker)>,
 ) {
-    if let Ok(mut p) = pq.single_mut() {
-        p.set_subsong(2);
-        p.play();
-    }
+    request_subsong(&mut fade, 2);
     gd.reset();
-    let hh = wq.single().unwrap().height() / 2.0;
-    spawn_player(&mut cmd, hh);
-    spawn_wave_announcement(&mut cmd, 1);
+    spawn_player(&mut cmd, screen.half_height);
+    spawn_fading_text(&mut cmd, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
     for (mut v, m) in uiq.iter_mut() {
-        *v = if matches!(
-            m,
-            UiMarker::Score | UiMarker::High | UiMarker::Lives | UiMarker::Wave
-        ) {
+        *v = if matches!(m, UiMarker::Score | UiMarker::High | UiMarker::Lives | UiMarker::Wave) {
             Visibility::Visible
         } else {
             Visibility::Hidden
@@ -760,19 +768,54 @@ fn enter_playing(
     }
 }
 
-fn enter_gameover(mut pq: Query<&mut Ym2149Playback>, mut q: Query<(&mut Visibility, &UiMarker)>) {
-    if let Ok(mut p) = pq.single_mut() {
-        p.set_subsong(3);
-        p.play();
-    }
-    for (mut v, m) in q.iter_mut() {
+fn enter_gameover(
+    mut cmd: Commands,
+    mut fade: ResMut<MusicFade>,
+    mut uiq: Query<(Entity, &mut Visibility, &UiMarker)>,
+    eq: Query<(Entity, &Transform), With<Enemy>>,
+    mut rng: Local<Option<SmallRng>>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+    request_subsong(&mut fade, 3);
+
+    for (entity, mut v, m) in uiq.iter_mut() {
         if *m == UiMarker::GameOver {
             *v = Visibility::Visible;
+            cmd.entity(entity).insert(GameOverUi { base_top: 45.0 });
+        }
+    }
+
+    let mut enemies: Vec<_> = eq.iter().collect();
+    // Fisher-Yates shuffle
+    for i in (1..enemies.len()).rev() {
+        let j = rng.random_range(0..=i);
+        enemies.swap(i, j);
+    }
+    for (i, (entity, t)) in enemies.into_iter().enumerate() {
+        cmd.entity(entity).remove::<DivingEnemy>().insert(GameOverEnemy {
+            phase: rng.random_range(0.0..std::f32::consts::TAU),
+            amplitude: rng.random_range(80.0..180.0),
+            frequency: rng.random_range(0.5..1.5),
+            base_pos: t.translation.truncate(),
+            delay: i as f32 * 0.08,
+            started: false,
+        });
+    }
+}
+
+fn exit_gameover(mut cmd: Commands, mut q: Query<(Entity, &mut Visibility, &UiMarker)>) {
+    for (entity, mut v, m) in q.iter_mut() {
+        if *m == UiMarker::GameOver {
+            *v = Visibility::Hidden;
+            cmd.entity(entity).remove::<GameOverUi>();
         }
     }
 }
 
-// Message handlers
+// ============================================================================
+// Message Handlers
+// ============================================================================
+
 fn handle_sfx_events(
     mut events: MessageReader<PlaySfxMsg>,
     gist: Option<Res<GistRes>>,
@@ -782,12 +825,15 @@ fn handle_sfx_events(
         if let (Some(g), Some(s)) = (&gist, &sfx)
             && let Ok(mut p) = g.0.lock()
         {
-            let sound = match ev.0 {
-                SfxType::Laser => &s.laser,
-                SfxType::Explode => &s.explode,
-                SfxType::Death => &s.death,
-            };
-            p.play_sound(sound, None, None);
+            p.play_sound(
+                match ev.0 {
+                    SfxType::Laser => &s.laser,
+                    SfxType::Explode => &s.explode,
+                    SfxType::Death => &s.death,
+                },
+                None,
+                None,
+            );
         }
     }
 }
@@ -800,8 +846,8 @@ fn handle_wave_complete(
     for _ in events.read() {
         gd.wave += 1;
         gd.enemy_direction = 1.0;
-        gd.dive_timer = gd.dive_interval();
-        spawn_wave_announcement(&mut cmd, gd.wave);
+        gd.dive_timer = Timer::from_seconds(gd.dive_interval(), TimerMode::Once);
+        spawn_fading_text(&mut cmd, &format!("WAVE {}", gd.wave), 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
     }
 }
 
@@ -811,11 +857,11 @@ fn handle_player_hit(
     mut gd: ResMut<GameData>,
     mut ns: ResMut<NextState<GameState>>,
     pq: Query<Entity, With<Player>>,
-    wq: Query<&Window, With<PrimaryWindow>>,
-    mut sfx_events: MessageWriter<PlaySfxMsg>,
+    screen: Res<ScreenSize>,
+    mut sfx: MessageWriter<PlaySfxMsg>,
 ) {
     for _ in events.read() {
-        sfx_events.write(PlaySfxMsg(SfxType::Death));
+        sfx.write(PlaySfxMsg(SfxType::Death));
         gd.lives = gd.lives.saturating_sub(1);
         for e in pq.iter() {
             cmd.entity(e).despawn();
@@ -823,7 +869,7 @@ fn handle_player_hit(
         if gd.lives == 0 {
             ns.set(GameState::GameOver);
         } else {
-            spawn_player(&mut cmd, wq.single().unwrap().height() / 2.0);
+            spawn_player(&mut cmd, screen.half_height);
         }
     }
 }
@@ -832,16 +878,15 @@ fn handle_enemy_killed(
     mut events: MessageReader<EnemyKilledMsg>,
     mut gd: ResMut<GameData>,
     mut sfx: MessageWriter<PlaySfxMsg>,
-    mut extra_life: MessageWriter<ExtraLifeMsg>,
+    mut extra: MessageWriter<ExtraLifeMsg>,
 ) {
     for ev in events.read() {
         gd.score += ev.0;
         gd.high_score = gd.high_score.max(gd.score);
         sfx.write(PlaySfxMsg(SfxType::Explode));
-        // Check for extra life
         if gd.score >= gd.next_extra_life {
             gd.next_extra_life += EXTRA_LIFE_SCORE;
-            extra_life.write(ExtraLifeMsg);
+            extra.write(ExtraLifeMsg);
         }
     }
 }
@@ -853,45 +898,14 @@ fn handle_extra_life(
 ) {
     for _ in events.read() {
         gd.lives += 1;
-        // Spawn notification UI
-        cmd.spawn((
-            Text::new("LIVES +1"),
-            TextFont {
-                font_size: 48.0,
-                ..default()
-            },
-            TextColor(Color::srgba(0.2, 1.0, 0.2, 1.0)),
-            TextLayout::new_with_justify(bevy::text::Justify::Center),
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Percent(40.0),
-                width: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            ExtraLifeNotification {
-                timer: Timer::from_seconds(1.0, TimerMode::Once),
-            },
-        ));
+        spawn_fading_text(&mut cmd, "LIVES +1", 1.0, Color::srgba(0.2, 1.0, 0.2, 1.0), false);
     }
 }
 
-fn extra_life_notification_update(
-    mut cmd: Commands,
-    time: Res<Time>,
-    mut q: Query<(Entity, &mut ExtraLifeNotification, &mut TextColor)>,
-) {
-    for (entity, mut notif, mut color) in q.iter_mut() {
-        notif.timer.tick(time.delta());
-        let alpha = 1.0 - notif.timer.fraction();
-        color.0 = Color::srgba(0.2, 1.0, 0.2, alpha);
-        if notif.timer.is_finished() {
-            cmd.entity(entity).despawn();
-        }
-    }
-}
+// ============================================================================
+// Title Screen
+// ============================================================================
 
-// Title screen
 fn title_input(kb: Res<ButtonInput<KeyCode>>, mut ns: ResMut<NextState<GameState>>) {
     if kb.just_pressed(KeyCode::Enter) {
         ns.set(GameState::Playing);
@@ -909,41 +923,39 @@ fn title_anim(time: Res<Time>, mut q: Query<(&mut TextColor, &UiMarker)>) {
     }
 }
 
-// Wave announcement
-fn wave_announcement_update(
+// ============================================================================
+// Gameplay Systems
+// ============================================================================
+
+fn fading_text_update(
     mut cmd: Commands,
     time: Res<Time>,
-    mut q: Query<(Entity, &mut WaveAnnouncement, Option<&mut TextColor>)>,
+    mut q: Query<(Entity, &mut FadingText, Option<&mut TextColor>)>,
 ) {
-    for (entity, mut ann, color) in q.iter_mut() {
-        ann.timer.tick(time.delta());
-        let is_ui = color.is_some();
+    for (entity, mut ft, color) in q.iter_mut() {
+        ft.timer.tick(time.delta());
         if let Some(mut c) = color {
-            let alpha = 1.0 - ann.timer.fraction();
-            c.0 = Color::srgba(1.0, 1.0, 0.2, alpha);
+            c.0 = ft.color.with_alpha(1.0 - ft.timer.fraction());
         }
-        if ann.timer.is_finished() {
+        if ft.timer.is_finished() {
             cmd.entity(entity).despawn();
-            // Only spawn enemies from the GameEntity marker (non-UI)
-            if !is_ui {
+            if ft.spawn_enemies {
                 spawn_enemies(&mut cmd);
             }
         }
     }
 }
 
-// Player systems
 fn player_movement(
     kb: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut q: Query<&mut Transform, With<Player>>,
-    wq: Query<&Window, With<PrimaryWindow>>,
+    screen: Res<ScreenSize>,
 ) {
     let Ok(mut t) = q.single_mut() else { return };
-    let hw = wq.single().unwrap().width() / 2.0 - PLAYER_SIZE.x / 2.0;
+    let hw = screen.half_width - PLAYER_SIZE.x / 2.0;
     let dir = kb.pressed(KeyCode::ArrowRight) as i32 - kb.pressed(KeyCode::ArrowLeft) as i32;
-    t.translation.x =
-        (t.translation.x + dir as f32 * PLAYER_SPEED * time.delta_secs()).clamp(-hw, hw);
+    t.translation.x = (t.translation.x + dir as f32 * PLAYER_SPEED * time.delta_secs()).clamp(-hw, hw);
 }
 
 fn player_shooting(
@@ -954,9 +966,9 @@ fn player_shooting(
     pq: Query<&Transform, With<Player>>,
     mut sfx: MessageWriter<PlaySfxMsg>,
 ) {
-    gd.shoot_timer -= time.delta_secs();
+    gd.shoot_timer.tick(time.delta());
     if kb.pressed(KeyCode::Space)
-        && gd.shoot_timer <= 0.0
+        && gd.shoot_timer.is_finished()
         && let Ok(pt) = pq.single()
     {
         cmd.spawn((
@@ -965,47 +977,44 @@ fn player_shooting(
                 custom_size: Some(BULLET_SIZE),
                 ..default()
             },
-            Transform::from_xyz(
-                pt.translation.x,
-                pt.translation.y + PLAYER_SIZE.y / 2.0,
-                1.0,
-            ),
-            Bullet { from_player: true },
+            Transform::from_xyz(pt.translation.x, pt.translation.y + PLAYER_SIZE.y / 2.0, 1.0),
+            PlayerBullet,
             GameEntity,
         ));
         sfx.write(PlaySfxMsg(SfxType::Laser));
-        gd.shoot_timer = 0.25;
+        gd.shoot_timer = Timer::from_seconds(0.25, TimerMode::Once);
     }
 }
 
-// Bullet systems
 fn bullet_movement(
     mut cmd: Commands,
     time: Res<Time>,
-    mut q: Query<(Entity, &mut Transform, &Bullet)>,
-    wq: Query<&Window, With<PrimaryWindow>>,
+    screen: Res<ScreenSize>,
+    mut player_bullets: Query<(Entity, &mut Transform), With<PlayerBullet>>,
+    mut enemy_bullets: Query<(Entity, &mut Transform), (With<EnemyBullet>, Without<PlayerBullet>)>,
 ) {
-    let hh = wq.single().unwrap().height() / 2.0;
-    for (e, mut t, b) in q.iter_mut() {
-        t.translation.y += (if b.from_player {
-            BULLET_SPEED
-        } else {
-            -ENEMY_BULLET_SPEED
-        }) * time.delta_secs();
-        if t.translation.y.abs() > hh + 20.0 {
+    let hh = screen.half_height;
+    for (e, mut t) in player_bullets.iter_mut() {
+        t.translation.y += BULLET_SPEED * time.delta_secs();
+        if t.translation.y > hh + 20.0 {
+            cmd.entity(e).despawn();
+        }
+    }
+    for (e, mut t) in enemy_bullets.iter_mut() {
+        t.translation.y -= ENEMY_BULLET_SPEED * time.delta_secs();
+        if t.translation.y < -hh - 20.0 {
             cmd.entity(e).despawn();
         }
     }
 }
 
-// Enemy systems
 fn enemy_formation_movement(
     time: Res<Time>,
     mut gd: ResMut<GameData>,
     mut q: Query<&mut Transform, (With<Enemy>, Without<DivingEnemy>)>,
-    wq: Query<&Window, With<PrimaryWindow>>,
+    screen: Res<ScreenSize>,
 ) {
-    let hw = wq.single().unwrap().width() / 2.0 - ENEMY_SIZE.x;
+    let hw = screen.half_width - ENEMY_SIZE.x;
     let edge = q.iter().any(|t| {
         (t.translation.x > hw && gd.enemy_direction > 0.0)
             || (t.translation.x < -hw && gd.enemy_direction < 0.0)
@@ -1026,12 +1035,14 @@ fn enemy_shooting(
     time: Res<Time>,
     mut gd: ResMut<GameData>,
     q: Query<&Transform, With<Enemy>>,
+    mut rng: Local<Option<SmallRng>>,
 ) {
-    gd.enemy_shoot_timer -= time.delta_secs();
-    if gd.enemy_shoot_timer <= 0.0 {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+    gd.enemy_shoot_timer.tick(time.delta());
+    if gd.enemy_shoot_timer.is_finished() {
         let enemies: Vec<_> = q.iter().collect();
         if !enemies.is_empty() {
-            let t = enemies[rand::rng().random_range(0..enemies.len())];
+            let t = enemies[rng.random_range(0..enemies.len())];
             cmd.spawn((
                 Sprite {
                     color: Color::srgb(1.0, 0.3, 0.3),
@@ -1039,15 +1050,14 @@ fn enemy_shooting(
                     ..default()
                 },
                 Transform::from_xyz(t.translation.x, t.translation.y - ENEMY_SIZE.y / 2.0, 1.0),
-                Bullet { from_player: false },
+                EnemyBullet,
                 GameEntity,
             ));
         }
-        gd.enemy_shoot_timer = gd.enemy_shoot_rate();
+        gd.enemy_shoot_timer = Timer::from_seconds(gd.enemy_shoot_rate(), TimerMode::Once);
     }
 }
 
-#[allow(clippy::type_complexity)]
 fn initiate_dives(
     mut cmd: Commands,
     time: Res<Time>,
@@ -1055,16 +1065,17 @@ fn initiate_dives(
     eq: Query<(Entity, &Transform), (With<Enemy>, Without<DivingEnemy>)>,
     dq: Query<&DivingEnemy>,
     pq: Query<&Transform, With<Player>>,
+    mut rng: Local<Option<SmallRng>>,
 ) {
     if gd.wave < 2 {
         return;
     }
-    gd.dive_timer -= time.delta_secs();
-    if gd.dive_timer <= 0.0 {
-        gd.dive_timer = gd.dive_interval();
-        let current_divers = dq.iter().count();
-        let max_divers = gd.max_divers();
-        if current_divers >= max_divers {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+    gd.dive_timer.tick(time.delta());
+    if gd.dive_timer.is_finished() {
+        gd.dive_timer = Timer::from_seconds(gd.dive_interval(), TimerMode::Once);
+        let (current, max) = (dq.iter().count(), gd.max_divers());
+        if current >= max {
             return;
         }
         let Ok(pt) = pq.single() else { return };
@@ -1072,16 +1083,16 @@ fn initiate_dives(
         if candidates.is_empty() {
             return;
         }
-        let new_divers = (max_divers - current_divers).min(1 + gd.wave as usize / 3);
-        let mut rng = rand::rng();
-        for _ in 0..new_divers.min(candidates.len()) {
-            let idx = rng.random_range(0..candidates.len());
-            let (e, t) = candidates[idx];
+        for _ in 0..(max - current).min(1 + gd.wave as usize / 3).min(candidates.len()) {
+            let (e, t) = candidates[rng.random_range(0..candidates.len())];
             cmd.entity(e).insert(DivingEnemy {
                 target_x: pt.translation.x + rng.random_range(-50.0..50.0),
                 returning: false,
                 start_y: t.translation.y,
                 original_x: t.translation.x,
+                progress: 0.0,
+                amplitude: rng.random_range(60.0..120.0),
+                curve_dir: if rng.random_bool(0.5) { 1.0 } else { -1.0 },
             });
         }
     }
@@ -1091,23 +1102,33 @@ fn diving_movement(
     mut cmd: Commands,
     time: Res<Time>,
     mut q: Query<(Entity, &mut Transform, &mut DivingEnemy)>,
-    wq: Query<&Window, With<PrimaryWindow>>,
+    screen: Res<ScreenSize>,
 ) {
-    let bottom = -wq.single().unwrap().height() / 2.0 + 80.0;
+    let bottom = -screen.half_height + 40.0;
     let dt = time.delta_secs();
+
     for (e, mut t, mut d) in q.iter_mut() {
         if !d.returning {
-            let dx = d.target_x - t.translation.x;
-            t.translation.x += (dx.signum() * DIVE_SPEED * 0.5 * dt).clamp(-dx.abs(), dx.abs());
-            t.translation.y -= DIVE_SPEED * dt;
-            if t.translation.y <= bottom {
+            d.progress += dt * 0.8;
+            let total_drop = d.start_y - bottom;
+            let target_y = d.start_y - d.progress * total_drop;
+            let wave = (d.progress * std::f32::consts::PI * 2.0).sin();
+            let base_x = d.original_x + (d.target_x - d.original_x) * d.progress;
+            t.translation.x = base_x + wave * d.amplitude * d.curve_dir;
+            t.translation.y = target_y;
+            if d.progress >= 1.0 {
                 d.returning = true;
+                d.progress = 0.0;
             }
         } else {
-            let (dx, dy) = (d.original_x - t.translation.x, d.start_y - t.translation.y);
-            t.translation.x += (dx.signum() * DIVE_SPEED * 0.5 * dt).clamp(-dx.abs(), dx.abs());
-            t.translation.y += (DIVE_SPEED * dt).min(dy);
-            if t.translation.y >= d.start_y {
+            d.progress += dt * 0.6;
+            let p = d.progress.min(1.0);
+            let ease = 1.0 - (1.0 - p).powi(2);
+            let arc = (p * std::f32::consts::PI).sin();
+            let target_x = d.target_x + (d.original_x - d.target_x) * ease;
+            t.translation.x = target_x + arc * d.amplitude * 0.5 * -d.curve_dir;
+            t.translation.y = bottom + (d.start_y - bottom) * ease;
+            if d.progress >= 1.0 {
                 t.translation = Vec3::new(d.original_x, d.start_y, 1.0);
                 cmd.entity(e).remove::<DivingEnemy>();
             }
@@ -1115,79 +1136,57 @@ fn diving_movement(
     }
 }
 
-// Collision systems
-fn bullet_enemy_collision(
+// ============================================================================
+// Collision System
+// ============================================================================
+
+fn collisions(
     mut cmd: Commands,
-    bq: Query<(Entity, &Transform, &Bullet)>,
+    player_bullets: Query<(Entity, &Transform), With<PlayerBullet>>,
+    enemy_bullets: Query<(Entity, &Transform), With<EnemyBullet>>,
     eq: Query<(Entity, &Transform, &Enemy)>,
-    mut events: MessageWriter<EnemyKilledMsg>,
+    pq: Query<&Transform, With<Player>>,
+    dq: Query<(Entity, &Transform), With<DivingEnemy>>,
+    mut enemy_killed: MessageWriter<EnemyKilledMsg>,
+    mut player_hit: MessageWriter<PlayerHitMsg>,
 ) {
-    for (be, bt, b) in bq.iter() {
-        if !b.from_player {
-            continue;
-        }
+    // Player bullets vs enemies
+    for (be, bt) in player_bullets.iter() {
+        let bp = bt.translation.truncate();
         for (ee, et, enemy) in eq.iter() {
-            if bt
-                .translation
-                .truncate()
-                .distance(et.translation.truncate())
-                < BULLET_SIZE.y / 2.0 + ENEMY_SIZE.x / 2.0
-            {
+            if bp.distance(et.translation.truncate()) < BULLET_SIZE.y / 2.0 + ENEMY_SIZE.x / 2.0 {
                 cmd.entity(be).despawn();
                 cmd.entity(ee).despawn();
-                events.write(EnemyKilledMsg(enemy.points));
+                enemy_killed.write(EnemyKilledMsg(enemy.points));
                 break;
             }
         }
     }
-}
 
-fn bullet_player_collision(
-    mut cmd: Commands,
-    bq: Query<(Entity, &Transform, &Bullet)>,
-    pq: Query<&Transform, With<Player>>,
-    mut events: MessageWriter<PlayerHitMsg>,
-) {
+    // Enemy bullets and divers vs player
     let Ok(pt) = pq.single() else { return };
-    for (be, bt, b) in bq.iter() {
-        if !b.from_player
-            && bt
-                .translation
-                .truncate()
-                .distance(pt.translation.truncate())
-                < BULLET_SIZE.y / 2.0 + PLAYER_SIZE.x / 2.0
-        {
+    let pp = pt.translation.truncate();
+
+    for (be, bt) in enemy_bullets.iter() {
+        if bt.translation.truncate().distance(pp) < BULLET_SIZE.y / 2.0 + PLAYER_SIZE.x / 2.0 {
             cmd.entity(be).despawn();
-            events.write(PlayerHitMsg);
-            break;
+            player_hit.write(PlayerHitMsg);
+            return;
         }
     }
-}
 
-fn diving_player_collision(
-    mut cmd: Commands,
-    dq: Query<(Entity, &Transform), With<DivingEnemy>>,
-    pq: Query<&Transform, With<Player>>,
-    mut events: MessageWriter<PlayerHitMsg>,
-) {
-    let Ok(pt) = pq.single() else { return };
     for (de, dt) in dq.iter() {
-        if dt
-            .translation
-            .truncate()
-            .distance(pt.translation.truncate())
-            < ENEMY_SIZE.x / 2.0 + PLAYER_SIZE.x / 2.0
-        {
+        if dt.translation.truncate().distance(pp) < ENEMY_SIZE.x / 2.0 + PLAYER_SIZE.x / 2.0 {
             cmd.entity(de).despawn();
-            events.write(PlayerHitMsg);
-            break;
+            player_hit.write(PlayerHitMsg);
+            return;
         }
     }
 }
 
 fn check_wave_complete(
     eq: Query<Entity, With<Enemy>>,
-    aq: Query<&WaveAnnouncement>,
+    aq: Query<&FadingText>,
     mut events: MessageWriter<WaveCompleteMsg>,
 ) {
     if eq.is_empty() && aq.is_empty() {
@@ -1195,13 +1194,12 @@ fn check_wave_complete(
     }
 }
 
-// Background
-fn starfield(
-    time: Res<Time>,
-    mut q: Query<(&mut Transform, &Star)>,
-    wq: Query<&Window, With<PrimaryWindow>>,
-) {
-    let hh = wq.single().unwrap().height() / 2.0;
+// ============================================================================
+// Global Systems
+// ============================================================================
+
+fn starfield(time: Res<Time>, mut q: Query<(&mut Transform, &Star)>, screen: Res<ScreenSize>) {
+    let hh = screen.half_height;
     for (mut t, s) in q.iter_mut() {
         t.translation.y -= s.speed * time.delta_secs();
         if t.translation.y < -hh {
@@ -1210,7 +1208,6 @@ fn starfield(
     }
 }
 
-// UI
 fn update_ui(gd: Res<GameData>, mut q: Query<(&mut Text, &UiMarker)>) {
     for (mut t, m) in q.iter_mut() {
         t.0 = match m {
@@ -1223,8 +1220,6 @@ fn update_ui(gd: Res<GameData>, mut q: Query<(&mut Text, &UiMarker)>) {
     }
 }
 
-// Input
-#[allow(clippy::too_many_arguments)]
 fn game_input(
     mut cmd: Commands,
     kb: Res<ButtonInput<KeyCode>>,
@@ -1232,23 +1227,27 @@ fn game_input(
     mut ns: ResMut<NextState<GameState>>,
     state: Res<State<GameState>>,
     eq: Query<Entity, With<Enemy>>,
-    bq: Query<Entity, With<Bullet>>,
+    player_bullets: Query<Entity, With<PlayerBullet>>,
+    enemy_bullets: Query<Entity, With<EnemyBullet>>,
     pq: Query<Entity, With<Player>>,
-    aq: Query<Entity, With<WaveAnnouncement>>,
-    wq: Query<&Window, With<PrimaryWindow>>,
-    mut playback: Query<&mut Ym2149Playback>,
+    aq: Query<Entity, With<FadingText>>,
+    screen: Res<ScreenSize>,
+    mut fade: ResMut<MusicFade>,
 ) {
     if kb.just_pressed(KeyCode::KeyR) {
-        for e in eq.iter().chain(bq.iter()).chain(pq.iter()).chain(aq.iter()) {
+        for e in eq
+            .iter()
+            .chain(player_bullets.iter())
+            .chain(enemy_bullets.iter())
+            .chain(pq.iter())
+            .chain(aq.iter())
+        {
             cmd.entity(e).despawn();
         }
         gd.reset();
-        spawn_player(&mut cmd, wq.single().unwrap().height() / 2.0);
-        spawn_wave_announcement(&mut cmd, 1);
-        if let Ok(mut p) = playback.single_mut() {
-            p.set_subsong(2);
-            p.play();
-        }
+        spawn_player(&mut cmd, screen.half_height);
+        spawn_fading_text(&mut cmd, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
+        request_subsong(&mut fade, 2);
         if *state.get() == GameState::GameOver {
             ns.set(GameState::Playing);
         }
@@ -1267,5 +1266,97 @@ fn music_toggle(kb: Res<ButtonInput<KeyCode>>, mut q: Query<&mut Ym2149Playback>
         } else {
             p.play();
         }
+    }
+}
+
+// ============================================================================
+// Music Crossfade
+// ============================================================================
+
+fn request_subsong(fade: &mut MusicFade, subsong: usize) {
+    fade.target_subsong = Some(subsong);
+    fade.phase = FadePhase::FadeOut;
+    fade.timer = 0.0;
+}
+
+fn music_crossfade(time: Res<Time>, mut fade: ResMut<MusicFade>, mut q: Query<&mut Ym2149Playback>) {
+    if fade.phase == FadePhase::Idle {
+        return;
+    }
+    let Ok(mut p) = q.single_mut() else { return };
+
+    // Skip if already on target subsong
+    if let Some(target) = fade.target_subsong
+        && p.current_subsong() == target
+        && fade.phase == FadePhase::FadeOut
+        && fade.timer == 0.0
+    {
+        fade.phase = FadePhase::Idle;
+        fade.target_subsong = None;
+        return;
+    }
+
+    fade.timer += time.delta_secs();
+    let progress = (fade.timer / FADE_DURATION).min(1.0);
+
+    match fade.phase {
+        FadePhase::FadeOut => {
+            p.set_volume(1.0 - progress);
+            if progress >= 1.0 {
+                if let Some(subsong) = fade.target_subsong {
+                    p.set_subsong(subsong);
+                    p.play();
+                }
+                fade.phase = FadePhase::FadeIn;
+                fade.timer = 0.0;
+            }
+        }
+        FadePhase::FadeIn => {
+            p.set_volume(progress);
+            if progress >= 1.0 {
+                fade.phase = FadePhase::Idle;
+                fade.target_subsong = None;
+            }
+        }
+        FadePhase::Idle => {}
+    }
+}
+
+// ============================================================================
+// Game Over Animations
+// ============================================================================
+
+fn gameover_enemy_movement(
+    time: Res<Time>,
+    mut q: Query<(&mut Transform, &mut GameOverEnemy)>,
+    screen: Res<ScreenSize>,
+) {
+    let (hw, hh) = (screen.half_width - 40.0, screen.half_height - 40.0);
+    let t = time.elapsed_secs();
+    let dt = time.delta_secs();
+
+    for (mut tr, mut ge) in q.iter_mut() {
+        if !ge.started {
+            ge.delay -= dt;
+            if ge.delay <= 0.0 {
+                ge.started = true;
+                ge.phase = t;
+            }
+            continue;
+        }
+        let local_t = (t - ge.phase) * ge.frequency;
+        let blend = ((t - ge.phase) / 2.0).min(1.0);
+        let target_x = (local_t + ge.amplitude).sin() * hw;
+        let target_y = (local_t * 0.7 + ge.amplitude * 0.5).sin() * hh;
+        tr.translation.x = ge.base_pos.x + (target_x - ge.base_pos.x) * blend;
+        tr.translation.y = ge.base_pos.y + (target_y - ge.base_pos.y) * blend;
+    }
+}
+
+fn gameover_ui_animation(time: Res<Time>, mut q: Query<(&mut Node, &GameOverUi)>) {
+    let t = time.elapsed_secs();
+    for (mut node, ui) in q.iter_mut() {
+        let offset = (t * 1.5).sin() * 1.5;
+        node.top = Val::Percent(ui.base_top + offset);
     }
 }
