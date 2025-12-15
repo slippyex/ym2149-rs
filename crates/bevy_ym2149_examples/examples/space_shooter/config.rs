@@ -19,8 +19,8 @@ pub const ANIM_FPS: f32 = 8.0;
 // === Power-up Constants ===
 pub const POWERUP_DROP_CHANCE: f32 = 0.05; // 5% chance to drop
 pub const POWERUP_SPEED: f32 = 100.0;
-pub const POWERUP_SIZE: Vec2 = Vec2::new(32.0, 32.0);
-pub const POWERUP_SCALE: f32 = 2.0;
+pub const POWERUP_SIZE: Vec2 = Vec2::new(32.0, 32.0); // 32x32 * 1.0 scale
+pub const POWERUP_SCALE: f32 = 1.0; // 32x32 sprites → 32px displayed
 pub const RAPID_FIRE_RATE: f32 = 0.12; // faster than normal 0.25
 pub const SPEED_BOOST_MULT: f32 = 1.5;
 pub const TRIPLE_SHOT_SPREAD: f32 = 15.0; // degrees

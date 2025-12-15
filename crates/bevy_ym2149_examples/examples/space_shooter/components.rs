@@ -203,3 +203,11 @@ pub struct ScreenFlashOverlay;
 pub struct Nebula {
     pub speed: f32,
 }
+
+/// Power-up animation (4x4 grid, column = type, row = frame)
+/// Frames step by 4: column 0 uses indices 0,4,8,12
+#[derive(Component)]
+pub struct PowerUpAnimation {
+    pub first: usize,
+    pub last: usize,
+}

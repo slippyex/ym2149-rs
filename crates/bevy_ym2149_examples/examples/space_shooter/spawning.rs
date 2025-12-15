@@ -9,7 +9,7 @@ use super::components::*;
 use super::config::*;
 use super::resources::*;
 
-pub const INVINCIBILITY_DURATION: f32 = 2.0;
+pub const INVINCIBILITY_DURATION: f32 = 10.0;
 
 pub fn spawn_player(
     cmd: &mut Commands,
@@ -256,12 +256,14 @@ pub fn spawn_wave_digits(
     }
 }
 
-/// Power-up visual configuration: (sprite_index, tint_color)
-pub const POWERUP_VISUALS: [(usize, Color); 4] = [
-    (0, Color::srgb(1.0, 0.4, 0.4)), // RapidFire - red tint
-    (2, Color::srgb(0.4, 1.0, 0.4)), // TripleShot - green tint
-    (0, Color::srgb(0.4, 0.6, 1.0)), // SpeedBoost - blue tint (same sprite as RapidFire)
-    (1, Color::srgb(1.0, 1.0, 0.4)), // PowerShot - yellow tint
+/// Power-up visual configuration: (first_frame, last_frame) for animation
+/// Bonuses-0001.png is 5x5 grid (32x32 sprites): columns are powerup types, rows are 5 animation frames
+/// Row-major indexing: column 0 = [0,5,10,15,20], column 1 = [1,6,11,16,21], etc.
+pub const POWERUP_ANIM: [(usize, usize); 4] = [
+    (2, 22), // RapidFire - red star (column 2: indices 2,7,12,17,22)
+    (0, 20), // TripleShot - green cross (column 0: indices 0,5,10,15,20)
+    (1, 21), // SpeedBoost - blue shield (column 1: indices 1,6,11,16,21)
+    (3, 23), // PowerShot - yellow 2x (column 3: indices 3,8,13,18,23)
 ];
 
 /// Spawn a random power-up that the player doesn't have yet
@@ -286,21 +288,22 @@ pub fn spawn_powerup(
         return;
     };
 
-    let (sprite_index, tint) = POWERUP_VISUALS[*visual_idx];
+    let (first, last) = POWERUP_ANIM[*visual_idx];
 
     cmd.spawn((
         Sprite {
             image: sprites.powerup_texture.clone(),
             texture_atlas: Some(TextureAtlas {
                 layout: sprites.powerup_layout.clone(),
-                index: sprite_index,
+                index: first,
             }),
-            color: tint,
             ..default()
         },
         Transform::from_translation(pos).with_scale(Vec3::splat(POWERUP_SCALE)),
         PowerUp { kind: *kind },
         GameEntity,
+        PowerUpAnimation { first, last },
+        AnimationTimer(Timer::from_seconds(0.15, TimerMode::Repeating)),
     ));
 }
 

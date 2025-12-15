@@ -415,7 +415,15 @@ pub fn spawn_powerups_ui(
     sprites: &SpriteAssets,
     screen: &ScreenSize,
 ) {
-    use super::spawning::POWERUP_VISUALS;
+    use super::spawning::POWERUP_ANIM;
+
+    // Text colors matching the new Bonuses sprite sheet
+    const POWERUP_TEXT_COLORS: [Color; 4] = [
+        Color::srgb(1.0, 0.3, 0.3), // RapidFire - red star
+        Color::srgb(0.3, 0.9, 0.3), // TripleShot - green cross
+        Color::srgb(0.3, 0.6, 1.0), // SpeedBoost - blue shield
+        Color::srgb(1.0, 0.9, 0.2), // PowerShot - yellow 2x
+    ];
 
     // Title
     let title_top = 8.0;
@@ -453,7 +461,8 @@ pub fn spawn_powerups_ui(
     let sprite_x = -100.0;
 
     for (i, (desc, visual_idx)) in powerups.iter().enumerate() {
-        let (sprite_index, tint) = POWERUP_VISUALS[*visual_idx];
+        let (sprite_index, _) = POWERUP_ANIM[*visual_idx];
+        let text_color = POWERUP_TEXT_COLORS[*visual_idx];
 
         // Text position as percentage from top
         let text_top = 23.0 + i as f32 * 11.0;
@@ -462,7 +471,7 @@ pub fn spawn_powerups_ui(
         // top% from screen top = half_height - (top% / 100 * height)
         let base_y = screen.half_height * (1.0 - 2.0 * text_top / 100.0) - 20.0;
 
-        // Power-up sprite (2D entity with tint)
+        // Power-up sprite (2D entity, sprites are already colored)
         cmd.spawn((
             Sprite {
                 image: sprites.powerup_texture.clone(),
@@ -470,10 +479,9 @@ pub fn spawn_powerups_ui(
                     layout: sprites.powerup_layout.clone(),
                     index: sprite_index,
                 }),
-                color: tint,
                 ..default()
             },
-            Transform::from_xyz(sprite_x, base_y, 5.0).with_scale(Vec3::splat(3.5)),
+            Transform::from_xyz(sprite_x, base_y, 5.0).with_scale(Vec3::splat(1.75)), // 32x32 * 1.75 ≈ 56px
             WavySprite {
                 line_index: i + 1,
                 base_y,
@@ -489,7 +497,7 @@ pub fn spawn_powerups_ui(
                 font_size: 28.0,
                 ..default()
             },
-            TextColor(tint),
+            TextColor(text_color),
             TextLayout::new_with_justify(bevy::text::Justify::Left),
             Node {
                 position_type: PositionType::Absolute,

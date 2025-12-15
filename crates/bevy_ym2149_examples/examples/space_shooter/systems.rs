@@ -475,7 +475,6 @@ pub fn handle_player_hit(
     mut events: MessageReader<PlayerHitMsg>,
     mut state: GameStateMut,
     player_q: PlayerQueries,
-    player_transform: Query<&Transform, With<Player>>,
     spawn: SpawnContext,
     scores: Res<HighScoreList>,
     mut sfx: MessageWriter<PlaySfxMsg>,
@@ -483,9 +482,6 @@ pub fn handle_player_hit(
     for _ in events.read() {
         sfx.write(PlaySfxMsg(SfxType::Death));
         state.data.lives = state.data.lives.saturating_sub(1);
-
-        // Get player position BEFORE despawning for explosion
-        let player_pos = player_transform.single().map(|t| t.translation).ok();
 
         // Reset power-ups and remove side boosters
         state.powerups.reset();
@@ -497,10 +493,7 @@ pub fn handle_player_hit(
             cmd.entity(e).try_despawn();
         }
 
-        // Spawn explosion at saved player position
-        if let Some(pos) = player_pos {
-            spawn_explosion(&mut cmd, pos, &spawn.sprites);
-        }
+        // Explosion is spawned in collisions system at player position
 
         if state.data.lives == 0 {
             if scores.is_high_score(state.data.score) {
@@ -911,6 +904,7 @@ pub fn collisions(
     for (be, bt) in queries.enemy_bullets.iter() {
         if bt.translation.truncate().distance(pp) < BULLET_SIZE.y / 2.0 + PLAYER_SIZE.x / 2.0 {
             cmd.entity(be).try_despawn();
+            spawn_explosion(&mut cmd, pt.translation, &ctx.sprites); // Explosion at player
             shake.add_trauma(SHAKE_TRAUMA_PLAYER_HIT);
             events.player_hit.write(PlayerHitMsg);
             return;
@@ -920,7 +914,7 @@ pub fn collisions(
     for (de, dt) in queries.divers.iter() {
         if dt.translation.truncate().distance(pp) < ENEMY_SIZE.x / 2.0 + PLAYER_SIZE.x / 2.0 {
             cmd.entity(de).try_despawn();
-            spawn_explosion(&mut cmd, dt.translation, &ctx.sprites);
+            spawn_explosion(&mut cmd, pt.translation, &ctx.sprites); // Explosion at player
             shake.add_trauma(SHAKE_TRAUMA_PLAYER_HIT);
             events.player_hit.write(PlayerHitMsg);
             return;
@@ -958,6 +952,26 @@ pub fn animate_sprites(
                 indices.first
             } else {
                 atlas.index + 1
+            };
+        }
+    }
+}
+
+/// Animate power-ups (5x5 grid stepping by 5 for same-column frames)
+pub fn powerup_animate(
+    time: Res<Time>,
+    mut q: Query<(&PowerUpAnimation, &mut AnimationTimer, &mut Sprite)>,
+) {
+    for (anim, mut timer, mut sprite) in q.iter_mut() {
+        timer.tick(time.delta());
+        if timer.just_finished()
+            && let Some(atlas) = &mut sprite.texture_atlas
+        {
+            // Step by 5 to stay in the same column (row-major 5x5 grid)
+            atlas.index = if atlas.index >= anim.last {
+                anim.first
+            } else {
+                atlas.index + 5
             };
         }
     }

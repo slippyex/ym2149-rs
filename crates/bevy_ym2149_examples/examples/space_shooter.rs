@@ -1,6 +1,6 @@
 //! Space Shooter - A Galaxian-style retro game with CRT effect
 //! Controls: Arrows (move), Space (fire), Enter (start), R (restart), M (music), C (CRT toggle), Q (quit)
-//! CLI: -m false (disable music)
+//! CLI: -m false (disable music), --reset-hi-scores (reset high scores to defaults)
 
 mod space_shooter {
     pub mod audio;
@@ -52,27 +52,46 @@ struct SetupAssets<'w> {
     atlas_layouts: ResMut<'w, Assets<TextureAtlasLayout>>,
 }
 
-fn parse_args() -> bool {
+struct CliArgs {
+    music_enabled: bool,
+    reset_hi_scores: bool,
+}
+
+fn parse_args() -> CliArgs {
     let args: Vec<String> = env::args().collect();
     let mut music_enabled = true;
+    let mut reset_hi_scores = false;
 
     let mut i = 1;
     while i < args.len() {
         if args[i] == "-m" && i + 1 < args.len() {
             music_enabled = args[i + 1].to_lowercase() != "false";
             i += 2;
+        } else if args[i] == "--reset-hi-scores" {
+            reset_hi_scores = true;
+            i += 1;
         } else {
             i += 1;
         }
     }
-    music_enabled
+    CliArgs {
+        music_enabled,
+        reset_hi_scores,
+    }
 }
 
 fn main() {
-    let music_enabled = parse_args();
+    let cli = parse_args();
+
+    // Reset high scores if requested
+    if cli.reset_hi_scores {
+        let default_scores = HighScoreList::default();
+        default_scores.save();
+        println!("High scores reset to defaults.");
+    }
 
     App::new()
-        .insert_resource(MusicEnabled(music_enabled))
+        .insert_resource(MusicEnabled(cli.music_enabled))
         .add_plugins((
             embedded_asset_plugin(),
             example_plugins(),
@@ -151,6 +170,7 @@ fn main() {
                     diving_movement,
                     fading_text_update,
                     powerup_movement,
+                    powerup_animate,
                 )
                     .in_set(GameSet::Movement),
                 (collisions, powerup_collection).in_set(GameSet::Collision),
@@ -541,15 +561,13 @@ fn setup(
                 None,
                 None,
             )),
-        powerup_texture: server.load(format!(
-            "{sprite_dir}/Items/Circle_+_Square_+_Missile_pick-ups (16 x 16).png"
-        )),
+        powerup_texture: server.load(format!("{sprite_dir}/Items/Bonuses-0001.png")),
         powerup_layout: setup_assets
             .atlas_layouts
             .add(TextureAtlasLayout::from_grid(
-                UVec2::splat(16),
-                3,
-                1,
+                UVec2::splat(32),
+                5,
+                5,
                 None,
                 None,
             )),
