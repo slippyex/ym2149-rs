@@ -32,6 +32,13 @@ pub const DIGIT_SCALE: f32 = 3.0;
 pub const DIGIT_SPACING: f32 = 26.0;
 pub const WAVE_DIGIT_SCALE: f32 = 2.5;
 
+// === VFX Constants ===
+pub const SHAKE_INTENSITY: f32 = 12.0; // Max shake offset in pixels
+pub const SHAKE_TRAUMA_EXPLOSION: f32 = 0.5; // Trauma from enemy explosion
+pub const SHAKE_TRAUMA_PLAYER_HIT: f32 = 1.0; // Trauma from player death
+pub const SCORE_POPUP_DURATION: f32 = 0.8; // Seconds for popup to fade
+pub const SCORE_POPUP_RISE: f32 = 40.0; // Pixels to rise
+
 // === High Score Constants ===
 pub const MAX_HIGH_SCORES: usize = 10;
 
@@ -43,6 +50,8 @@ pub enum GameState {
     Playing,
     NameEntry,
     HighScores,
+    PowerUpsScreen,
+    EnemyScoresScreen,
     GameOver,
 }
 

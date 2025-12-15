@@ -2,28 +2,39 @@
 
 use bevy::prelude::*;
 
-use rand::rngs::SmallRng;
 use rand::Rng;
+use rand::rngs::SmallRng;
 
 use super::components::*;
 use super::config::*;
 use super::resources::*;
 
-pub fn spawn_player(cmd: &mut Commands, hh: f32, sprites: &SpriteAssets) {
-    let player_id = cmd
-        .spawn((
-            Sprite::from_atlas_image(
-                sprites.player_texture.clone(),
-                TextureAtlas {
-                    layout: sprites.player_layout.clone(),
-                    index: 1,
-                },
-            ),
-            Transform::from_xyz(0.0, -hh + 60.0, 1.0).with_scale(Vec3::splat(SPRITE_SCALE)),
-            Player,
-            GameEntity,
-        ))
-        .id();
+pub const INVINCIBILITY_DURATION: f32 = 2.0;
+
+pub fn spawn_player(
+    cmd: &mut Commands,
+    hh: f32,
+    sprites: &SpriteAssets,
+    invincible: bool,
+) -> Entity {
+    let mut player_cmd = cmd.spawn((
+        Sprite::from_atlas_image(
+            sprites.player_texture.clone(),
+            TextureAtlas {
+                layout: sprites.player_layout.clone(),
+                index: 1,
+            },
+        ),
+        Transform::from_xyz(0.0, -hh + 60.0, 1.0).with_scale(Vec3::splat(SPRITE_SCALE)),
+        Player,
+        GameEntity,
+    ));
+
+    if invincible {
+        player_cmd.insert(Invincible::new(INVINCIBILITY_DURATION));
+    }
+
+    let player_id = player_cmd.id();
 
     // Booster flame as child
     cmd.spawn((
@@ -40,15 +51,17 @@ pub fn spawn_player(cmd: &mut Commands, hh: f32, sprites: &SpriteAssets) {
         AnimationIndices { first: 0, last: 1 },
         AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
     ));
+
+    player_id
 }
 
 pub fn spawn_enemies(cmd: &mut Commands, sprites: &SpriteAssets) {
     let start_x = -(7.0 * ENEMY_SPACING.x) / 2.0;
     let rows: [(u32, EnemyType); 4] = [
-        (40, EnemyType::Lips),
-        (30, EnemyType::BonBon),
-        (20, EnemyType::Alan),
-        (10, EnemyType::Alan),
+        (100, EnemyType::Lips),
+        (50, EnemyType::BonBon),
+        (25, EnemyType::Alan),
+        (25, EnemyType::Alan),
     ];
 
     for (row, (pts, enemy_type)) in rows.iter().enumerate() {
@@ -165,11 +178,7 @@ pub fn spawn_explosion(cmd: &mut Commands, pos: Vec3, sprites: &SpriteAssets) {
 /// Get the atlas index for a digit (0-9)
 /// Number font layout: 1-5 in top row (indices 0-4), 6-9,0 in bottom row (indices 5-9)
 pub fn digit_to_atlas_index(digit: u8) -> usize {
-    if digit == 0 {
-        9
-    } else {
-        (digit - 1) as usize
-    }
+    if digit == 0 { 9 } else { (digit - 1) as usize }
 }
 
 pub fn spawn_life_icons(
@@ -203,14 +212,8 @@ pub fn spawn_score_digits(
         ScoreType::Score => (-screen.half_width + 30.0, screen.half_height - 25.0),
         ScoreType::HighScore => (-40.0, screen.half_height - 25.0),
     };
-
-    let digits: Vec<u8> = format!("{:06}", value.min(999999))
-        .chars()
-        .map(|c| c.to_digit(10).unwrap() as u8)
-        .collect();
-
-    for (i, &digit) in digits.iter().enumerate() {
-        let x = base_x + (i as f32) * DIGIT_SPACING;
+    for (i, c) in format!("{:06}", value.min(999999)).chars().enumerate() {
+        let digit = c.to_digit(10).unwrap_or(0) as u8;
         cmd.spawn((
             Sprite::from_atlas_image(
                 sprites.number_font_texture.clone(),
@@ -219,7 +222,8 @@ pub fn spawn_score_digits(
                     index: digit_to_atlas_index(digit),
                 },
             ),
-            Transform::from_xyz(x, y, 10.0).with_scale(Vec3::splat(DIGIT_SCALE)),
+            Transform::from_xyz(base_x + (i as f32) * DIGIT_SPACING, y, 10.0)
+                .with_scale(Vec3::splat(DIGIT_SCALE)),
             DigitSprite { position: i },
             score_type,
             GameEntity,
@@ -233,17 +237,9 @@ pub fn spawn_wave_digits(
     screen: &ScreenSize,
     wave: u32,
 ) {
-    let base_x = -screen.half_width + 30.0;
-    let y = screen.half_height - 60.0;
-    let digit_spacing = 22.0;
-
-    let digits: Vec<u8> = format!("{:02}", wave.min(99))
-        .chars()
-        .map(|c| c.to_digit(10).unwrap() as u8)
-        .collect();
-
-    for (i, &digit) in digits.iter().enumerate() {
-        let x = base_x + (i as f32) * digit_spacing;
+    let (base_x, y) = (-screen.half_width + 30.0, screen.half_height - 60.0);
+    for (i, c) in format!("{:02}", wave.min(99)).chars().enumerate() {
+        let digit = c.to_digit(10).unwrap_or(0) as u8;
         cmd.spawn((
             Sprite::from_atlas_image(
                 sprites.number_font_texture.clone(),
@@ -252,12 +248,21 @@ pub fn spawn_wave_digits(
                     index: digit_to_atlas_index(digit),
                 },
             ),
-            Transform::from_xyz(x, y, 10.0).with_scale(Vec3::splat(WAVE_DIGIT_SCALE)),
+            Transform::from_xyz(base_x + (i as f32) * 22.0, y, 10.0)
+                .with_scale(Vec3::splat(WAVE_DIGIT_SCALE)),
             WaveDigit,
             GameEntity,
         ));
     }
 }
+
+/// Power-up visual configuration: (sprite_index, tint_color)
+pub const POWERUP_VISUALS: [(usize, Color); 4] = [
+    (0, Color::srgb(1.0, 0.4, 0.4)), // RapidFire - red tint
+    (2, Color::srgb(0.4, 1.0, 0.4)), // TripleShot - green tint
+    (0, Color::srgb(0.4, 0.6, 1.0)), // SpeedBoost - blue tint (same sprite as RapidFire)
+    (1, Color::srgb(1.0, 1.0, 0.4)), // PowerShot - yellow tint
+];
 
 /// Spawn a random power-up that the player doesn't have yet
 pub fn spawn_powerup(
@@ -267,81 +272,66 @@ pub fn spawn_powerup(
     powerups: &PowerUpState,
     rng: &mut SmallRng,
 ) {
-    // Build list of power-ups the player doesn't have
-    let mut available = Vec::new();
-    if !powerups.rapid_fire {
-        available.push(PowerUpType::RapidFire);
-    }
-    if !powerups.triple_shot {
-        available.push(PowerUpType::TripleShot);
-    }
-    if !powerups.speed_boost {
-        available.push(PowerUpType::SpeedBoost);
-    }
-    if !powerups.power_shot {
-        available.push(PowerUpType::PowerShot);
-    }
+    // (type, has_it, visual_index)
+    let all = [
+        (PowerUpType::RapidFire, powerups.rapid_fire, 0),
+        (PowerUpType::TripleShot, powerups.triple_shot, 1),
+        (PowerUpType::SpeedBoost, powerups.speed_boost, 2),
+        (PowerUpType::PowerShot, powerups.power_shot, 3),
+    ];
+    let available: Vec<_> = all.iter().filter(|(_, has, _)| !has).collect();
 
-    // Don't spawn if player has all power-ups
-    if available.is_empty() {
+    let Some(&(kind, _, visual_idx)) = available.get(rng.random_range(0..available.len().max(1)))
+    else {
         return;
-    }
-
-    let kind = available[rng.random_range(0..available.len())];
-
-    // Map power-up type to sprite index (0=circle, 1=square, 2=missile)
-    let sprite_index = match kind {
-        PowerUpType::RapidFire => 0,   // Circle
-        PowerUpType::SpeedBoost => 0,  // Circle
-        PowerUpType::PowerShot => 1,   // Square
-        PowerUpType::TripleShot => 2,  // Missile
     };
 
+    let (sprite_index, tint) = POWERUP_VISUALS[*visual_idx];
+
     cmd.spawn((
-        Sprite::from_atlas_image(
-            sprites.powerup_texture.clone(),
-            TextureAtlas {
+        Sprite {
+            image: sprites.powerup_texture.clone(),
+            texture_atlas: Some(TextureAtlas {
                 layout: sprites.powerup_layout.clone(),
                 index: sprite_index,
-            },
-        ),
+            }),
+            color: tint,
+            ..default()
+        },
         Transform::from_translation(pos).with_scale(Vec3::splat(POWERUP_SCALE)),
-        PowerUp { kind },
+        PowerUp { kind: *kind },
         GameEntity,
     ));
 }
 
 /// Spawn side boosters attached to the player
 pub fn spawn_side_boosters(cmd: &mut Commands, player_id: Entity, sprites: &SpriteAssets) {
-    // Left booster
-    cmd.spawn((
-        Sprite::from_atlas_image(
-            sprites.booster_left_texture.clone(),
-            TextureAtlas {
-                layout: sprites.booster_left_layout.clone(),
-                index: 0,
-            },
+    let boosters = [
+        (
+            -10.0,
+            &sprites.booster_left_texture,
+            &sprites.booster_left_layout,
         ),
-        Transform::from_xyz(-10.0, -8.0, -0.1),
-        ChildOf(player_id),
-        SideBooster,
-        AnimationIndices { first: 0, last: 1 },
-        AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
-    ));
-
-    // Right booster
-    cmd.spawn((
-        Sprite::from_atlas_image(
-            sprites.booster_right_texture.clone(),
-            TextureAtlas {
-                layout: sprites.booster_right_layout.clone(),
-                index: 0,
-            },
+        (
+            10.0,
+            &sprites.booster_right_texture,
+            &sprites.booster_right_layout,
         ),
-        Transform::from_xyz(10.0, -8.0, -0.1),
-        ChildOf(player_id),
-        SideBooster,
-        AnimationIndices { first: 0, last: 1 },
-        AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
-    ));
+    ];
+    for (x, texture, layout) in boosters {
+        cmd.spawn((
+            Sprite::from_atlas_image(
+                texture.clone(),
+                TextureAtlas {
+                    layout: layout.clone(),
+                    index: 0,
+                },
+            ),
+            Transform::from_xyz(x, -8.0, -0.1),
+            ChildOf(player_id),
+            SideBooster,
+            AnimationIndices { first: 0, last: 1 },
+            AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
+        ));
+    }
 }

@@ -5,6 +5,20 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct Player;
 
+/// Player is invincible (after respawn)
+#[derive(Component)]
+pub struct Invincible {
+    pub timer: Timer,
+}
+
+impl Invincible {
+    pub fn new(duration: f32) -> Self {
+        Self {
+            timer: Timer::from_seconds(duration, TimerMode::Once),
+        }
+    }
+}
+
 #[derive(Component)]
 pub struct PlayerBullet;
 
@@ -89,7 +103,7 @@ pub enum ScoreType {
     HighScore,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub struct WaveDigit;
 
 #[derive(Component, Clone, Copy, PartialEq)]
@@ -120,6 +134,45 @@ pub struct HighScoresUi;
 #[derive(Component)]
 pub struct HighScoreRow(pub usize);
 
+// === Power-ups Info UI ===
+#[derive(Component)]
+pub struct PowerUpsUi;
+
+// === Enemy Scores UI ===
+#[derive(Component)]
+pub struct EnemyScoresUi;
+
+// === Wavy Text Animation ===
+#[derive(Component)]
+pub struct WavyText {
+    pub line_index: usize,
+    pub base_top: f32,
+}
+
+// === Wavy Sprite Animation (for info screen sprites) ===
+#[derive(Component)]
+pub struct WavySprite {
+    pub line_index: usize,
+    pub base_y: f32,
+}
+
+// === Quit Confirmation UI ===
+#[derive(Component)]
+pub struct QuitConfirmUi;
+
+// === Visual Effects ===
+#[derive(Component)]
+pub struct GameCamera;
+
+#[derive(Component)]
+pub struct ScorePopup {
+    pub timer: Timer,
+    pub start_y: f32,
+}
+
+#[derive(Component)]
+pub struct StarLayer(pub u8); // 0 = far/slow, 1 = mid, 2 = near/fast
+
 // === Power-ups ===
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PowerUpType {
@@ -140,3 +193,13 @@ pub struct PowerUp {
 
 #[derive(Component)]
 pub struct SideBooster;
+
+/// Screen flash overlay for power-up collection
+#[derive(Component)]
+pub struct ScreenFlashOverlay;
+
+/// Nebula background cloud
+#[derive(Component)]
+pub struct Nebula {
+    pub speed: f32,
+}

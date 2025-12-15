@@ -248,10 +248,19 @@ impl Default for ScreenCycleTimer {
 }
 
 /// Current name entry state
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct NameEntryState {
     pub chars: [char; 3],
     pub position: usize,
+}
+
+impl Default for NameEntryState {
+    fn default() -> Self {
+        Self {
+            chars: ['A', 'A', 'A'],
+            position: 0,
+        }
+    }
 }
 
 /// Whether the game is in attract mode (cycling between title and high scores)
@@ -320,4 +329,64 @@ impl PowerUpState {
     pub fn has_any(&self) -> bool {
         self.rapid_fire || self.triple_shot || self.speed_boost || self.power_shot
     }
+}
+
+/// Quit confirmation dialog state
+#[derive(Resource, Default)]
+pub struct QuitConfirmation {
+    pub showing: bool,
+}
+
+/// CLI setting: whether music is enabled
+#[derive(Resource)]
+pub struct MusicEnabled(pub bool);
+
+/// Screen shake effect state
+#[derive(Resource, Default)]
+pub struct ScreenShake {
+    pub trauma: f32,     // Current shake intensity (0.0 - 1.0)
+    pub decay_rate: f32, // How fast trauma decays
+}
+
+impl ScreenShake {
+    pub fn add_trauma(&mut self, amount: f32) {
+        self.trauma = (self.trauma + amount).min(1.0);
+        self.decay_rate = 5.0; // Default decay
+    }
+}
+
+/// Combo tracking for rapid kills
+#[derive(Resource, Default)]
+pub struct ComboTracker {
+    pub count: u32,
+    pub timer: f32,
+}
+
+impl ComboTracker {
+    const COMBO_WINDOW: f32 = 1.0; // Seconds to maintain combo
+
+    pub fn add_kill(&mut self) {
+        self.count += 1;
+        self.timer = Self::COMBO_WINDOW;
+    }
+
+    pub fn tick(&mut self, dt: f32) {
+        if self.timer > 0.0 {
+            self.timer -= dt;
+            if self.timer <= 0.0 {
+                self.count = 0;
+            }
+        }
+    }
+
+    pub fn current(&self) -> u32 {
+        self.count.max(1)
+    }
+}
+
+/// Screen flash effect for power-up collection
+#[derive(Resource, Default)]
+pub struct ScreenFlash {
+    pub timer: f32,
+    pub color: Color,
 }
