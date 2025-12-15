@@ -16,6 +16,15 @@ pub const FADE_DURATION: f32 = 2.0;
 pub const SPRITE_SCALE: f32 = 3.0;
 pub const ANIM_FPS: f32 = 8.0;
 
+// === Power-up Constants ===
+pub const POWERUP_DROP_CHANCE: f32 = 0.05; // 5% chance to drop
+pub const POWERUP_SPEED: f32 = 100.0;
+pub const POWERUP_SIZE: Vec2 = Vec2::new(32.0, 32.0);
+pub const POWERUP_SCALE: f32 = 2.0;
+pub const RAPID_FIRE_RATE: f32 = 0.12; // faster than normal 0.25
+pub const SPEED_BOOST_MULT: f32 = 1.5;
+pub const TRIPLE_SHOT_SPREAD: f32 = 15.0; // degrees
+
 // === UI Constants ===
 pub const LIFE_ICON_SCALE: f32 = 2.0;
 pub const LIFE_ICON_SPACING: f32 = 36.0;
@@ -23,12 +32,17 @@ pub const DIGIT_SCALE: f32 = 3.0;
 pub const DIGIT_SPACING: f32 = 26.0;
 pub const WAVE_DIGIT_SCALE: f32 = 2.5;
 
+// === High Score Constants ===
+pub const MAX_HIGH_SCORES: usize = 10;
+
 // === Game States ===
 #[derive(States, Debug, Clone, Copy, Eq, PartialEq, Hash, Default)]
 pub enum GameState {
     #[default]
     TitleScreen,
     Playing,
+    NameEntry,
+    HighScores,
     GameOver,
 }
 
@@ -48,11 +62,15 @@ pub struct EnemyKilledMsg(pub u32);
 #[derive(bevy::ecs::message::Message)]
 pub struct ExtraLifeMsg;
 
+#[derive(bevy::ecs::message::Message)]
+pub struct PowerUpCollectedMsg(pub super::components::PowerUpType);
+
 #[derive(Clone, Copy)]
 pub enum SfxType {
     Laser,
     Explode,
     Death,
+    PowerUp,
 }
 
 // === Music Fade Phase ===

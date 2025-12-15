@@ -1,5 +1,6 @@
 //! Gameplay systems
 
+use bevy::ecs::query::Or;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_ym2149::Ym2149Playback;
@@ -28,17 +29,99 @@ pub fn title_input(kb: Res<ButtonInput<KeyCode>>, mut ns: ResMut<NextState<GameS
     if kb.just_pressed(KeyCode::Enter) {
         ns.set(GameState::Playing);
     }
+    if kb.just_pressed(KeyCode::KeyH) {
+        ns.set(GameState::HighScores);
+    }
     if kb.just_pressed(KeyCode::Escape) {
         std::process::exit(0);
     }
 }
 
-pub fn title_anim(time: Res<Time>, mut q: Query<(&mut TextColor, &UiMarker)>) {
-    for (mut c, m) in q.iter_mut() {
-        if *m == UiMarker::PressEnter {
-            c.0 = Color::srgba(1.0, 1.0, 0.2, (time.elapsed_secs() * 2.0).sin() * 0.3 + 0.7);
+pub fn title_anim(
+    time: Res<Time>,
+    fade: Res<ScreenFade>,
+    mut title_q: Query<(&mut TextColor, &UiMarker)>,
+) {
+    let t = time.elapsed_secs();
+    let alpha = fade.alpha;
+
+    for (mut color, marker) in title_q.iter_mut() {
+        match marker {
+            UiMarker::Title => {
+                // Pulsing brightness + hue shift
+                let pulse = (t * 1.5).sin() * 0.15 + 1.0;
+                let hue_shift = (t * 0.5).sin() * 0.1;
+                color.0 = Color::srgba(
+                    (0.2 + hue_shift) * pulse,
+                    0.8 * pulse,
+                    (1.0 - hue_shift) * pulse,
+                    alpha,
+                );
+            }
+            UiMarker::PressEnter => {
+                // Blinking
+                let blink = (t * 3.0).sin() * 0.4 + 0.6;
+                color.0 = Color::srgba(1.0, 1.0, 0.2, alpha * blink);
+            }
+            _ => {}
         }
     }
+}
+
+pub fn screen_fade_update(time: Res<Time>, mut fade: ResMut<ScreenFade>) {
+    fade.timer.tick(time.delta());
+    let progress = fade.timer.fraction();
+
+    if fade.fading_in {
+        fade.alpha = progress;
+        if fade.timer.just_finished() {
+            fade.fading_in = false;
+            fade.alpha = 1.0;
+        }
+    } else if fade.fading_out {
+        fade.alpha = 1.0 - progress;
+        if fade.timer.just_finished() {
+            fade.fading_out = false;
+            fade.alpha = 0.0;
+        }
+    }
+}
+
+pub fn title_auto_cycle(
+    time: Res<Time>,
+    attract: Res<AttractMode>,
+    mut fade: ResMut<ScreenFade>,
+    mut timer: ResMut<ScreenCycleTimer>,
+    mut ns: ResMut<NextState<GameState>>,
+) {
+    if !attract.active {
+        return;
+    }
+
+    timer.0.tick(time.delta());
+
+    // Start fade-out 0.5s before timer ends
+    let remaining = timer.0.remaining_secs();
+    if remaining <= ScreenFade::FADE_DURATION && !fade.fading_out && fade.alpha > 0.0 {
+        fade.start_fade_out();
+    }
+
+    // Transition when timer finishes
+    if timer.0.just_finished() {
+        ns.set(GameState::HighScores);
+    }
+}
+
+pub fn start_screen_fade_in(mut fade: ResMut<ScreenFade>) {
+    fade.start_fade_in();
+}
+
+pub fn reset_attract_mode(mut attract: ResMut<AttractMode>) {
+    attract.active = false;
+}
+
+pub fn activate_attract_mode(mut attract: ResMut<AttractMode>) {
+    attract.active = true;
 }
 
 // === State Transitions ===
@@ -54,18 +137,38 @@ pub fn hide_title_ui(mut q: Query<(&mut Visibility, &UiMarker)>) {
     }
 }
 
+pub fn show_title_ui(mut q: Query<(&mut Visibility, &UiMarker)>) {
+    for (mut v, m) in q.iter_mut() {
+        if matches!(
+            m,
+            UiMarker::Title | UiMarker::PressEnter | UiMarker::Subtitle
+        ) {
+            *v = Visibility::Visible;
+        }
+    }
+}
+
 pub fn enter_playing(
     mut cmd: Commands,
     mut gd: ResMut<GameData>,
     mut fade: ResMut<MusicFade>,
+    mut powerups: ResMut<PowerUpState>,
     screen: Res<ScreenSize>,
     sprites: Res<SpriteAssets>,
+    fonts: Res<FontAssets>,
     mut uiq: Query<(&mut Visibility, &UiMarker)>,
+    old_enemies: Query<Entity, With<GameOverEnemy>>,
 ) {
+    // Clean up any leftover enemies from game over
+    for e in old_enemies.iter() {
+        cmd.entity(e).try_despawn();
+    }
+
     request_subsong(&mut fade, 2);
     gd.reset();
+    powerups.reset();
     spawn_player(&mut cmd, screen.half_height, &sprites);
-    spawn_fading_text(&mut cmd, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
+    spawn_fading_text(&mut cmd, &fonts, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
 
     spawn_life_icons(&mut cmd, &sprites, &screen, gd.lives);
     spawn_score_digits(&mut cmd, &sprites, &screen, ScoreType::Score, gd.score);
@@ -80,17 +183,29 @@ pub fn enter_playing(
 pub fn enter_gameover(
     mut cmd: Commands,
     mut fade: ResMut<MusicFade>,
+    mut powerups: ResMut<PowerUpState>,
     mut uiq: Query<(Entity, &mut Visibility, &UiMarker)>,
     eq: Query<(Entity, &Transform), With<Enemy>>,
     player_bullets: Query<Entity, With<PlayerBullet>>,
     enemy_bullets: Query<Entity, With<EnemyBullet>>,
+    floating_powerups: Query<Entity, With<PowerUp>>,
     mut rng: Local<Option<SmallRng>>,
 ) {
     let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
     request_subsong(&mut fade, 3);
 
-    for e in player_bullets.iter().chain(enemy_bullets.iter()) {
-        cmd.entity(e).despawn();
+    // Clear all power-ups
+    powerups.reset();
+
+    // Start 10-second timer to auto-return to title
+    cmd.insert_resource(ScreenCycleTimer::default());
+
+    for e in player_bullets
+        .iter()
+        .chain(enemy_bullets.iter())
+        .chain(floating_powerups.iter())
+    {
+        cmd.entity(e).try_despawn();
     }
 
     for (entity, mut v, m) in uiq.iter_mut() {
@@ -119,12 +234,31 @@ pub fn enter_gameover(
     }
 }
 
-pub fn exit_gameover(mut cmd: Commands, mut q: Query<(Entity, &mut Visibility, &UiMarker)>) {
+pub fn gameover_auto_return(
+    time: Res<Time>,
+    mut timer: ResMut<ScreenCycleTimer>,
+    mut ns: ResMut<NextState<GameState>>,
+) {
+    timer.0.tick(time.delta());
+    if timer.0.just_finished() {
+        ns.set(GameState::TitleScreen);
+    }
+}
+
+pub fn exit_gameover(
+    mut cmd: Commands,
+    mut q: Query<(Entity, &mut Visibility, &UiMarker)>,
+    enemies: Query<Entity, With<GameOverEnemy>>,
+) {
     for (entity, mut v, m) in q.iter_mut() {
         if *m == UiMarker::GameOver {
             *v = Visibility::Hidden;
             cmd.entity(entity).remove::<GameOverUi>();
         }
+    }
+    // Despawn enemies when leaving game over
+    for e in enemies.iter() {
+        cmd.entity(e).try_despawn();
     }
 }
 
@@ -144,6 +278,7 @@ pub fn handle_sfx_events(
                     SfxType::Laser => &s.laser,
                     SfxType::Explode => &s.explode,
                     SfxType::Death => &s.death,
+                    SfxType::PowerUp => &s.explode, // Reuse explode for now
                 },
                 None,
                 None,
@@ -156,6 +291,7 @@ pub fn handle_wave_complete(
     mut cmd: Commands,
     mut events: MessageReader<WaveCompleteMsg>,
     mut gd: ResMut<GameData>,
+    fonts: Res<FontAssets>,
 ) {
     for _ in events.read() {
         gd.wave += 1;
@@ -163,6 +299,7 @@ pub fn handle_wave_complete(
         gd.dive_timer = Timer::from_seconds(gd.dive_interval(), TimerMode::Once);
         spawn_fading_text(
             &mut cmd,
+            &fonts,
             &format!("WAVE {}", gd.wave),
             2.0,
             Color::srgba(1.0, 1.0, 0.2, 1.0),
@@ -176,19 +313,33 @@ pub fn handle_player_hit(
     mut events: MessageReader<PlayerHitMsg>,
     mut gd: ResMut<GameData>,
     mut ns: ResMut<NextState<GameState>>,
+    mut powerups: ResMut<PowerUpState>,
     pq: Query<Entity, With<Player>>,
+    side_boosters: Query<Entity, With<SideBooster>>,
     screen: Res<ScreenSize>,
     sprites: Res<SpriteAssets>,
+    scores: Res<HighScoreList>,
     mut sfx: MessageWriter<PlaySfxMsg>,
 ) {
     for _ in events.read() {
         sfx.write(PlaySfxMsg(SfxType::Death));
         gd.lives = gd.lives.saturating_sub(1);
+
+        // Reset power-ups and remove side boosters
+        powerups.reset();
+        for e in side_boosters.iter() {
+            cmd.entity(e).try_despawn();
+        }
+
         for e in pq.iter() {
-            cmd.entity(e).despawn();
+            cmd.entity(e).try_despawn();
         }
         if gd.lives == 0 {
-            ns.set(GameState::GameOver);
+            if scores.is_high_score(gd.score) {
+                ns.set(GameState::NameEntry);
+            } else {
+                ns.set(GameState::GameOver);
+            }
         } else {
             spawn_player(&mut cmd, screen.half_height, &sprites);
         }
@@ -216,10 +367,11 @@ pub fn handle_extra_life(
     mut cmd: Commands,
     mut events: MessageReader<ExtraLifeMsg>,
     mut gd: ResMut<GameData>,
+    fonts: Res<FontAssets>,
 ) {
     for _ in events.read() {
         gd.lives += 1;
-        spawn_fading_text(&mut cmd, "LIVES +1", 1.0, Color::srgba(0.2, 1.0, 0.2, 1.0), false);
+        spawn_fading_text(&mut cmd, &fonts, "LIVES +1", 1.0, Color::srgba(0.2, 1.0, 0.2, 1.0), false);
     }
 }
 
@@ -237,7 +389,7 @@ pub fn fading_text_update(
             c.0 = ft.color.with_alpha(1.0 - ft.timer.fraction());
         }
         if ft.timer.is_finished() {
-            cmd.entity(entity).despawn();
+            cmd.entity(entity).try_despawn();
             if ft.spawn_enemies {
                 spawn_enemies(&mut cmd, &sprites);
             }
@@ -250,14 +402,19 @@ pub fn player_movement(
     time: Res<Time>,
     mut q: Query<(&mut Transform, &mut Sprite), With<Player>>,
     screen: Res<ScreenSize>,
+    powerups: Res<PowerUpState>,
 ) {
     let Ok((mut t, mut sprite)) = q.single_mut() else {
         return;
     };
     let hw = screen.half_width - PLAYER_SIZE.x / 2.0;
     let dir = kb.pressed(KeyCode::ArrowRight) as i32 - kb.pressed(KeyCode::ArrowLeft) as i32;
-    t.translation.x =
-        (t.translation.x + dir as f32 * PLAYER_SPEED * time.delta_secs()).clamp(-hw, hw);
+    let speed = if powerups.speed_boost {
+        PLAYER_SPEED * SPEED_BOOST_MULT
+    } else {
+        PLAYER_SPEED
+    };
+    t.translation.x = (t.translation.x + dir as f32 * speed * time.delta_secs()).clamp(-hw, hw);
 
     if let Some(atlas) = &mut sprite.texture_atlas {
         atlas.index = match dir {
@@ -275,6 +432,7 @@ pub fn player_shooting(
     mut gd: ResMut<GameData>,
     pq: Query<&Transform, With<Player>>,
     sprites: Res<SpriteAssets>,
+    powerups: Res<PowerUpState>,
     mut sfx: MessageWriter<PlaySfxMsg>,
 ) {
     gd.shoot_timer.tick(time.delta());
@@ -282,23 +440,65 @@ pub fn player_shooting(
         && gd.shoot_timer.is_finished()
         && let Ok(pt) = pq.single()
     {
-        cmd.spawn((
-            Sprite::from_atlas_image(
+        let base_pos = Vec3::new(pt.translation.x, pt.translation.y + PLAYER_SIZE.y / 2.0, 1.0);
+
+        // Choose projectile texture based on power-ups
+        let (texture, layout, last_frame, scale) = if powerups.power_shot {
+            (
+                sprites.power_shot_texture.clone(),
+                sprites.power_shot_layout.clone(),
+                3,
+                SPRITE_SCALE * 0.6,
+            )
+        } else if powerups.triple_shot {
+            (
+                sprites.triple_shot_texture.clone(),
+                sprites.triple_shot_layout.clone(),
+                1,
+                SPRITE_SCALE * 0.5,
+            )
+        } else {
+            (
                 sprites.player_bullet_texture.clone(),
-                TextureAtlas {
-                    layout: sprites.player_bullet_layout.clone(),
-                    index: 0,
-                },
-            ),
-            Transform::from_xyz(pt.translation.x, pt.translation.y + PLAYER_SIZE.y / 2.0, 1.0)
-                .with_scale(Vec3::splat(SPRITE_SCALE * 0.5)),
-            PlayerBullet,
-            GameEntity,
-            AnimationIndices { first: 0, last: 1 },
-            AnimationTimer(Timer::from_seconds(0.05, TimerMode::Repeating)),
-        ));
+                sprites.player_bullet_layout.clone(),
+                1,
+                SPRITE_SCALE * 0.5,
+            )
+        };
+
+        // Spawn bullets based on power-ups
+        let angles: &[f32] = if powerups.triple_shot {
+            &[-TRIPLE_SHOT_SPREAD, 0.0, TRIPLE_SHOT_SPREAD]
+        } else {
+            &[0.0]
+        };
+
+        for &angle_deg in angles {
+            let angle_rad = angle_deg.to_radians();
+            let offset_x = angle_rad.sin() * 10.0;
+            let pos = base_pos + Vec3::new(offset_x, 0.0, 0.0);
+
+            cmd.spawn((
+                Sprite::from_atlas_image(
+                    texture.clone(),
+                    TextureAtlas {
+                        layout: layout.clone(),
+                        index: 0,
+                    },
+                ),
+                Transform::from_translation(pos)
+                    .with_scale(Vec3::splat(scale))
+                    .with_rotation(Quat::from_rotation_z(-angle_rad)),
+                PlayerBullet,
+                GameEntity,
+                AnimationIndices { first: 0, last: last_frame },
+                AnimationTimer(Timer::from_seconds(0.05, TimerMode::Repeating)),
+            ));
+        }
+
         sfx.write(PlaySfxMsg(SfxType::Laser));
-        gd.shoot_timer = Timer::from_seconds(0.25, TimerMode::Once);
+        let fire_rate = if powerups.rapid_fire { RAPID_FIRE_RATE } else { 0.25 };
+        gd.shoot_timer = Timer::from_seconds(fire_rate, TimerMode::Once);
     }
 }
 
@@ -309,17 +509,26 @@ pub fn bullet_movement(
     mut player_bullets: Query<(Entity, &mut Transform), With<PlayerBullet>>,
     mut enemy_bullets: Query<(Entity, &mut Transform), (With<EnemyBullet>, Without<PlayerBullet>)>,
 ) {
-    let hh = screen.half_height;
+    let (hw, hh) = (screen.half_width, screen.half_height);
+    let dt = time.delta_secs();
+
     for (e, mut t) in player_bullets.iter_mut() {
-        t.translation.y += BULLET_SPEED * time.delta_secs();
-        if t.translation.y > hh + 20.0 {
-            cmd.entity(e).despawn();
+        // Get direction from rotation (bullets are rotated with -angle_rad)
+        let (_, angle) = t.rotation.to_axis_angle();
+        let dir = Vec2::new(-angle.sin(), angle.cos());
+        t.translation.x += dir.x * BULLET_SPEED * dt;
+        t.translation.y += dir.y * BULLET_SPEED * dt;
+
+        if t.translation.y > hh + 20.0
+            || t.translation.x.abs() > hw + 20.0
+        {
+            cmd.entity(e).try_despawn();
         }
     }
     for (e, mut t) in enemy_bullets.iter_mut() {
-        t.translation.y -= ENEMY_BULLET_SPEED * time.delta_secs();
+        t.translation.y -= ENEMY_BULLET_SPEED * dt;
         if t.translation.y < -hh - 20.0 {
-            cmd.entity(e).despawn();
+            cmd.entity(e).try_despawn();
         }
     }
 }
@@ -470,17 +679,26 @@ pub fn collisions(
     pq: Query<&Transform, With<Player>>,
     dq: Query<(Entity, &Transform), With<DivingEnemy>>,
     sprites: Res<SpriteAssets>,
+    powerups: Res<PowerUpState>,
     mut enemy_killed: MessageWriter<EnemyKilledMsg>,
     mut player_hit: MessageWriter<PlayerHitMsg>,
+    mut rng: Local<Option<SmallRng>>,
 ) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
     for (be, bt) in player_bullets.iter() {
         let bp = bt.translation.truncate();
         for (ee, et, enemy) in eq.iter() {
             if bp.distance(et.translation.truncate()) < BULLET_SIZE.y / 2.0 + ENEMY_SIZE.x / 2.0 {
-                cmd.entity(be).despawn();
-                cmd.entity(ee).despawn();
+                cmd.entity(be).try_despawn();
+                cmd.entity(ee).try_despawn();
                 spawn_explosion(&mut cmd, et.translation, &sprites);
                 enemy_killed.write(EnemyKilledMsg(enemy.points));
+
+                // Random chance to spawn power-up (only if player doesn't have all)
+                if rng.random::<f32>() < POWERUP_DROP_CHANCE {
+                    spawn_powerup(&mut cmd, et.translation, &sprites, &powerups, rng);
+                }
                 break;
             }
         }
@@ -491,7 +709,7 @@ pub fn collisions(
 
     for (be, bt) in enemy_bullets.iter() {
         if bt.translation.truncate().distance(pp) < BULLET_SIZE.y / 2.0 + PLAYER_SIZE.x / 2.0 {
-            cmd.entity(be).despawn();
+            cmd.entity(be).try_despawn();
             player_hit.write(PlayerHitMsg);
             return;
         }
@@ -499,7 +717,7 @@ pub fn collisions(
 
     for (de, dt) in dq.iter() {
         if dt.translation.truncate().distance(pp) < ENEMY_SIZE.x / 2.0 + PLAYER_SIZE.x / 2.0 {
-            cmd.entity(de).despawn();
+            cmd.entity(de).try_despawn();
             spawn_explosion(&mut cmd, dt.translation, &sprites);
             player_hit.write(PlayerHitMsg);
             return;
@@ -547,7 +765,7 @@ pub fn explosion_update(
         if timer.just_finished() {
             if let Some(atlas) = &sprite.texture_atlas {
                 if atlas.index >= indices.last {
-                    cmd.entity(entity).despawn();
+                    cmd.entity(entity).try_despawn();
                 }
             }
         }
@@ -566,42 +784,37 @@ pub fn starfield(time: Res<Time>, mut q: Query<(&mut Transform, &Star)>, screen:
     }
 }
 
-pub fn game_input(
+pub fn game_restart(
     mut cmd: Commands,
     kb: Res<ButtonInput<KeyCode>>,
     mut gd: ResMut<GameData>,
     mut ns: ResMut<NextState<GameState>>,
+    mut powerups: ResMut<PowerUpState>,
     state: Res<State<GameState>>,
     eq: Query<Entity, With<Enemy>>,
-    player_bullets: Query<Entity, With<PlayerBullet>>,
-    enemy_bullets: Query<Entity, With<EnemyBullet>>,
+    bullets: Query<Entity, Or<(With<PlayerBullet>, With<EnemyBullet>)>>,
     pq: Query<Entity, With<Player>>,
-    aq: Query<Entity, With<FadingText>>,
-    life_icons: Query<Entity, With<LifeIcon>>,
-    digit_sprites: Query<Entity, With<DigitSprite>>,
-    wave_digits: Query<Entity, With<WaveDigit>>,
+    cleanup: Query<Entity, Or<(With<FadingText>, With<LifeIcon>, With<DigitSprite>, With<WaveDigit>, With<PowerUp>, With<SideBooster>)>>,
     screen: Res<ScreenSize>,
     sprites: Res<SpriteAssets>,
+    fonts: Res<FontAssets>,
     mut fade: ResMut<MusicFade>,
 ) {
     if kb.just_pressed(KeyCode::KeyR) {
         for e in eq
             .iter()
-            .chain(player_bullets.iter())
-            .chain(enemy_bullets.iter())
-            .chain(aq.iter())
-            .chain(life_icons.iter())
-            .chain(digit_sprites.iter())
-            .chain(wave_digits.iter())
+            .chain(bullets.iter())
+            .chain(cleanup.iter())
         {
-            cmd.entity(e).despawn();
+            cmd.entity(e).try_despawn();
         }
         for e in pq.iter() {
-            cmd.entity(e).despawn();
+            cmd.entity(e).try_despawn();
         }
         gd.reset();
+        powerups.reset();
         spawn_player(&mut cmd, screen.half_height, &sprites);
-        spawn_fading_text(&mut cmd, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
+        spawn_fading_text(&mut cmd, &fonts, "WAVE 1", 2.0, Color::srgba(1.0, 1.0, 0.2, 1.0), true);
 
         spawn_life_icons(&mut cmd, &sprites, &screen, gd.lives);
         spawn_score_digits(&mut cmd, &sprites, &screen, ScoreType::Score, gd.score);
@@ -613,6 +826,9 @@ pub fn game_input(
             ns.set(GameState::Playing);
         }
     }
+}
+
+pub fn game_quit(kb: Res<ButtonInput<KeyCode>>) {
     if kb.just_pressed(KeyCode::Escape) {
         std::process::exit(0);
     }
@@ -716,3 +932,282 @@ pub fn gameover_ui_animation(time: Res<Time>, mut q: Query<(&mut Node, &GameOver
         node.top = Val::Percent(ui.base_top + offset);
     }
 }
+
+// === Name Entry ===
+
+pub fn enter_name_entry(
+    mut cmd: Commands,
+    gd: Res<GameData>,
+    fonts: Res<FontAssets>,
+    mut name_state: ResMut<NameEntryState>,
+    mut powerups: ResMut<PowerUpState>,
+    eq: Query<(Entity, &Transform), With<Enemy>>,
+    player_bullets: Query<Entity, With<PlayerBullet>>,
+    enemy_bullets: Query<Entity, With<EnemyBullet>>,
+    floating_powerups: Query<Entity, With<PowerUp>>,
+    mut rng: Local<Option<SmallRng>>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
+    // Clear all power-ups
+    powerups.reset();
+
+    // Despawn all bullets and floating power-ups
+    for e in player_bullets
+        .iter()
+        .chain(enemy_bullets.iter())
+        .chain(floating_powerups.iter())
+    {
+        cmd.entity(e).try_despawn();
+    }
+
+    // Add sine wave movement to enemies (same as game over)
+    let mut enemies: Vec<_> = eq.iter().collect();
+    for i in (1..enemies.len()).rev() {
+        let j = rng.random_range(0..=i);
+        enemies.swap(i, j);
+    }
+    for (i, (entity, t)) in enemies.into_iter().enumerate() {
+        cmd.entity(entity)
+            .remove::<DivingEnemy>()
+            .insert(GameOverEnemy {
+                phase: rng.random_range(0.0..std::f32::consts::TAU),
+                amplitude: rng.random_range(80.0..180.0),
+                frequency: rng.random_range(0.5..1.5),
+                base_pos: t.translation.truncate(),
+                delay: i as f32 * 0.08,
+                started: false,
+            });
+    }
+
+    *name_state = NameEntryState {
+        chars: ['A', 'A', 'A'],
+        position: 0,
+    };
+    super::ui::spawn_name_entry_ui(&mut cmd, &fonts, gd.score, gd.wave);
+}
+
+pub fn name_entry_input(
+    kb: Res<ButtonInput<KeyCode>>,
+    mut name_state: ResMut<NameEntryState>,
+    mut ns: ResMut<NextState<GameState>>,
+    mut scores: ResMut<HighScoreList>,
+    mut new_hs_index: ResMut<NewHighScoreIndex>,
+    gd: Res<GameData>,
+    mut q: Query<(&mut Text, &mut TextColor, &NameEntryChar)>,
+) {
+    let pos = name_state.position;
+
+    // Character change
+    if kb.just_pressed(KeyCode::ArrowUp) {
+        let c = &mut name_state.chars[pos];
+        *c = match *c {
+            'Z' => 'A',
+            _ => ((*c as u8) + 1) as char,
+        };
+    }
+    if kb.just_pressed(KeyCode::ArrowDown) {
+        let c = &mut name_state.chars[pos];
+        *c = match *c {
+            'A' => 'Z',
+            _ => ((*c as u8) - 1) as char,
+        };
+    }
+
+    // Position change
+    if kb.just_pressed(KeyCode::ArrowRight) && name_state.position < 2 {
+        name_state.position += 1;
+    }
+    if kb.just_pressed(KeyCode::ArrowLeft) && name_state.position > 0 {
+        name_state.position -= 1;
+    }
+
+    // Confirm
+    if kb.just_pressed(KeyCode::Enter) {
+        let name: String = name_state.chars.iter().collect();
+        let index = scores.add_score(name, gd.score, gd.wave);
+        new_hs_index.0 = Some(index);
+        ns.set(GameState::HighScores);
+        return;
+    }
+
+    // Update display
+    for (mut text, mut color, char_marker) in q.iter_mut() {
+        text.0 = name_state.chars[char_marker.index].to_string();
+        color.0 = if char_marker.index == name_state.position {
+            Color::srgb(1.0, 1.0, 0.2)
+        } else {
+            Color::srgb(0.5, 0.5, 0.5)
+        };
+    }
+}
+
+pub fn name_entry_blink(
+    time: Res<Time>,
+    name_state: Res<NameEntryState>,
+    mut q: Query<(&mut TextColor, &NameEntryChar)>,
+) {
+    let blink = (time.elapsed_secs() * 4.0).sin() > 0.0;
+    for (mut color, char_marker) in q.iter_mut() {
+        if char_marker.index == name_state.position {
+            color.0 = if blink {
+                Color::srgb(1.0, 1.0, 0.2)
+            } else {
+                Color::srgb(0.8, 0.6, 0.0)
+            };
+        }
+    }
+}
+
+pub fn exit_name_entry(mut cmd: Commands, q: Query<Entity, With<NameEntryUi>>) {
+    for e in q.iter() {
+        cmd.entity(e).try_despawn();
+    }
+}
+
+// === High Scores Screen ===
+
+pub fn enter_high_scores(mut cmd: Commands, fonts: Res<FontAssets>, scores: Res<HighScoreList>) {
+    super::ui::spawn_high_scores_ui(&mut cmd, &fonts, &scores);
+    cmd.insert_resource(ScreenCycleTimer::default());
+}
+
+pub fn high_scores_input(
+    kb: Res<ButtonInput<KeyCode>>,
+    mut ns: ResMut<NextState<GameState>>,
+    mut attract: ResMut<AttractMode>,
+) {
+    if kb.just_pressed(KeyCode::Escape) || kb.just_pressed(KeyCode::Enter) {
+        attract.active = false; // Manual exit disables attract mode
+        ns.set(GameState::TitleScreen);
+    }
+}
+
+pub fn high_scores_auto_return(
+    time: Res<Time>,
+    attract: Res<AttractMode>,
+    mut fade: ResMut<ScreenFade>,
+    mut timer: ResMut<ScreenCycleTimer>,
+    mut ns: ResMut<NextState<GameState>>,
+) {
+    if !attract.active {
+        return;
+    }
+
+    timer.0.tick(time.delta());
+
+    // Start fade-out 0.5s before timer ends
+    let remaining = timer.0.remaining_secs();
+    if remaining <= ScreenFade::FADE_DURATION && !fade.fading_out && fade.alpha > 0.0 {
+        fade.start_fade_out();
+    }
+
+    if timer.0.just_finished() {
+        ns.set(GameState::TitleScreen);
+    }
+}
+
+pub fn high_scores_fade(
+    time: Res<Time>,
+    fade: Res<ScreenFade>,
+    new_hs_index: Res<NewHighScoreIndex>,
+    mut q: Query<(&mut TextColor, Option<&HighScoreRow>), With<HighScoresUi>>,
+) {
+    let alpha = fade.alpha;
+    let highlight_idx = new_hs_index.0;
+    let blink = (time.elapsed_secs() * 6.0).sin() > 0.0;
+
+    for (mut color, row) in q.iter_mut() {
+        let base = color.0.to_srgba();
+
+        // Apply highlight blink if this is the new high score row
+        let is_highlighted = row.is_some_and(|r| Some(r.0) == highlight_idx);
+        let row_alpha = if is_highlighted && !blink {
+            alpha * 0.3
+        } else {
+            alpha
+        };
+
+        color.0 = Color::srgba(base.red, base.green, base.blue, row_alpha);
+    }
+}
+
+pub fn exit_high_scores(
+    mut cmd: Commands,
+    mut new_hs_index: ResMut<NewHighScoreIndex>,
+    q: Query<Entity, With<HighScoresUi>>,
+    enemies: Query<Entity, With<GameOverEnemy>>,
+) {
+    new_hs_index.0 = None;
+    for e in q.iter() {
+        cmd.entity(e).try_despawn();
+    }
+    // Despawn flying enemies when returning to title
+    for e in enemies.iter() {
+        cmd.entity(e).try_despawn();
+    }
+}
+
+// === Power-ups ===
+
+pub fn powerup_movement(
+    mut cmd: Commands,
+    time: Res<Time>,
+    screen: Res<ScreenSize>,
+    mut q: Query<(Entity, &mut Transform), With<PowerUp>>,
+) {
+    let bottom = -screen.half_height - 20.0;
+    for (entity, mut t) in q.iter_mut() {
+        t.translation.y -= POWERUP_SPEED * time.delta_secs();
+        // Gentle floating motion
+        t.translation.x += (time.elapsed_secs() * 2.0 + t.translation.y * 0.1).sin() * 0.5;
+        if t.translation.y < bottom {
+            cmd.entity(entity).try_despawn();
+        }
+    }
+}
+
+pub fn powerup_collection(
+    mut cmd: Commands,
+    powerups: Query<(Entity, &Transform, &PowerUp)>,
+    player: Query<&Transform, With<Player>>,
+    mut collected: MessageWriter<PowerUpCollectedMsg>,
+    mut sfx: MessageWriter<PlaySfxMsg>,
+) {
+    let Ok(pt) = player.single() else { return };
+    let pp = pt.translation.truncate();
+
+    for (entity, t, powerup) in powerups.iter() {
+        if t.translation.truncate().distance(pp) < POWERUP_SIZE.x / 2.0 + PLAYER_SIZE.x / 2.0 {
+            cmd.entity(entity).try_despawn();
+            collected.write(PowerUpCollectedMsg(powerup.kind));
+            sfx.write(PlaySfxMsg(SfxType::PowerUp));
+        }
+    }
+}
+
+pub fn handle_powerup_collected(
+    mut cmd: Commands,
+    mut events: MessageReader<PowerUpCollectedMsg>,
+    mut powerups: ResMut<PowerUpState>,
+    sprites: Res<SpriteAssets>,
+    player: Query<Entity, With<Player>>,
+    side_boosters: Query<Entity, With<SideBooster>>,
+) {
+    for ev in events.read() {
+        match ev.0 {
+            PowerUpType::RapidFire => powerups.rapid_fire = true,
+            PowerUpType::TripleShot => powerups.triple_shot = true,
+            PowerUpType::SpeedBoost => powerups.speed_boost = true,
+            PowerUpType::PowerShot => powerups.power_shot = true,
+        }
+
+        // Spawn side boosters if we have any power-up and don't have them yet
+        if powerups.has_any() && side_boosters.is_empty() {
+            if let Ok(player_id) = player.single() {
+                spawn_side_boosters(&mut cmd, player_id, &sprites);
+            }
+        }
+    }
+}
+

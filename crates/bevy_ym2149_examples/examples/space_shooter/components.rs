@@ -103,3 +103,40 @@ pub enum UiMarker {
     PressEnter,
     Subtitle,
 }
+
+// === Name Entry UI ===
+#[derive(Component)]
+pub struct NameEntryUi;
+
+#[derive(Component)]
+pub struct NameEntryChar {
+    pub index: usize,
+}
+
+// === High Scores UI ===
+#[derive(Component)]
+pub struct HighScoresUi;
+
+#[derive(Component)]
+pub struct HighScoreRow(pub usize);
+
+// === Power-ups ===
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PowerUpType {
+    /// Faster shooting rate
+    RapidFire,
+    /// Triple shot (spread)
+    TripleShot,
+    /// Speed boost for movement
+    SpeedBoost,
+    /// Stronger bullets (more damage/bigger)
+    PowerShot,
+}
+
+#[derive(Component)]
+pub struct PowerUp {
+    pub kind: PowerUpType,
+}
+
+#[derive(Component)]
+pub struct SideBooster;

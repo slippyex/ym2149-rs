@@ -15,6 +15,7 @@ This crate contains comprehensive runnable examples showing how to use the YM214
 | `demoscene` | Shader-heavy CRT pipeline + synchronized overlays |
 | `playlist_crossfade_example` | Selectable playlist UI with crossfades |
 | `sndh_with_gist_sfx` | Dual YM2149 emulators: SNDH music + GIST sound effects |
+| `space_shooter` | Galaxian-style game with CRT effect, SNDH music, GIST SFX |
 
 ## Examples
 
@@ -111,6 +112,27 @@ let gist_player = Arc::new(Mutex::new(GistPlayer::new()));
 // ... register as Bevy Decodable audio source
 ```
 
+### space_shooter
+Galaxian-style retro arcade game demonstrating:
+- **SNDH music:** Mad Max's "Lethal Xcess (STe)" soundtrack with subsong crossfades
+- **GIST sound effects:** Laser, explosion, and death sounds on separate YM2149 emulator
+- **CRT post-processing:** Toggleable scanline/bloom shader effect
+- **Sprite-based UI:** Life icons, score digits, wave counter using sprite sheets
+- **Game states:** Title screen, gameplay, and game over with smooth transitions
+- **Enemy waves:** Formation movement with diving attack patterns
+
+**Run:** `cargo run --example space_shooter -p bevy_ym2149_examples --release`
+
+<img src="../../docs/screenshots/space_shooter.png" alt="Space Shooter example" width="780">
+
+**Controls**
+- `←/→` – Move player ship
+- `Space` – Fire
+- `Enter` – Start game (title screen)
+- `R` – Restart (game over)
+- `M` – Toggle music
+- `C` – Toggle CRT effect
+- `Esc` – Quit
 
 ## Crate Structure
 
@@ -126,7 +148,17 @@ bevy_ym2149_examples/
 │   ├── advanced_example.rs
 │   ├── feature_showcase.rs
 │   ├── demoscene.rs
-│   └── sndh_with_gist_sfx.rs
+│   ├── sndh_with_gist_sfx.rs
+│   ├── space_shooter.rs
+│   └── space_shooter/            # Modular game code
+│       ├── audio.rs
+│       ├── components.rs
+│       ├── config.rs
+│       ├── crt.rs
+│       ├── resources.rs
+│       ├── spawning.rs
+│       ├── systems.rs
+│       └── ui.rs
 ├── assets/                       # Shared assets for examples
 │   ├── music/                    # YM/AKS/SNDH music files
 │   ├── sfx/gist/                 # GIST sound effect files (.snd)

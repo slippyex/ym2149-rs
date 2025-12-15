@@ -53,11 +53,19 @@ fn main() {
         .insert_resource(GameData::new())
         .insert_resource(CrtState { enabled: true })
         .insert_resource(MusicFade::default())
+        .insert_resource(HighScoreList::load())
+        .insert_resource(NameEntryState::default())
+        .insert_resource(AttractMode::default())
+        .insert_resource(PowerUpState::default())
+        .insert_resource(NewHighScoreIndex::default())
+        .insert_resource(ScreenCycleTimer::default())
+        .insert_resource(ScreenFade::default())
         .add_message::<PlaySfxMsg>()
         .add_message::<WaveCompleteMsg>()
         .add_message::<PlayerHitMsg>()
         .add_message::<EnemyKilledMsg>()
         .add_message::<ExtraLifeMsg>()
+        .add_message::<PowerUpCollectedMsg>()
         .configure_sets(
             Update,
             (
@@ -74,16 +82,21 @@ fn main() {
         // Title screen
         .add_systems(
             Update,
-            (title_input.in_set(GameSet::Input), title_anim)
+            (title_input.in_set(GameSet::Input), title_anim, title_auto_cycle, screen_fade_update)
                 .run_if(in_state(GameState::TitleScreen)),
         )
         .add_systems(
             OnEnter(GameState::TitleScreen),
-            |mut fade: ResMut<MusicFade>| request_subsong(&mut fade, 1),
+            (
+                |mut fade: ResMut<MusicFade>| request_subsong(&mut fade, 1),
+                show_title_ui,
+                |mut timer: ResMut<ScreenCycleTimer>| timer.0.reset(),
+                start_screen_fade_in,
+            ),
         )
         .add_systems(OnExit(GameState::TitleScreen), hide_title_ui)
         // Playing state
-        .add_systems(OnEnter(GameState::Playing), enter_playing)
+        .add_systems(OnEnter(GameState::Playing), (enter_playing, reset_attract_mode))
         .add_systems(
             Update,
             (
@@ -93,9 +106,10 @@ fn main() {
                     enemy_formation_movement,
                     diving_movement,
                     fading_text_update,
+                    powerup_movement,
                 )
                     .in_set(GameSet::Movement),
-                collisions.in_set(GameSet::Collision),
+                (collisions, powerup_collection).in_set(GameSet::Collision),
                 (enemy_shooting, initiate_dives, check_wave_complete).in_set(GameSet::Spawn),
             )
                 .run_if(in_state(GameState::Playing)),
@@ -108,15 +122,33 @@ fn main() {
                 handle_player_hit,
                 handle_enemy_killed,
                 handle_extra_life,
+                handle_powerup_collected,
             )
                 .in_set(GameSet::Cleanup)
                 .run_if(in_state(GameState::Playing)),
         )
-        // Game over state
-        .add_systems(OnEnter(GameState::GameOver), enter_gameover)
+        // Name entry state (high score)
+        .add_systems(OnEnter(GameState::NameEntry), (enter_name_entry, activate_attract_mode))
         .add_systems(
             Update,
-            (gameover_enemy_movement, gameover_ui_animation).run_if(in_state(GameState::GameOver)),
+            (name_entry_input, name_entry_blink, gameover_enemy_movement)
+                .run_if(in_state(GameState::NameEntry)),
+        )
+        .add_systems(OnExit(GameState::NameEntry), exit_name_entry)
+        // High scores state
+        .add_systems(OnEnter(GameState::HighScores), (enter_high_scores, start_screen_fade_in))
+        .add_systems(
+            Update,
+            (high_scores_input, high_scores_fade, high_scores_auto_return, screen_fade_update, gameover_enemy_movement)
+                .run_if(in_state(GameState::HighScores)),
+        )
+        .add_systems(OnExit(GameState::HighScores), exit_high_scores)
+        // Game over state
+        .add_systems(OnEnter(GameState::GameOver), (enter_gameover, activate_attract_mode))
+        .add_systems(
+            Update,
+            (gameover_enemy_movement, gameover_ui_animation, gameover_auto_return)
+                .run_if(in_state(GameState::GameOver)),
         )
         .add_systems(OnExit(GameState::GameOver), exit_gameover)
         // Global systems
@@ -124,7 +156,8 @@ fn main() {
             Update,
             (
                 starfield,
-                game_input.in_set(GameSet::Input),
+                game_restart.in_set(GameSet::Input),
+                game_quit,
                 music_toggle,
                 crt_toggle,
                 (update_ui, update_life_icons, update_score_digits, update_wave_digits)
@@ -249,6 +282,14 @@ fn setup(
         booster_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::splat(16), 2, 1, None, None,
         )),
+        booster_left_texture: server.load(format!("{sprite_dir}/Player ship/Boosters_left (16 x 16).png")),
+        booster_left_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16), 2, 1, None, None,
+        )),
+        booster_right_texture: server.load(format!("{sprite_dir}/Player ship/Boosters_right (16 x 16).png")),
+        booster_right_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16), 2, 1, None, None,
+        )),
         enemy_alan_texture: server.load(format!("{sprite_dir}/Enemies/Alan (16 x 16).png")),
         enemy_alan_layout: {
             let mut layout = TextureAtlasLayout::new_empty(UVec2::new(96, 16));
@@ -273,6 +314,14 @@ fn setup(
         player_bullet_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::splat(16), 2, 1, None, None,
         )),
+        triple_shot_texture: server.load(format!("{sprite_dir}/Projectiles/Player_donut_shot (16 x 16).png")),
+        triple_shot_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16), 2, 1, None, None,
+        )),
+        power_shot_texture: server.load(format!("{sprite_dir}/Projectiles/Player_square_shot (16 x 16).png")),
+        power_shot_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16), 4, 1, None, None,
+        )),
         enemy_bullet_texture: server.load(format!("{sprite_dir}/Projectiles/Enemy_projectile (16 x 16).png")),
         enemy_bullet_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::splat(16), 3, 1, None, None,
@@ -286,7 +335,17 @@ fn setup(
         number_font_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::splat(8), 5, 2, None, None,
         )),
+        powerup_texture: server.load(format!("{sprite_dir}/Items/Circle_+_Square_+_Missile_pick-ups (16 x 16).png")),
+        powerup_layout: atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(16), 3, 1, None, None,
+        )),
     });
+
+    // Load arcade font
+    let fonts = FontAssets {
+        arcade: server.load("fonts/ARCADECLASSIC.TTF"),
+    };
+    cmd.insert_resource(fonts.clone());
 
     // Starfield
     let mut rng = SmallRng::from_os_rng();
@@ -304,5 +363,5 @@ fn setup(
         ));
     }
 
-    spawn_ui(&mut cmd);
+    spawn_ui(&mut cmd, &fonts);
 }

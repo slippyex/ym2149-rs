@@ -2,6 +2,9 @@
 
 use bevy::prelude::*;
 
+use rand::rngs::SmallRng;
+use rand::Rng;
+
 use super::components::*;
 use super::config::*;
 use super::resources::*;
@@ -96,6 +99,7 @@ pub fn spawn_enemies(cmd: &mut Commands, sprites: &SpriteAssets) {
 
 pub fn spawn_fading_text(
     cmd: &mut Commands,
+    fonts: &FontAssets,
     text: &str,
     duration: f32,
     color: Color,
@@ -120,6 +124,7 @@ pub fn spawn_fading_text(
     cmd.spawn((
         Text::new(text),
         TextFont {
+            font: fonts.arcade.clone(),
             font_size: if spawn_enemies { 72.0 } else { 48.0 },
             ..default()
         },
@@ -252,4 +257,91 @@ pub fn spawn_wave_digits(
             GameEntity,
         ));
     }
+}
+
+/// Spawn a random power-up that the player doesn't have yet
+pub fn spawn_powerup(
+    cmd: &mut Commands,
+    pos: Vec3,
+    sprites: &SpriteAssets,
+    powerups: &PowerUpState,
+    rng: &mut SmallRng,
+) {
+    // Build list of power-ups the player doesn't have
+    let mut available = Vec::new();
+    if !powerups.rapid_fire {
+        available.push(PowerUpType::RapidFire);
+    }
+    if !powerups.triple_shot {
+        available.push(PowerUpType::TripleShot);
+    }
+    if !powerups.speed_boost {
+        available.push(PowerUpType::SpeedBoost);
+    }
+    if !powerups.power_shot {
+        available.push(PowerUpType::PowerShot);
+    }
+
+    // Don't spawn if player has all power-ups
+    if available.is_empty() {
+        return;
+    }
+
+    let kind = available[rng.random_range(0..available.len())];
+
+    // Map power-up type to sprite index (0=circle, 1=square, 2=missile)
+    let sprite_index = match kind {
+        PowerUpType::RapidFire => 0,   // Circle
+        PowerUpType::SpeedBoost => 0,  // Circle
+        PowerUpType::PowerShot => 1,   // Square
+        PowerUpType::TripleShot => 2,  // Missile
+    };
+
+    cmd.spawn((
+        Sprite::from_atlas_image(
+            sprites.powerup_texture.clone(),
+            TextureAtlas {
+                layout: sprites.powerup_layout.clone(),
+                index: sprite_index,
+            },
+        ),
+        Transform::from_translation(pos).with_scale(Vec3::splat(POWERUP_SCALE)),
+        PowerUp { kind },
+        GameEntity,
+    ));
+}
+
+/// Spawn side boosters attached to the player
+pub fn spawn_side_boosters(cmd: &mut Commands, player_id: Entity, sprites: &SpriteAssets) {
+    // Left booster
+    cmd.spawn((
+        Sprite::from_atlas_image(
+            sprites.booster_left_texture.clone(),
+            TextureAtlas {
+                layout: sprites.booster_left_layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_xyz(-10.0, -8.0, -0.1),
+        ChildOf(player_id),
+        SideBooster,
+        AnimationIndices { first: 0, last: 1 },
+        AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
+    ));
+
+    // Right booster
+    cmd.spawn((
+        Sprite::from_atlas_image(
+            sprites.booster_right_texture.clone(),
+            TextureAtlas {
+                layout: sprites.booster_right_layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_xyz(10.0, -8.0, -0.1),
+        ChildOf(player_id),
+        SideBooster,
+        AnimationIndices { first: 0, last: 1 },
+        AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
+    ));
 }
