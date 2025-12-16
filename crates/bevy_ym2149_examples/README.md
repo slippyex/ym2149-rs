@@ -4,6 +4,13 @@ Example applications demonstrating the bevy_ym2149 plugin.
 
 This crate contains comprehensive runnable examples showing how to use the YM2149 PSG emulator plugin in Bevy applications, from basic playback to advanced visualization and audio routing.
 
+**Supported formats:**
+- **YM** - Compressed register dumps (Atari ST, Amstrad CPC, ZX Spectrum)
+- **SNDH** - Atari ST music with 68000 CPU emulation
+- **AKS** - Arkos Tracker 2 format
+- **AY** - ZX Spectrum format
+- **GIST** - Atari ST sound effects (112-byte register sequences)
+
 ## Example Matrix
 
 | Example | Highlights |
@@ -15,7 +22,7 @@ This crate contains comprehensive runnable examples showing how to use the YM214
 | `demoscene` | Shader-heavy CRT pipeline + synchronized overlays |
 | `playlist_crossfade_example` | Selectable playlist UI with crossfades |
 | `sndh_with_gist_sfx` | Dual YM2149 emulators: SNDH music + GIST sound effects |
-| `space_shooter` | Galaxian-style game with CRT effect, SNDH music, GIST SFX |
+| `space_shooter` | Complete arcade game: CRT, power-ups, high scores, attract mode |
 
 ## Examples
 
@@ -114,25 +121,44 @@ let gist_player = Arc::new(Mutex::new(GistPlayer::new()));
 
 ### space_shooter
 Galaxian-style retro arcade game demonstrating:
-- **SNDH music:** Mad Max's "Lethal Xcess (STe)" soundtrack with subsong crossfades
-- **GIST sound effects:** Laser, explosion, and death sounds on separate YM2149 emulator
+- **SNDH music:** Mad Max's "Lethal Xcess (STe)" soundtrack with subsong crossfades (title, gameplay, game over)
+- **GIST sound effects:** Laser, explosion, death, and power-up sounds on separate YM2149 emulator
 - **CRT post-processing:** Toggleable scanline/bloom shader effect
 - **Sprite-based UI:** Life icons, score digits, wave counter using sprite sheets
-- **Game states:** Title screen, gameplay, and game over with smooth transitions
-- **Enemy waves:** Formation movement with diving attack patterns
+- **Power-up system:** Rapid Fire, Triple Shot, Speed Boost, Power Shot with animated pickups
+- **High score persistence:** Top 10 scores saved to disk with 3-character name entry
+- **Visual effects:** Screen shake, score popups, invincibility shield bubble, death flash
+- **Attract mode:** Auto-cycling title screen → high scores → power-ups info → enemy scores
+- **Enemy waves:** Formation movement with diving attack patterns, increasing difficulty
 
 **Run:** `cargo run --example space_shooter -p bevy_ym2149_examples --release`
 
 <img src="../../docs/screenshots/space_shooter.png" alt="Space Shooter example" width="780">
 
 **Controls**
-- `←/→` – Move player ship
-- `Space` – Fire
-- `Enter` – Start game (title screen)
-- `R` – Restart (game over)
-- `M` – Toggle music
-- `C` – Toggle CRT effect
-- `Esc` – Quit
+| Screen | Key | Action |
+|--------|-----|--------|
+| Title | `Enter` | Start game |
+| Title | `H` | View high scores |
+| Title | `Esc` | Quit |
+| Gameplay | `←/→` | Move ship |
+| Gameplay | `Space` | Fire |
+| Gameplay | `M` | Toggle music |
+| Gameplay | `C` | Toggle CRT effect |
+| Gameplay | `Q` | Quit (with confirmation) |
+| Gameplay | `R` | Restart |
+| Name Entry | `↑/↓` | Change letter |
+| Name Entry | `←/→` | Move cursor |
+| Name Entry | `Enter` | Confirm name |
+
+**CLI Options**
+```bash
+# Disable music
+cargo run --example space_shooter -p bevy_ym2149_examples --release -- -m false
+
+# Reset high scores to defaults
+cargo run --example space_shooter -p bevy_ym2149_examples --release -- --reset-hi-scores
+```
 
 ## Crate Structure
 
@@ -285,17 +311,24 @@ The examples use the following asset structure:
 ```
 assets/                          # Base directory set at compile time
 ├── music/                       # YM2149 music files
-│   ├── Ashtray.ym
-│   ├── Credits.ym
-│   ├── ND-Toxygene.ym
-│   ├── Prelude.ym
-│   ├── Scout.ym
-│   └── Steps.ym
+│   ├── *.ym                     # YM format files
+│   ├── *.sndh                   # SNDH format (Atari ST)
+│   └── *.aks                    # Arkos Tracker format
+├── sfx/gist/                    # GIST sound effect files
+│   └── *.snd                    # 112-byte GIST format
+├── sprites/                     # Sprite sheets (space_shooter)
+│   ├── player.png               # Player ship
+│   ├── enemies-*.png            # Enemy sprites (Alan, BonBon, Lips)
+│   ├── bullets.png              # Projectile sprites
+│   ├── explosion.png            # Explosion animation
+│   ├── Bonuses-0001.png         # Power-up animations (5x5 grid)
+│   └── *.png                    # UI sprites (lives, digits, etc.)
 ├── fonts/                       # Bitmap fonts for UI
-│   └── demoscene_font.png
+│   ├── demoscene_font.png       # Demoscene example
+│   └── joystix.ttf              # Space shooter arcade font
 └── shaders/                     # Custom WGSL shaders
-    ├── crt_post.wgsl
-    └── oldschool.wgsl
+    ├── crt_post.wgsl            # CRT post-processing
+    └── oldschool.wgsl           # Demoscene raymarcher
 ```
 
 ## Building and Running
@@ -317,10 +350,13 @@ This crate does not define Cargo feature flags. Visualization-heavy demos simply
 ## Dependencies
 
 The examples depend on:
-- `bevy_ym2149` - The YM2149 plugin for Bevy
 - `bevy` - The Bevy game engine (0.17)
-- `bevy_mesh` - Mesh rendering for Bevy
-- `ym2149` - YM2149 core emulator
+- `bevy_ym2149` - The YM2149 plugin for Bevy
+- `bevy_ym2149_viz` - Visualization plugin (oscilloscope, spectrum)
+- `ym2149-gist-replayer` - GIST sound effect player
+- `bevy_embedded_assets` - Asset embedding for standalone binaries
+- `directories` - Cross-platform paths for high score persistence (space_shooter)
+- `serde` / `serde_json` - High score serialization (space_shooter)
 
 ## Notes
 
