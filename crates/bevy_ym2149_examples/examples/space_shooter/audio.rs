@@ -32,7 +32,12 @@ impl Iterator for GistDec {
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
-        Some(self.player.lock().unwrap().generate_samples(1)[0] * self.volume)
+        // Use `ok()` to gracefully handle poisoned mutex (returns silence)
+        self.player
+            .lock()
+            .ok()
+            .map(|mut player| player.generate_samples(1)[0] * self.volume)
+            .or(Some(0.0))
     }
 }
 

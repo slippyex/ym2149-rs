@@ -115,6 +115,7 @@ fn main() {
         .insert_resource(ScreenShake::default())
         .insert_resource(ComboTracker::default())
         .insert_resource(ScreenFlash::default())
+        .insert_resource(PlayerRespawnTimer::default())
         .add_message::<PlaySfxMsg>()
         .add_message::<WaveCompleteMsg>()
         .add_message::<PlayerHitMsg>()
@@ -133,7 +134,7 @@ fn main() {
                 .chain(),
         )
         .add_systems(Startup, setup)
-        .add_systems(Update, update_screen_size)
+        .add_systems(Update, (update_screen_size, screen_flash_system))
         // Title screen
         .add_systems(
             Update,
@@ -178,8 +179,9 @@ fn main() {
                 screen_shake_system,
                 score_popup_system,
                 combo_tick,
-                screen_flash_system,
                 invincibility_system,
+                player_respawn_system,
+                shield_bubble_system,
             )
                 .run_if(in_state(GameState::Playing)),
         )
@@ -414,6 +416,37 @@ fn setup(
         death: GistSound::load(format!("{dir}/falling.snd")).unwrap(),
     });
 
+    // Create soft circle texture for shield bubble (64x64 with radial gradient)
+    let bubble_size = 64u32;
+    let mut bubble_data = Vec::with_capacity((bubble_size * bubble_size * 4) as usize);
+    let center = bubble_size as f32 / 2.0;
+    for y in 0..bubble_size {
+        for x in 0..bubble_size {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            let dist = (dx * dx + dy * dy).sqrt() / center;
+            // Soft edge with glow - more transparent toward edge
+            let alpha = if dist > 1.0 {
+                0
+            } else {
+                ((1.0 - dist).powf(0.5) * 200.0) as u8
+            };
+            bubble_data.extend_from_slice(&[255, 255, 255, alpha]); // White with alpha
+        }
+    }
+    let bubble_img = Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: bubble_size,
+            height: bubble_size,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        bubble_data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    );
+    let bubble_texture = setup_assets.images.add(bubble_img);
+
     // Load sprite assets
     let sprite_dir = "Mini Pixel Pack 3";
     cmd.insert_resource(SpriteAssets {
@@ -571,6 +604,7 @@ fn setup(
                 None,
                 None,
             )),
+        bubble_texture,
     });
 
     // Load arcade font

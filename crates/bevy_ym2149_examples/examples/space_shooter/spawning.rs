@@ -17,6 +17,7 @@ pub fn spawn_player(
     sprites: &SpriteAssets,
     invincible: bool,
 ) -> Entity {
+    let player_y = -hh + 60.0;
     let mut player_cmd = cmd.spawn((
         Sprite::from_atlas_image(
             sprites.player_texture.clone(),
@@ -25,7 +26,7 @@ pub fn spawn_player(
                 index: 1,
             },
         ),
-        Transform::from_xyz(0.0, -hh + 60.0, 1.0).with_scale(Vec3::splat(SPRITE_SCALE)),
+        Transform::from_xyz(0.0, player_y, 1.0).with_scale(Vec3::splat(SPRITE_SCALE)),
         Player,
         GameEntity,
     ));
@@ -51,6 +52,20 @@ pub fn spawn_player(
         AnimationIndices { first: 0, last: 1 },
         AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
     ));
+
+    // Shield bubble when invincible
+    if invincible {
+        cmd.spawn((
+            Sprite {
+                image: sprites.bubble_texture.clone(),
+                color: Color::srgba(1.0, 0.9, 0.2, 0.5), // Yellow tint
+                ..default()
+            },
+            Transform::from_xyz(0.0, player_y, 0.9), // Slightly behind player
+            ShieldBubble,
+            GameEntity,
+        ));
+    }
 
     player_id
 }

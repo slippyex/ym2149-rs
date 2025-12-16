@@ -211,3 +211,7 @@ pub struct PowerUpAnimation {
     pub first: usize,
     pub last: usize,
 }
+
+/// Shield bubble that protects the player during invincibility
+#[derive(Component)]
+pub struct ShieldBubble;

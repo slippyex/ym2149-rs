@@ -144,6 +144,7 @@ pub struct SpriteAssets {
     pub number_font_layout: Handle<TextureAtlasLayout>,
     pub powerup_texture: Handle<Image>,
     pub powerup_layout: Handle<TextureAtlasLayout>,
+    pub bubble_texture: Handle<Image>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -389,4 +390,29 @@ impl ComboTracker {
 pub struct ScreenFlash {
     pub timer: f32,
     pub color: Color,
+}
+
+/// Delayed player respawn timer
+#[derive(Resource, Default)]
+pub struct PlayerRespawnTimer {
+    pub timer: Option<Timer>,
+}
+
+impl PlayerRespawnTimer {
+    pub const RESPAWN_DELAY: f32 = 2.0; // Seconds before respawn
+
+    pub fn start(&mut self) {
+        self.timer = Some(Timer::from_seconds(Self::RESPAWN_DELAY, TimerMode::Once));
+    }
+
+    pub fn tick(&mut self, dt: std::time::Duration) -> bool {
+        if let Some(ref mut timer) = self.timer {
+            timer.tick(dt);
+            if timer.just_finished() {
+                self.timer = None;
+                return true; // Ready to respawn
+            }
+        }
+        false
+    }
 }

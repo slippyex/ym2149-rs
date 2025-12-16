@@ -128,6 +128,81 @@ impl RestartCleanup<'_, '_> {
     }
 }
 
+/// Visual effects resources bundled together
+#[derive(SystemParam)]
+pub struct VfxResources<'w> {
+    pub flash: ResMut<'w, ScreenFlash>,
+    pub shake: ResMut<'w, ScreenShake>,
+    pub screen: Res<'w, ScreenSize>,
+}
+
+/// Music-related resources
+#[derive(SystemParam)]
+pub struct MusicResources<'w> {
+    pub fade: ResMut<'w, MusicFade>,
+    pub enabled: Res<'w, MusicEnabled>,
+}
+
+/// Popup and effect entities to clean up
+#[derive(SystemParam)]
+pub struct EffectCleanup<'w, 's> {
+    pub popups: Query<'w, 's, Entity, With<ScorePopup>>,
+    pub bubbles: Query<'w, 's, Entity, With<ShieldBubble>>,
+}
+
+/// Resources for initializing playing state
+#[derive(SystemParam)]
+pub struct PlayingStateInit<'w> {
+    pub data: ResMut<'w, GameData>,
+    pub powerups: ResMut<'w, PowerUpState>,
+    pub music: MusicResources<'w>,
+}
+
+/// Collision VFX resources (shake + combo tracking)
+#[derive(SystemParam)]
+pub struct CollisionVfx<'w> {
+    pub shake: ResMut<'w, ScreenShake>,
+    pub combo: ResMut<'w, ComboTracker>,
+    pub fonts: Res<'w, FontAssets>,
+}
+
+/// Power-up collection context
+#[derive(SystemParam)]
+pub struct PowerUpContext<'w, 's> {
+    pub state: ResMut<'w, PowerUpState>,
+    pub flash: ResMut<'w, ScreenFlash>,
+    pub screen: Res<'w, ScreenSize>,
+    pub sprites: Res<'w, SpriteAssets>,
+    pub player: Query<'w, 's, Entity, With<Player>>,
+    pub side_boosters: Query<'w, 's, Entity, With<SideBooster>>,
+}
+
+/// Cleanup context for state transitions (name entry, game over)
+#[derive(SystemParam)]
+pub struct TransitionCleanup<'w, 's> {
+    pub powerups: ResMut<'w, PowerUpState>,
+    pub enemies: Query<'w, 's, (Entity, &'static Transform), With<Enemy>>,
+    pub game_entities: GameEndCleanup<'w, 's>,
+    pub effects: EffectCleanup<'w, 's>,
+}
+
+/// Player death handling context
+#[derive(SystemParam)]
+pub struct PlayerDeathContext<'w> {
+    pub scores: Res<'w, HighScoreList>,
+    pub respawn_timer: ResMut<'w, PlayerRespawnTimer>,
+    pub sfx: MessageWriter<'w, PlaySfxMsg>,
+}
+
+// === Type Aliases for Complex Queries ===
+
+type ShieldBubbleQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Transform, &'static mut Sprite),
+    (With<ShieldBubble>, Without<Player>),
+>;
+
 // === Helper Functions ===
 
 /// Cleans up gameplay entities when game ends (bullets, floating power-ups)
@@ -179,7 +254,11 @@ pub fn update_screen_size(
 
 // === Title Screen ===
 
-pub fn title_input(kb: Res<ButtonInput<KeyCode>>, mut ns: ResMut<NextState<GameState>>) {
+pub fn title_input(
+    kb: Res<ButtonInput<KeyCode>>,
+    mut ns: ResMut<NextState<GameState>>,
+    mut exit: MessageWriter<AppExit>,
+) {
     if kb.just_pressed(KeyCode::Enter) {
         ns.set(GameState::Playing);
     }
@@ -187,7 +266,7 @@ pub fn title_input(kb: Res<ButtonInput<KeyCode>>, mut ns: ResMut<NextState<GameS
         ns.set(GameState::HighScores);
     }
     if kb.just_pressed(KeyCode::Escape) {
-        std::process::exit(0);
+        exit.write(AppExit::Success);
     }
 }
 
@@ -304,10 +383,7 @@ pub fn show_title_ui(mut q: Query<(&mut Visibility, &UiMarker)>) {
 
 pub fn enter_playing(
     mut cmd: Commands,
-    mut gd: ResMut<GameData>,
-    mut fade: ResMut<MusicFade>,
-    mut powerups: ResMut<PowerUpState>,
-    music_enabled: Res<MusicEnabled>,
+    mut state: PlayingStateInit,
     spawn: SpawnContext,
     mut uiq: Query<(&mut Visibility, &UiMarker)>,
     old_enemies: Query<Entity, With<GameOverEnemy>>,
@@ -317,11 +393,11 @@ pub fn enter_playing(
         cmd.entity(e).try_despawn();
     }
 
-    if music_enabled.0 {
-        request_subsong(&mut fade, 2);
+    if state.music.enabled.0 {
+        request_subsong(&mut state.music.fade, 2);
     }
-    gd.reset();
-    powerups.reset();
+    state.data.reset();
+    state.powerups.reset();
     spawn_player(&mut cmd, spawn.screen.half_height, &spawn.sprites, false);
     spawn_fading_text(
         &mut cmd,
@@ -332,22 +408,22 @@ pub fn enter_playing(
         true,
     );
 
-    spawn_life_icons(&mut cmd, &spawn.sprites, &spawn.screen, gd.lives);
+    spawn_life_icons(&mut cmd, &spawn.sprites, &spawn.screen, state.data.lives);
     spawn_score_digits(
         &mut cmd,
         &spawn.sprites,
         &spawn.screen,
         ScoreType::Score,
-        gd.score,
+        state.data.score,
     );
     spawn_score_digits(
         &mut cmd,
         &spawn.sprites,
         &spawn.screen,
         ScoreType::HighScore,
-        gd.high_score,
+        state.data.high_score,
     );
-    spawn_wave_digits(&mut cmd, &spawn.sprites, &spawn.screen, gd.wave);
+    spawn_wave_digits(&mut cmd, &spawn.sprites, &spawn.screen, state.data.wave);
 
     for (mut v, _) in uiq.iter_mut() {
         *v = Visibility::Hidden;
@@ -356,20 +432,30 @@ pub fn enter_playing(
 
 pub fn enter_gameover(
     mut cmd: Commands,
-    mut fade: ResMut<MusicFade>,
-    mut powerups: ResMut<PowerUpState>,
-    music_enabled: Res<MusicEnabled>,
+    mut music: MusicResources,
     mut uiq: Query<(Entity, &mut Visibility, &UiMarker)>,
-    eq: Query<(Entity, &Transform), With<Enemy>>,
-    cleanup: GameEndCleanup,
+    mut cleanup: TransitionCleanup,
     mut rng: Local<Option<SmallRng>>,
 ) {
     let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
-    if music_enabled.0 {
-        request_subsong(&mut fade, 3);
+    if music.enabled.0 {
+        request_subsong(&mut music.fade, 3);
     }
 
-    cleanup_game_entities(&mut cmd, &mut powerups, cleanup.all(), std::iter::empty());
+    cleanup_game_entities(
+        &mut cmd,
+        &mut cleanup.powerups,
+        cleanup.game_entities.all(),
+        std::iter::empty(),
+    );
+
+    // Also clean up score popups and shield bubbles
+    for e in cleanup.effects.popups.iter() {
+        cmd.entity(e).try_despawn();
+    }
+    for e in cleanup.effects.bubbles.iter() {
+        cmd.entity(e).try_despawn();
+    }
 
     cmd.insert_resource(ScreenCycleTimer::default());
 
@@ -380,7 +466,7 @@ pub fn enter_gameover(
         }
     }
 
-    let enemies: Vec<_> = eq.iter().collect();
+    let enemies: Vec<_> = cleanup.enemies.iter().collect();
     setup_enemies_sine_wave(&mut cmd, &enemies, rng);
 }
 
@@ -475,12 +561,11 @@ pub fn handle_player_hit(
     mut events: MessageReader<PlayerHitMsg>,
     mut state: GameStateMut,
     player_q: PlayerQueries,
-    spawn: SpawnContext,
-    scores: Res<HighScoreList>,
-    mut sfx: MessageWriter<PlaySfxMsg>,
+    mut death: PlayerDeathContext,
+    mut vfx: VfxResources,
 ) {
     for _ in events.read() {
-        sfx.write(PlaySfxMsg(SfxType::Death));
+        death.sfx.write(PlaySfxMsg(SfxType::Death));
         state.data.lives = state.data.lives.saturating_sub(1);
 
         // Reset power-ups and remove side boosters
@@ -495,16 +580,62 @@ pub fn handle_player_hit(
 
         // Explosion is spawned in collisions system at player position
 
+        // Death flash - bright red overlay
+        let flash_color = Color::srgba(1.0, 0.0, 0.0, 0.7);
+        vfx.flash.timer = 0.6;
+        vfx.flash.color = flash_color;
+        cmd.spawn((
+            Sprite {
+                color: flash_color,
+                custom_size: Some(Vec2::new(vfx.screen.width * 2.0, vfx.screen.height * 2.0)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, 0.0, 50.0),
+            ScreenFlashOverlay,
+        ));
+
+        // Extra screen shake on death
+        vfx.shake.add_trauma(1.0);
+
         if state.data.lives == 0 {
-            if scores.is_high_score(state.data.score) {
+            if death.scores.is_high_score(state.data.score) {
                 state.next_state.set(GameState::NameEntry);
             } else {
                 state.next_state.set(GameState::GameOver);
             }
         } else {
-            // Respawn with invincibility
-            spawn_player(&mut cmd, spawn.screen.half_height, &spawn.sprites, true);
+            // Start respawn timer instead of immediate respawn
+            death.respawn_timer.start();
         }
+    }
+}
+
+/// System to handle delayed player respawn
+pub fn player_respawn_system(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut respawn_timer: ResMut<PlayerRespawnTimer>,
+    sprites: Res<SpriteAssets>,
+    screen: Res<ScreenSize>,
+    mut flash: ResMut<ScreenFlash>,
+) {
+    if respawn_timer.tick(time.delta()) {
+        // Timer finished, respawn with invincibility
+        spawn_player(&mut cmd, screen.half_height, &sprites, true);
+
+        // Dramatic spawn flash - white/cyan
+        let flash_color = Color::srgba(0.5, 1.0, 1.0, 0.6);
+        flash.timer = 0.4;
+        flash.color = flash_color;
+        cmd.spawn((
+            Sprite {
+                color: flash_color,
+                custom_size: Some(Vec2::new(screen.width * 2.0, screen.height * 2.0)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, 0.0, 50.0),
+            ScreenFlashOverlay,
+        ));
     }
 }
 
@@ -852,10 +983,8 @@ pub fn collisions(
     mut cmd: Commands,
     queries: CollisionQueries,
     ctx: ShootingContext,
-    fonts: Res<FontAssets>,
     mut events: CollisionEvents,
-    mut shake: ResMut<ScreenShake>,
-    mut combo: ResMut<ComboTracker>,
+    mut vfx: CollisionVfx,
     invincible_player: Query<(), (With<Player>, With<Invincible>)>,
     mut rng: Local<Option<SmallRng>>,
 ) {
@@ -872,14 +1001,14 @@ pub fn collisions(
                 events.enemy_killed.write(EnemyKilledMsg(enemy.points));
 
                 // Track combo and spawn popup
-                combo.add_kill();
-                shake.add_trauma(SHAKE_TRAUMA_EXPLOSION);
+                vfx.combo.add_kill();
+                vfx.shake.add_trauma(SHAKE_TRAUMA_EXPLOSION);
                 spawn_score_popup(
                     &mut cmd,
-                    &fonts,
+                    &vfx.fonts,
                     et.translation,
                     enemy.points,
-                    combo.current(),
+                    vfx.combo.current(),
                 );
 
                 // Random chance to spawn power-up (only if player doesn't have all)
@@ -904,8 +1033,9 @@ pub fn collisions(
     for (be, bt) in queries.enemy_bullets.iter() {
         if bt.translation.truncate().distance(pp) < BULLET_SIZE.y / 2.0 + PLAYER_SIZE.x / 2.0 {
             cmd.entity(be).try_despawn();
-            spawn_explosion(&mut cmd, pt.translation, &ctx.sprites); // Explosion at player
-            shake.add_trauma(SHAKE_TRAUMA_PLAYER_HIT);
+            // Multiple explosions for dramatic player death
+            spawn_player_death_explosions(&mut cmd, pt.translation, &ctx.sprites);
+            vfx.shake.add_trauma(SHAKE_TRAUMA_PLAYER_HIT);
             events.player_hit.write(PlayerHitMsg);
             return;
         }
@@ -914,11 +1044,27 @@ pub fn collisions(
     for (de, dt) in queries.divers.iter() {
         if dt.translation.truncate().distance(pp) < ENEMY_SIZE.x / 2.0 + PLAYER_SIZE.x / 2.0 {
             cmd.entity(de).try_despawn();
-            spawn_explosion(&mut cmd, pt.translation, &ctx.sprites); // Explosion at player
-            shake.add_trauma(SHAKE_TRAUMA_PLAYER_HIT);
+            // Multiple explosions for dramatic player death
+            spawn_player_death_explosions(&mut cmd, pt.translation, &ctx.sprites);
+            vfx.shake.add_trauma(SHAKE_TRAUMA_PLAYER_HIT);
             events.player_hit.write(PlayerHitMsg);
             return;
         }
+    }
+}
+
+/// Spawn multiple explosions for a dramatic player death effect
+fn spawn_player_death_explosions(cmd: &mut Commands, pos: Vec3, sprites: &SpriteAssets) {
+    // Center explosion
+    spawn_explosion(cmd, pos, sprites);
+    // Offset explosions for cluster effect
+    let offsets = [
+        Vec3::new(-15.0, 10.0, 0.0),
+        Vec3::new(15.0, 10.0, 0.0),
+        Vec3::new(0.0, -12.0, 0.0),
+    ];
+    for offset in offsets {
+        spawn_explosion(cmd, pos + offset, sprites);
     }
 }
 
@@ -1000,8 +1146,7 @@ pub fn game_restart(
     kb: Res<ButtonInput<KeyCode>>,
     mut state: GameStateMut,
     game_state: Res<State<GameState>>,
-    mut fade: ResMut<MusicFade>,
-    music_enabled: Res<MusicEnabled>,
+    mut music: MusicResources,
     spawn: SpawnContext,
     cleanup: RestartCleanup,
 ) {
@@ -1041,8 +1186,8 @@ pub fn game_restart(
         );
         spawn_wave_digits(&mut cmd, &spawn.sprites, &spawn.screen, state.data.wave);
 
-        if music_enabled.0 {
-            request_subsong(&mut fade, 2);
+        if music.enabled.0 {
+            request_subsong(&mut music.fade, 2);
         }
         if *game_state.get() == GameState::GameOver {
             state.next_state.set(GameState::Playing);
@@ -1056,11 +1201,12 @@ pub fn game_quit(
     fonts: Res<FontAssets>,
     mut quit_state: ResMut<QuitConfirmation>,
     quit_ui: Query<Entity, With<QuitConfirmUi>>,
+    mut exit: MessageWriter<AppExit>,
 ) {
     if quit_state.showing {
         // Handle Y/N while confirmation is showing
         if kb.just_pressed(KeyCode::KeyY) {
-            std::process::exit(0);
+            exit.write(AppExit::Success);
         }
         if kb.just_pressed(KeyCode::KeyN) || kb.just_pressed(KeyCode::Escape) {
             quit_state.showing = false;
@@ -1227,15 +1373,26 @@ pub fn enter_name_entry(
     gd: Res<GameData>,
     spawn: SpawnContext,
     mut name_state: ResMut<NameEntryState>,
-    mut powerups: ResMut<PowerUpState>,
-    eq: Query<(Entity, &Transform), With<Enemy>>,
-    cleanup: GameEndCleanup,
+    mut cleanup: TransitionCleanup,
 ) {
     let mut rng = SmallRng::from_os_rng();
 
-    cleanup_game_entities(&mut cmd, &mut powerups, cleanup.all(), std::iter::empty());
+    cleanup_game_entities(
+        &mut cmd,
+        &mut cleanup.powerups,
+        cleanup.game_entities.all(),
+        std::iter::empty(),
+    );
 
-    let enemies: Vec<_> = eq.iter().collect();
+    // Also clean up score popups and shield bubbles
+    for e in cleanup.effects.popups.iter() {
+        cmd.entity(e).try_despawn();
+    }
+    for e in cleanup.effects.bubbles.iter() {
+        cmd.entity(e).try_despawn();
+    }
+
+    let enemies: Vec<_> = cleanup.enemies.iter().collect();
     setup_enemies_sine_wave(&mut cmd, &enemies, &mut rng);
 
     *name_state = NameEntryState::default();
@@ -1599,12 +1756,7 @@ pub fn powerup_collection(
 pub fn handle_powerup_collected(
     mut cmd: Commands,
     mut events: MessageReader<PowerUpCollectedMsg>,
-    mut powerups: ResMut<PowerUpState>,
-    mut flash: ResMut<ScreenFlash>,
-    sprites: Res<SpriteAssets>,
-    screen: Res<ScreenSize>,
-    player: Query<Entity, With<Player>>,
-    side_boosters: Query<Entity, With<SideBooster>>,
+    mut ctx: PowerUpContext,
 ) {
     for ev in events.read() {
         // Get flash color based on power-up type
@@ -1616,21 +1768,21 @@ pub fn handle_powerup_collected(
         };
 
         match ev.0 {
-            PowerUpType::RapidFire => powerups.rapid_fire = true,
-            PowerUpType::TripleShot => powerups.triple_shot = true,
-            PowerUpType::SpeedBoost => powerups.speed_boost = true,
-            PowerUpType::PowerShot => powerups.power_shot = true,
+            PowerUpType::RapidFire => ctx.state.rapid_fire = true,
+            PowerUpType::TripleShot => ctx.state.triple_shot = true,
+            PowerUpType::SpeedBoost => ctx.state.speed_boost = true,
+            PowerUpType::PowerShot => ctx.state.power_shot = true,
         }
 
         // Trigger screen flash
-        flash.timer = 0.3;
-        flash.color = flash_color;
+        ctx.flash.timer = 0.3;
+        ctx.flash.color = flash_color;
 
         // Spawn flash overlay
         cmd.spawn((
             Sprite {
                 color: flash_color,
-                custom_size: Some(Vec2::new(screen.width * 2.0, screen.height * 2.0)),
+                custom_size: Some(Vec2::new(ctx.screen.width * 2.0, ctx.screen.height * 2.0)),
                 ..default()
             },
             Transform::from_xyz(0.0, 0.0, 50.0),
@@ -1638,11 +1790,11 @@ pub fn handle_powerup_collected(
         ));
 
         // Spawn side boosters if we have any power-up and don't have them yet
-        if powerups.has_any()
-            && side_boosters.is_empty()
-            && let Ok(player_id) = player.single()
+        if ctx.state.has_any()
+            && ctx.side_boosters.is_empty()
+            && let Ok(player_id) = ctx.player.single()
         {
-            spawn_side_boosters(&mut cmd, player_id, &sprites);
+            spawn_side_boosters(&mut cmd, player_id, &ctx.sprites);
         }
     }
 }
@@ -1675,6 +1827,7 @@ pub fn invincibility_system(
     mut cmd: Commands,
     time: Res<Time>,
     mut q: Query<(Entity, &mut Invincible, &mut Sprite), With<Player>>,
+    bubbles: Query<Entity, With<ShieldBubble>>,
 ) {
     for (entity, mut invincible, mut sprite) in q.iter_mut() {
         invincible.timer.tick(time.delta());
@@ -1692,7 +1845,46 @@ pub fn invincibility_system(
         if invincible.timer.is_finished() {
             sprite.color = Color::WHITE;
             cmd.entity(entity).remove::<Invincible>();
+
+            // Also remove the shield bubble
+            for bubble in bubbles.iter() {
+                cmd.entity(bubble).try_despawn();
+            }
         }
+    }
+}
+
+/// Shield bubble follows player and pulses/fades based on invincibility timer
+pub fn shield_bubble_system(
+    time: Res<Time>,
+    player_q: Query<(&Transform, &Invincible), With<Player>>,
+    mut bubble_q: ShieldBubbleQuery,
+) {
+    let Ok((player_transform, invincible)) = player_q.single() else {
+        return;
+    };
+
+    let remaining = invincible.timer.remaining_secs();
+    let total = invincible.timer.duration().as_secs_f32();
+    let progress = remaining / total; // 1.0 -> 0.0 as time passes
+
+    let t = time.elapsed_secs();
+
+    for (mut transform, mut sprite) in bubble_q.iter_mut() {
+        // Follow player position
+        transform.translation.x = player_transform.translation.x;
+        transform.translation.y = player_transform.translation.y;
+
+        // Pulsing size effect
+        let pulse = 1.0 + (t * 8.0).sin() * 0.15;
+        transform.scale = Vec3::splat(pulse);
+
+        // Fade out as invincibility runs out (more visible at start, fades toward end)
+        let base_alpha = 0.5 * progress; // Fades from 0.5 to 0 over time
+        let flash = ((t * 6.0).sin() + 1.0) * 0.5; // 0.0 - 1.0 oscillation
+        let alpha = base_alpha * (0.6 + flash * 0.4);
+
+        sprite.color = Color::srgba(1.0, 0.9, 0.2, alpha);
     }
 }
 
