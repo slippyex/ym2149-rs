@@ -517,6 +517,12 @@ pub fn spawn_boss_for_wave(
             target: Vec2::new(0.0, y),
             timer: Timer::from_seconds(0.15, TimerMode::Once),
         },
+        BossRage::default(),
+        BossChargeAttack::default(),
+        BossPhase::default(),
+        BossShield::default(),
+        BossMovementPattern::default(),
+        BossFloat::default(),
         GameEntity,
     ));
 
@@ -565,7 +571,7 @@ pub fn spawn_boss_bar(cmd: &mut Commands, screen: &ScreenSize) {
     let width = 260.0;
     let height = 12.0;
     let left_x = -width * 0.5;
-    let y = screen.half_height - 30.0;
+    let y = screen.half_height - 55.0; // Below the score displays
 
     cmd.spawn((
         Sprite {
@@ -707,6 +713,42 @@ pub fn spawn_life_icons(
             GameEntity,
         ));
     }
+}
+
+/// Exhaustion bar dimensions (for spawning and updating)
+pub const EXHAUSTION_BAR_WIDTH: f32 = 90.0;
+pub const EXHAUSTION_BAR_HEIGHT: f32 = 8.0;
+
+/// Spawn the exhaustion bar UI below life icons
+pub fn spawn_exhaustion_bar(cmd: &mut Commands, screen: &ScreenSize) {
+    // Position below life icons
+    let x = screen.half_width - 30.0 - EXHAUSTION_BAR_WIDTH / 2.0 + 18.0;
+    let y = screen.half_height - 55.0;
+
+    // Background (dark)
+    cmd.spawn((
+        Sprite {
+            color: Color::srgba(0.2, 0.2, 0.2, 0.8),
+            custom_size: Some(Vec2::new(EXHAUSTION_BAR_WIDTH, EXHAUSTION_BAR_HEIGHT)),
+            ..default()
+        },
+        Transform::from_xyz(x, y, 9.0),
+        ExhaustionBarBg,
+        GameEntity,
+    ));
+
+    // Fill bar (starts full/green, centered at same position)
+    let fill_width = EXHAUSTION_BAR_WIDTH - 2.0;
+    cmd.spawn((
+        Sprite {
+            color: Color::srgb(0.2, 0.9, 0.3),
+            custom_size: Some(Vec2::new(fill_width, EXHAUSTION_BAR_HEIGHT - 2.0)),
+            ..default()
+        },
+        Transform::from_xyz(x, y, 9.5),
+        ExhaustionBarFill,
+        GameEntity,
+    ));
 }
 
 pub fn spawn_score_digits(

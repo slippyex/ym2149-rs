@@ -24,6 +24,10 @@ pub struct ScreenSize {
     pub half_height: f32,
 }
 
+/// Debug: start at a specific wave (CLI: --wave N or --boss)
+#[derive(Resource, Default)]
+pub struct DebugStartWave(pub Option<u32>);
+
 impl ScreenSize {
     pub fn from_window(w: &Window) -> Self {
         Self {
@@ -575,5 +579,96 @@ impl PlayerRespawnTimer {
             }
         }
         false
+    }
+}
+
+/// Boost power-up drop rate after player respawns
+#[derive(Resource, Default)]
+pub struct PowerUpDropBoost {
+    pub timer: Option<Timer>,
+}
+
+impl PowerUpDropBoost {
+    pub const BOOST_DURATION: f32 = 12.0; // Seconds of boosted drop rate
+    pub const BOOST_MULTIPLIER: f32 = 4.0; // 4x drop rate during boost
+
+    pub fn activate(&mut self) {
+        self.timer = Some(Timer::from_seconds(Self::BOOST_DURATION, TimerMode::Once));
+    }
+
+    pub fn tick(&mut self, dt: std::time::Duration) {
+        if let Some(ref mut timer) = self.timer {
+            timer.tick(dt);
+            if timer.just_finished() {
+                self.timer = None;
+            }
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.timer.is_some()
+    }
+
+    pub fn drop_chance(&self) -> f32 {
+        if self.is_active() {
+            crate::space_shooter::config::POWERUP_DROP_CHANCE * Self::BOOST_MULTIPLIER
+        } else {
+            crate::space_shooter::config::POWERUP_DROP_CHANCE
+        }
+    }
+}
+
+/// Firing exhaustion system - continuous fire becomes less effective over time
+#[derive(Resource)]
+pub struct FiringExhaustion {
+    /// Current exhaustion level (0.0 = fresh, 1.0 = fully exhausted)
+    pub level: f32,
+    /// Whether player is currently firing
+    pub is_firing: bool,
+}
+
+impl Default for FiringExhaustion {
+    fn default() -> Self {
+        Self {
+            level: 0.0,
+            is_firing: false,
+        }
+    }
+}
+
+impl FiringExhaustion {
+    /// Rate at which exhaustion builds up per second while firing
+    pub const EXHAUST_RATE: f32 = 0.25;
+    /// Rate at which exhaustion recovers per second when not firing
+    pub const RECOVERY_RATE: f32 = 0.5;
+    /// Exhaustion threshold where slowdown begins (30%)
+    pub const SLOWDOWN_THRESHOLD: f32 = 0.3;
+    /// Maximum fire rate penalty at full exhaustion (3x slower)
+    pub const MAX_PENALTY: f32 = 3.0;
+
+    /// Update exhaustion based on firing state
+    pub fn update(&mut self, dt: f32, firing: bool) {
+        self.is_firing = firing;
+        if firing {
+            self.level = (self.level + Self::EXHAUST_RATE * dt).min(1.0);
+        } else {
+            self.level = (self.level - Self::RECOVERY_RATE * dt).max(0.0);
+        }
+    }
+
+    /// Get fire rate multiplier (1.0 = normal, higher = slower)
+    pub fn fire_rate_multiplier(&self) -> f32 {
+        if self.level <= Self::SLOWDOWN_THRESHOLD {
+            1.0
+        } else {
+            // Linear interpolation from 1.0 to MAX_PENALTY
+            let t = (self.level - Self::SLOWDOWN_THRESHOLD) / (1.0 - Self::SLOWDOWN_THRESHOLD);
+            1.0 + t * (Self::MAX_PENALTY - 1.0)
+        }
+    }
+
+    /// Get display percentage (0.0 to 1.0, inverted for "energy remaining")
+    pub fn energy_remaining(&self) -> f32 {
+        1.0 - self.level
     }
 }

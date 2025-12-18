@@ -58,12 +58,168 @@ pub struct BossTarget {
     pub timer: Timer,
 }
 
+/// Boss floating/bobbing animation state
+#[derive(Component)]
+pub struct BossFloat {
+    pub time: f32,
+}
+
+impl Default for BossFloat {
+    fn default() -> Self {
+        Self { time: 0.0 }
+    }
+}
+
 #[derive(Component, Clone, Copy)]
 pub struct BossEscort {
     pub angle: f32,
     pub radius: f32,
     pub speed: f32,
 }
+
+/// Boss enters rage mode at low HP - faster, more aggressive, red glow.
+#[derive(Component)]
+pub struct BossRage {
+    pub active: bool,
+    pub flash_timer: Timer,
+}
+
+impl Default for BossRage {
+    fn default() -> Self {
+        Self {
+            active: false,
+            flash_timer: Timer::from_seconds(0.15, TimerMode::Repeating),
+        }
+    }
+}
+
+/// Boss charge attack - telegraphed big attack.
+#[derive(Component)]
+pub struct BossChargeAttack {
+    pub state: ChargeState,
+    pub timer: Timer,
+    pub cooldown: Timer,
+}
+
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum ChargeState {
+    #[default]
+    Ready,
+    /// Boss is charging up (telegraph phase)
+    Charging,
+    /// Boss fires the big attack
+    Firing,
+    /// Cooldown before next charge
+    Cooldown,
+}
+
+impl Default for BossChargeAttack {
+    fn default() -> Self {
+        Self {
+            state: ChargeState::Ready,
+            timer: Timer::from_seconds(1.5, TimerMode::Once),
+            cooldown: Timer::from_seconds(6.0, TimerMode::Once),
+        }
+    }
+}
+
+/// Warning indicator that grows during boss charge attack.
+#[derive(Component)]
+pub struct ChargeWarning;
+
+/// Boss HP phase tracking (triggers at 75%, 50%, 25%).
+#[derive(Component)]
+pub struct BossPhase {
+    pub current: u8, // 0=full, 1=75%, 2=50%, 3=25%
+    pub transition_timer: Option<Timer>,
+}
+
+impl Default for BossPhase {
+    fn default() -> Self {
+        Self {
+            current: 0,
+            transition_timer: None,
+        }
+    }
+}
+
+/// Boss shield - temporarily invulnerable.
+#[derive(Component)]
+pub struct BossShield {
+    pub active: bool,
+    pub timer: Timer,
+    pub cooldown: Timer,
+}
+
+impl Default for BossShield {
+    fn default() -> Self {
+        Self {
+            active: false,
+            timer: Timer::from_seconds(3.0, TimerMode::Once),
+            cooldown: Timer::from_seconds(12.0, TimerMode::Once),
+        }
+    }
+}
+
+/// Boss movement pattern state.
+#[derive(Component)]
+pub struct BossMovementPattern {
+    pub current: BossMoveType,
+    pub timer: Timer,
+    pub cooldown: Timer,
+    pub start_pos: Vec2,
+    pub target_pos: Vec2,
+}
+
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum BossMoveType {
+    #[default]
+    Normal,
+    /// Quick dash to the side
+    Dash,
+    /// Dive toward player then retreat
+    DiveBomb,
+}
+
+impl Default for BossMovementPattern {
+    fn default() -> Self {
+        Self {
+            current: BossMoveType::Normal,
+            timer: Timer::from_seconds(0.5, TimerMode::Once),
+            cooldown: Timer::from_seconds(5.0, TimerMode::Once),
+            start_pos: Vec2::ZERO,
+            target_pos: Vec2::ZERO,
+        }
+    }
+}
+
+/// Homing missile projectile.
+#[derive(Component)]
+pub struct HomingMissile {
+    pub speed: f32,
+    pub turn_rate: f32,
+    pub lifetime: Timer,
+    pub velocity: Vec2,
+}
+
+/// Bomb projectile that falls and explodes.
+#[derive(Component)]
+pub struct BossBomb {
+    pub fall_speed: f32,
+    pub explode_y: f32,
+}
+
+/// Bomb explosion ring pattern.
+#[derive(Component)]
+pub struct BombExplosion {
+    pub timer: Timer,
+    pub origin: Vec2,
+    pub wave: u8,
+}
+
+/// Visual shield bubble around boss.
+#[derive(Component)]
+pub struct BossShieldBubble;
 
 #[derive(Component, Clone, Copy)]
 pub struct BulletDamage(pub u8);
@@ -154,6 +310,17 @@ pub struct TitleSpiralFlyby {
     pub phase: f32,
 }
 
+// === Demoscene Effects ===
+
+/// Raster bar effect (horizontal color bands).
+#[derive(Component)]
+pub struct RasterBar {
+    pub index: usize,
+    pub base_y: f32,
+    pub speed: f32,
+    pub phase: f32,
+}
+
 #[derive(Component)]
 pub struct AnimationIndices {
     pub first: usize,
@@ -231,6 +398,14 @@ pub struct CrtQuad;
 
 #[derive(Component)]
 pub struct LifeIcon;
+
+/// Marker for the exhaustion bar background
+#[derive(Component)]
+pub struct ExhaustionBarBg;
+
+/// Marker for the exhaustion bar fill (energy remaining)
+#[derive(Component)]
+pub struct ExhaustionBarFill;
 
 #[derive(Component)]
 pub struct DigitSprite {

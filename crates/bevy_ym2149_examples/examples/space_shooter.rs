@@ -1,6 +1,7 @@
 //! Space Shooter - A Galaxian-style retro game with CRT effect
 //! Controls: Arrows (move), Space (fire), Enter (start), R (restart), M (music), C (CRT toggle), Q (quit)
 //! CLI: -m false (disable music), --reset-hi-scores (reset high scores to defaults)
+//!      --wave N (start at wave N), --boss (start directly at boss fight)
 
 mod space_shooter {
     pub mod audio;
@@ -56,12 +57,14 @@ struct SetupAssets<'w> {
 struct CliArgs {
     music_enabled: bool,
     reset_hi_scores: bool,
+    start_wave: Option<u32>,
 }
 
 fn parse_args() -> CliArgs {
     let args: Vec<String> = env::args().collect();
     let mut music_enabled = true;
     let mut reset_hi_scores = false;
+    let mut start_wave = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -71,6 +74,13 @@ fn parse_args() -> CliArgs {
         } else if args[i] == "--reset-hi-scores" {
             reset_hi_scores = true;
             i += 1;
+        } else if args[i] == "--wave" && i + 1 < args.len() {
+            start_wave = args[i + 1].parse().ok();
+            i += 2;
+        } else if args[i] == "--boss" {
+            // Start at first boss wave (wave 5)
+            start_wave = Some(BOSS_WAVE_INTERVAL);
+            i += 1;
         } else {
             i += 1;
         }
@@ -78,6 +88,7 @@ fn parse_args() -> CliArgs {
     CliArgs {
         music_enabled,
         reset_hi_scores,
+        start_wave,
     }
 }
 
@@ -103,6 +114,7 @@ fn main() {
         .add_audio_source::<GistAudio>()
         .init_state::<GameState>()
         .insert_resource(GameData::new())
+        .insert_resource(DebugStartWave(cli.start_wave))
         .insert_resource(GameTimers::default())
         .insert_resource(CrtState { enabled: true })
         .insert_resource(MusicFade::default())
@@ -118,6 +130,8 @@ fn main() {
         .insert_resource(ComboTracker::default())
         .insert_resource(ScreenFlash::default())
         .insert_resource(PlayerRespawnTimer::default())
+        .insert_resource(PowerUpDropBoost::default())
+        .insert_resource(FiringExhaustion::default())
         .insert_resource(PlayerEnergy::default())
         .insert_resource(WavePatternRotation::default())
         .insert_resource(PowerUpDropQueue::default())
@@ -159,6 +173,8 @@ fn main() {
                 title_flyby_update.run_if(in_state(GameState::TitleScreen)),
                 title_auto_cycle.run_if(in_state(GameState::TitleScreen)),
                 screen_fade_update.run_if(in_state(GameState::TitleScreen)),
+                // Demoscene effects
+                raster_bar_update.run_if(in_state(GameState::TitleScreen)),
             ),
         )
         .add_systems(
@@ -199,7 +215,10 @@ fn main() {
                 )
                     .in_set(GameSet::Movement)
                     .run_if(in_state(GameState::Playing)),
-                (collisions, powerup_collection)
+                collisions
+                    .in_set(GameSet::Collision)
+                    .run_if(in_state(GameState::Playing)),
+                (powerup_collection, powerup_drop_boost_tick)
                     .in_set(GameSet::Collision)
                     .run_if(in_state(GameState::Playing)),
                 (
@@ -207,6 +226,17 @@ fn main() {
                     diver_shooting,
                     boss_shooting,
                     boss_escort_shooting,
+                    boss_spawn_escorts,
+                    boss_rage_update,
+                    boss_charge_attack,
+                    boss_phase_update,
+                    boss_shield_update,
+                    boss_shield_bubble_follow,
+                    boss_homing_missile_spawn,
+                    homing_missile_update,
+                    boss_bomb_spawn,
+                    boss_bomb_update,
+                    bomb_explosion_update,
                     initiate_dives,
                     initiate_spirals,
                     spawn_queued_powerups,
@@ -339,6 +369,7 @@ fn main() {
                 )
                     .run_if(resource_changed::<GameData>),
                 combo_ui_update.run_if(in_state(GameState::Playing)),
+                update_exhaustion_bar.run_if(in_state(GameState::Playing)),
                 wave_transition_update.run_if(in_state(GameState::Playing)),
                 wave_flyout_system.run_if(in_state(GameState::Playing)),
                 animate_sprites,
@@ -711,11 +742,11 @@ fn setup(
         boss_layout: setup_assets
             .atlas_layouts
             .add(TextureAtlasLayout::from_grid(
-                UVec2::splat(128),
+                UVec2::new(128, 105), // Smaller height to crop tightly
                 2,
                 3,
-                None,
-                Some(UVec2::new(0, 32)),
+                Some(UVec2::new(0, 23)), // Vertical padding between rows
+                Some(UVec2::new(0, 45)), // Skip flames + top padding
             )),
         bubble_texture,
         ring_texture,

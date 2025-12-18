@@ -18,15 +18,15 @@ pub const SPRITE_SCALE: f32 = 3.0;
 pub const ANIM_FPS: f32 = 8.0;
 pub const BOSS_WAVE_INTERVAL: u32 = 5;
 pub const BOSS_SCALE: f32 = 1.05;
-pub const BOSS_HIT_RADIUS: f32 = 58.0;
+pub const BOSS_HIT_RADIUS: f32 = 42.0; // Reduced to match actual visible boss area
 
 // === Power-up Constants ===
 pub const POWERUP_DROP_CHANCE: f32 = 0.02; // 2% chance to drop (power-ups should be rare)
 pub const POWERUP_SPEED: f32 = 100.0;
-pub const POWERUP_SIZE: Vec2 = Vec2::new(32.0, 32.0); // 32x32 * 1.0 scale
-pub const POWERUP_SCALE: f32 = 1.0; // 32x32 sprites → 32px displayed
-pub const BASE_FIRE_RATE: f32 = 0.18;
-pub const RAPID_FIRE_RATE: f32 = 0.12;
+pub const POWERUP_SIZE: Vec2 = Vec2::new(32.0, 32.0); // 32x32 base size
+pub const POWERUP_SCALE: f32 = 1.5; // Larger power-ups for better visibility
+pub const BASE_FIRE_RATE: f32 = 0.14; // Slightly faster base shooting
+pub const RAPID_FIRE_RATE: f32 = 0.09;
 pub const SPEED_BOOST_MULT: f32 = 1.5;
 pub const TRIPLE_SHOT_SPREAD: f32 = 15.0; // degrees
 pub const POWERUP_DUPLICATE_SCORE: u32 = 250;

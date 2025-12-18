@@ -332,8 +332,8 @@ pub fn spawn_high_scores_ui(cmd: &mut Commands, fonts: &FontAssets, scores: &Hig
                 }
             });
 
-        // Score entries
-        for (i, entry) in scores.entries.iter().enumerate().take(10) {
+        // Score entries (9 rows to fit screen)
+        for (i, entry) in scores.entries.iter().enumerate().take(9) {
             let color = match i {
                 0 => Color::srgb(1.0, 0.2, 0.2), // Red (1st)
                 1 => Color::srgb(1.0, 1.0, 0.2), // Yellow (2nd)
@@ -671,6 +671,49 @@ pub fn update_life_icons(
         }
         spawn_life_icons(&mut cmd, &sprites, &screen, gd.lives);
     }
+}
+
+/// Update the exhaustion bar fill based on current exhaustion level
+pub fn update_exhaustion_bar(
+    exhaustion: Res<FiringExhaustion>,
+    screen: Res<ScreenSize>,
+    mut bar_fill: Query<(&mut Sprite, &mut Transform), With<ExhaustionBarFill>>,
+) {
+    let Ok((mut sprite, mut transform)) = bar_fill.single_mut() else {
+        return;
+    };
+
+    let energy = exhaustion.energy_remaining();
+    let max_width = EXHAUSTION_BAR_WIDTH - 2.0;
+    let current_width = max_width * energy;
+
+    // Update width based on energy remaining
+    sprite.custom_size = Some(Vec2::new(current_width, EXHAUSTION_BAR_HEIGHT - 2.0));
+
+    // Calculate bar center x - align to left edge as it shrinks
+    let bar_center_x = screen.half_width - 30.0 - EXHAUSTION_BAR_WIDTH / 2.0 + 18.0;
+    let left_edge = bar_center_x - max_width / 2.0;
+    let new_center_x = left_edge + current_width / 2.0;
+    transform.translation.x = new_center_x;
+
+    // Color gradient: green -> yellow -> orange -> red as energy depletes
+    let color = if energy > 0.7 {
+        // Green zone (full energy)
+        Color::srgb(0.2, 0.9, 0.3)
+    } else if energy > 0.5 {
+        // Yellow zone (getting tired)
+        let t = (energy - 0.5) / 0.2;
+        Color::srgb(0.9 - t * 0.7, 0.9, 0.3 - t * 0.1)
+    } else if energy > 0.3 {
+        // Orange zone (exhausted starts affecting fire rate)
+        let t = (energy - 0.3) / 0.2;
+        Color::srgb(1.0, 0.5 + t * 0.4, 0.2)
+    } else {
+        // Red zone (severely exhausted)
+        let t = energy / 0.3;
+        Color::srgb(1.0, 0.2 + t * 0.3, 0.1)
+    };
+    sprite.color = color;
 }
 
 pub fn update_score_digits(

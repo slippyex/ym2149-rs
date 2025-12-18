@@ -90,6 +90,7 @@ pub struct GameStateMut<'w> {
 pub struct ShootingContext<'w> {
     pub sprites: Res<'w, SpriteAssets>,
     pub powerups: Res<'w, PowerUpState>,
+    pub drop_boost: Res<'w, PowerUpDropBoost>,
 }
 
 /// Entities to clean up when game ends
@@ -588,6 +589,32 @@ fn spawn_title_scene(cmd: &mut Commands, sprites: &SpriteAssets, screen: &Screen
         AnimationTimer(Timer::from_seconds(0.08, TimerMode::Repeating)),
         TitleSceneEntity,
     ));
+
+    // === Demoscene Effects ===
+
+    // Raster bars behind the title text area
+    let bar_count = 8;
+    let bar_height = 14.0;
+    let bar_spacing = 18.0;
+    let bar_base_y = screen.half_height * 0.25;
+    for i in 0..bar_count {
+        let y = bar_base_y - (i as f32) * bar_spacing;
+        cmd.spawn((
+            Sprite {
+                color: Color::srgba(0.0, 0.0, 0.0, 0.0),
+                custom_size: Some(Vec2::new(screen.width * 1.5, bar_height)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, y, 0.15),
+            RasterBar {
+                index: i,
+                base_y: y,
+                speed: 2.5,
+                phase: i as f32 * 0.4,
+            },
+            TitleSceneEntity,
+        ));
+    }
 }
 
 pub fn ensure_title_screen_scene(
@@ -756,6 +783,39 @@ pub fn screen_fade_update(time: Res<Time>, mut fade: ResMut<ScreenFade>) {
     }
 }
 
+// === Demoscene Effect Systems ===
+
+/// Update raster bars with color cycling and swinging motion.
+pub fn raster_bar_update(
+    time: Res<Time>,
+    fade: Res<ScreenFade>,
+    mut bars: Query<(&mut Transform, &mut Sprite, &RasterBar)>,
+) {
+    let t = time.elapsed_secs();
+    let alpha = fade.alpha;
+
+    for (mut tr, mut sprite, bar) in bars.iter_mut() {
+        let phase = t * bar.speed + bar.phase;
+
+        // Classic rainbow color cycling
+        let r = (phase).sin() * 0.5 + 0.5;
+        let g = (phase + 2.094).sin() * 0.5 + 0.5; // +2π/3
+        let b = (phase + 4.189).sin() * 0.5 + 0.5; // +4π/3
+
+        // Brightness varies with time for pulsing effect
+        let brightness = (t * 1.5 + bar.index as f32 * 0.3).sin() * 0.25 + 0.75;
+
+        sprite.color = Color::srgba(r * brightness, g * brightness, b * brightness, 0.55 * alpha);
+
+        // Horizontal swing - each bar swings with phase offset for wave effect
+        let swing_x = (t * 1.8 + bar.index as f32 * 0.5).sin() * 45.0;
+        // Vertical wave - bars undulate up and down
+        let swing_y = (t * 2.5 + bar.index as f32 * 0.4).sin() * 12.0;
+        tr.translation.x = swing_x;
+        tr.translation.y = bar.base_y + swing_y;
+    }
+}
+
 pub fn title_auto_cycle(
     time: Res<Time>,
     attract: Res<AttractMode>,
@@ -830,6 +890,7 @@ pub fn enter_playing(
     mut drop_queue: ResMut<PowerUpDropQueue>,
     mut powerup_cd: ResMut<PowerUpSpawnCooldown>,
     mut intermission: ResMut<WaveIntermission>,
+    debug_wave: Res<DebugStartWave>,
 ) {
     // Clean up any leftover enemies from game over
     for e in old_enemies.iter() {
@@ -840,6 +901,10 @@ pub fn enter_playing(
         request_subsong(&mut state.music.fade, 2);
     }
     state.data.reset();
+    // Apply debug start wave if specified (CLI: --wave N or --boss)
+    if let Some(wave) = debug_wave.0 {
+        state.data.wave = wave.max(1);
+    }
     state.powerups.reset();
     energy.reset();
     drop_queue.0.clear();
@@ -851,10 +916,17 @@ pub fn enter_playing(
     timers.shoot = Timer::from_seconds(0.0, TimerMode::Once);
     spawn_player(&mut cmd, spawn.screen.half_height, &spawn.sprites, false);
     spawn_fading_text(&mut cmd, &spawn.fonts, "", 1.2, Color::NONE, true);
-    super::ui::spawn_wave_transition_fx(&mut cmd, &spawn.fonts, spawn.screen.as_ref(), 1, 1.2);
+    super::ui::spawn_wave_transition_fx(
+        &mut cmd,
+        &spawn.fonts,
+        spawn.screen.as_ref(),
+        state.data.wave,
+        1.2,
+    );
     flash.trigger(0.22, Color::srgba(0.35, 0.55, 1.0, 0.25));
 
     spawn_life_icons(&mut cmd, &spawn.sprites, &spawn.screen, state.data.lives);
+    spawn_exhaustion_bar(&mut cmd, &spawn.screen);
     spawn_score_digits(
         &mut cmd,
         &spawn.sprites,
@@ -1138,19 +1210,52 @@ pub fn handle_player_hit(
 }
 
 /// System to handle delayed player respawn
+#[allow(clippy::too_many_arguments)]
 pub fn player_respawn_system(
     mut cmd: Commands,
     time: Res<Time>,
     mut respawn_timer: ResMut<PlayerRespawnTimer>,
+    mut drop_boost: ResMut<PowerUpDropBoost>,
     sprites: Res<SpriteAssets>,
     screen: Res<ScreenSize>,
     mut flash: ResMut<ScreenFlash>,
     mut energy: ResMut<PlayerEnergy>,
+    boss_q: Query<&Transform, With<Boss>>,
+    mut rng: Local<Option<SmallRng>>,
 ) {
     if respawn_timer.tick(time.delta()) {
+        let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
         // Timer finished, respawn with invincibility
         spawn_player(&mut cmd, screen.half_height, &sprites, true);
         energy.reset();
+
+        // Activate power-up drop boost to help player recover
+        drop_boost.activate();
+
+        // During boss fight: spawn 2-3 power-ups immediately (no health)
+        if let Ok(boss_t) = boss_q.single() {
+            let powerup_types = [
+                PowerUpType::RapidFire,
+                PowerUpType::TripleShot,
+                PowerUpType::PowerShot,
+                PowerUpType::SpeedBoost,
+            ];
+            let count = 2 + (rng.random::<u8>() % 2) as usize; // 2-3 power-ups
+
+            for i in 0..count {
+                let kind = powerup_types[rng.random_range(0..powerup_types.len())];
+                // Spread power-ups horizontally below boss
+                let offset_x = (i as f32 - 1.0) * 80.0;
+                let pos = Vec3::new(
+                    (boss_t.translation.x + offset_x)
+                        .clamp(-screen.half_width + 50.0, screen.half_width - 50.0),
+                    boss_t.translation.y - 100.0,
+                    1.0,
+                );
+                spawn_powerup_kind(&mut cmd, pos, &sprites, kind);
+            }
+        }
 
         // Dramatic spawn flash - white/cyan
         let flash_color = Color::srgba(0.5, 1.0, 1.0, 0.6);
@@ -1345,6 +1450,7 @@ pub fn player_shooting(
     kb: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut timers: ResMut<GameTimers>,
+    mut exhaustion: ResMut<FiringExhaustion>,
     pq: Query<&Transform, (With<Player>, Without<WaveFlyout>)>,
     player_bullets: Query<Entity, With<PlayerBullet>>,
     ctx: ShootingContext,
@@ -1353,20 +1459,24 @@ pub fn player_shooting(
     timers.shoot.tick(time.delta());
     // Hold-to-fire is always enabled; RapidFire improves the cooldown/cap.
     let wants_fire = kb.pressed(KeyCode::Space);
+
+    // Update exhaustion state
+    exhaustion.update(time.delta_secs(), wants_fire);
+
     if wants_fire
         && timers.shoot.is_finished()
         && let Ok(pt) = pq.single()
     {
         // Galaxian-style pressure: avoid screen-filling bullet spam.
-        let mut cap = 2usize;
+        let mut cap = 3usize; // Base cap increased for stronger initial gun
         if ctx.powerups.rapid_fire {
-            cap += 1;
+            cap += 2;
         }
         if ctx.powerups.triple_shot {
             // Allow at least one triple-salvo to exist on screen; with RapidFire, allow a follow-up.
-            cap = cap.max(3);
+            cap = cap.max(4);
             if ctx.powerups.rapid_fire {
-                cap += 1;
+                cap += 2;
             }
         }
         if player_bullets.iter().count() >= cap {
@@ -1443,11 +1553,13 @@ pub fn player_shooting(
         }
 
         sfx.write(PlaySfxMsg(SfxType::Laser));
-        let fire_rate = if ctx.powerups.rapid_fire {
+        let base_fire_rate = if ctx.powerups.rapid_fire {
             RAPID_FIRE_RATE
         } else {
             BASE_FIRE_RATE
         };
+        // Apply exhaustion penalty to fire rate
+        let fire_rate = base_fire_rate * exhaustion.fire_rate_multiplier();
         timers.shoot = Timer::from_seconds(fire_rate, TimerMode::Once);
     }
 }
@@ -1714,7 +1826,18 @@ pub fn initiate_spirals(
 pub fn boss_movement(
     time: Res<Time>,
     screen: Res<ScreenSize>,
-    mut q: Query<(&mut Transform, &Boss, &BossEnergy, &mut BossTarget)>,
+    mut q: Query<(
+        &mut Transform,
+        &Boss,
+        &BossEnergy,
+        &BossRage,
+        &BossPhase,
+        &mut BossTarget,
+        &mut BossMovementPattern,
+        &mut BossFloat,
+    )>,
+    player: Query<&Transform, (With<Player>, Without<Boss>)>,
+    mut shake: ResMut<ScreenShake>,
     mut rng: Local<Option<SmallRng>>,
 ) {
     let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
@@ -1723,8 +1846,8 @@ pub fn boss_movement(
     let safe_min_y = (-screen.half_height + 260.0).min(screen.half_height - 200.0);
     let top_y = screen.half_height - 120.0;
 
-    for (mut tr, boss, energy, mut target) in q.iter_mut() {
-        target.timer.tick(time.delta());
+    for (mut tr, boss, energy, rage, phase, mut target, mut pattern, mut float) in q.iter_mut() {
+        pattern.cooldown.tick(time.delta());
 
         let frac = if energy.max > 0 {
             (energy.current as f32 / energy.max as f32).clamp(0.0, 1.0)
@@ -1732,38 +1855,127 @@ pub fn boss_movement(
             0.0
         };
         let stage = boss.stage.max(1) as f32;
-        let speed = 120.0 + stage * 14.0 + (1.0 - frac) * 40.0;
+        let rage_mult = if rage.active { 1.5 } else { 1.0 };
+        let speed = (120.0 + stage * 14.0 + (1.0 - frac) * 40.0) * rage_mult;
 
-        let pos = tr.translation.truncate();
-        if target.timer.is_finished() || pos.distance(target.target) < 24.0 {
-            // Pick a fresh target frequently; dip lower as HP drops, but never near the player.
-            let dip = (1.0 - frac).powf(1.6);
-            let y_min = (top_y - 180.0 * dip).max(safe_min_y);
-            let y_max = top_y;
-            let x_min = -screen.half_width + 140.0;
-            let x_max = screen.half_width - 140.0;
-            let x = if x_min < x_max {
-                rng.random_range(x_min..x_max)
-            } else {
-                0.0
-            };
-            let y = if y_min < y_max {
-                rng.random_range(y_min..y_max)
-            } else {
-                y_max
-            };
+        // Handle special movement patterns
+        match pattern.current {
+            BossMoveType::Normal => {
+                // Stage 1: no special movement patterns
+                // Stage 2+: check if we should start a special move at phase 1+
+                if pattern.cooldown.is_finished() && boss.stage >= 2 && phase.current >= 1 {
+                    let move_chance = if rage.active { 0.010 } else { 0.004 };
+                    if rng.random::<f32>() < move_chance {
+                        if rng.random::<f32>() < 0.6 {
+                            // Dash
+                            pattern.current = BossMoveType::Dash;
+                            pattern.start_pos = tr.translation.truncate();
+                            let dir = if rng.random::<bool>() { 1.0 } else { -1.0 };
+                            pattern.target_pos = Vec2::new(
+                                (tr.translation.x + dir * 280.0)
+                                    .clamp(-screen.half_width + 100.0, screen.half_width - 100.0),
+                                tr.translation.y,
+                            );
+                            pattern.timer = Timer::from_seconds(0.25, TimerMode::Once);
+                            shake.trauma = 0.3;
+                            continue;
+                        } else {
+                            // Dive bomb
+                            pattern.current = BossMoveType::DiveBomb;
+                            pattern.start_pos = tr.translation.truncate();
+                            if let Ok(pt) = player.single() {
+                                pattern.target_pos =
+                                    Vec2::new(pt.translation.x, pt.translation.y + 120.0);
+                            }
+                            pattern.timer = Timer::from_seconds(0.6, TimerMode::Once);
+                            shake.trauma = 0.3;
+                            continue;
+                        }
+                    }
+                }
 
-            target.target = Vec2::new(x, y);
-            let cadence = 0.7 + rng.random::<f32>() * 0.55;
-            target.timer =
-                Timer::from_seconds((cadence / (1.0 + stage * 0.06)).max(0.35), TimerMode::Once);
+                // Normal movement
+                target.timer.tick(time.delta());
+                let pos = tr.translation.truncate();
+                if target.timer.is_finished() || pos.distance(target.target) < 24.0 {
+                    let dip = (1.0 - frac).powf(1.6);
+                    let y_min = (top_y - 180.0 * dip).max(safe_min_y);
+                    let y_max = top_y;
+                    let x_min = -screen.half_width + 140.0;
+                    let x_max = screen.half_width - 140.0;
+                    let x = if x_min < x_max {
+                        rng.random_range(x_min..x_max)
+                    } else {
+                        0.0
+                    };
+                    let y = if y_min < y_max {
+                        rng.random_range(y_min..y_max)
+                    } else {
+                        y_max
+                    };
+                    target.target = Vec2::new(x, y);
+                    let cadence = 0.7 + rng.random::<f32>() * 0.55;
+                    target.timer = Timer::from_seconds(
+                        (cadence / (1.0 + stage * 0.06)).max(0.35),
+                        TimerMode::Once,
+                    );
+                }
+
+                let to = target.target - pos;
+                let dir = to.normalize_or_zero();
+                let step = (speed * dt).min(to.length());
+                tr.translation.x += dir.x * step;
+                tr.translation.y = (tr.translation.y + dir.y * step).clamp(safe_min_y, top_y);
+            }
+            BossMoveType::Dash => {
+                pattern.timer.tick(time.delta());
+                let t = pattern.timer.fraction();
+                let ease_t = 1.0 - (1.0 - t).powi(3);
+                let pos = pattern.start_pos.lerp(pattern.target_pos, ease_t);
+                tr.translation.x = pos.x;
+                tr.translation.y = pos.y;
+
+                if pattern.timer.just_finished() {
+                    pattern.current = BossMoveType::Normal;
+                    pattern.cooldown = Timer::from_seconds(3.0, TimerMode::Once);
+                }
+            }
+            BossMoveType::DiveBomb => {
+                pattern.timer.tick(time.delta());
+                let t = pattern.timer.fraction();
+                let dive_t = if t < 0.5 {
+                    let local_t = t * 2.0;
+                    local_t * local_t
+                } else {
+                    let local_t = (t - 0.5) * 2.0;
+                    1.0 - local_t * local_t
+                };
+                let pos = pattern.start_pos.lerp(pattern.target_pos, dive_t);
+                tr.translation.x = pos.x;
+                tr.translation.y = pos.y;
+
+                if pattern.timer.just_finished() {
+                    pattern.current = BossMoveType::Normal;
+                    pattern.cooldown = Timer::from_seconds(4.0, TimerMode::Once);
+                    shake.trauma = 0.25;
+                }
+            }
         }
 
-        let to = target.target - pos;
-        let dir = to.normalize_or_zero();
-        let step = (speed * dt).min(to.length());
-        tr.translation.x += dir.x * step;
-        tr.translation.y = (tr.translation.y + dir.y * step).clamp(safe_min_y, top_y);
+        // Update float time for animation
+        float.time += dt;
+
+        // Add subtle floating bob effect
+        let bob_speed = if rage.active { 3.0 } else { 1.8 };
+        let bob_amplitude = if rage.active { 12.0 } else { 8.0 };
+        let bob_offset = (float.time * bob_speed).sin() * bob_amplitude;
+        tr.translation.y += bob_offset * dt * 2.0; // Smooth integration
+
+        // Add gentle rotation (tilting back and forth)
+        let tilt_speed = if rage.active { 2.5 } else { 1.2 };
+        let tilt_amplitude = if rage.active { 0.12 } else { 0.06 }; // radians
+        let tilt = (float.time * tilt_speed).sin() * tilt_amplitude;
+        tr.rotation = Quat::from_rotation_z(tilt);
     }
 }
 
@@ -1777,11 +1989,13 @@ pub fn boss_escort_movement(
 
     for (mut tr, escort) in escorts.iter_mut() {
         let a = escort.angle + t * escort.speed;
+        // Wider horizontal orbit, positioned below/around boss (not on top)
         let x = boss_t.translation.x + a.cos() * escort.radius;
-        let y = boss_t.translation.y - 14.0 + a.sin() * escort.radius * 0.35;
+        let y = boss_t.translation.y - 60.0 + a.sin() * escort.radius * 0.5;
         tr.translation.x = x;
         tr.translation.y = y;
-        tr.translation.z = boss_t.translation.z + 0.1;
+        // Higher z so they render in front and are hittable
+        tr.translation.z = boss_t.translation.z + 1.0;
     }
 }
 
@@ -1885,16 +2099,103 @@ pub fn boss_escort_shooting(
     }
 }
 
+/// Periodically spawn new escort enemies during boss fight.
+#[allow(clippy::too_many_arguments)]
+pub fn boss_spawn_escorts(
+    mut cmd: Commands,
+    time: Res<Time>,
+    sprites: Res<SpriteAssets>,
+    boss_q: Query<(&Transform, &Boss, &BossPhase), With<Boss>>,
+    escorts: Query<Entity, With<BossEscort>>,
+    mut cooldown: Local<Timer>,
+    mut rng: Local<Option<SmallRng>>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
+    // Initialize cooldown
+    if cooldown.duration().is_zero() {
+        *cooldown = Timer::from_seconds(10.0, TimerMode::Once);
+    }
+    cooldown.tick(time.delta());
+
+    let Ok((boss_t, boss, phase)) = boss_q.single() else {
+        return;
+    };
+
+    // Stage 1: no dynamic escort spawning
+    // Stage 2+: spawn at phase 2+ (50% HP or less)
+    if boss.stage < 2 {
+        return;
+    }
+    if phase.current < 2 {
+        return;
+    }
+
+    // Limit active escorts based on stage
+    let max_escorts = match boss.stage {
+        2 => 2,
+        3 => 3,
+        _ => 4,
+    };
+    if escorts.iter().count() >= max_escorts {
+        return;
+    }
+
+    if !cooldown.is_finished() {
+        return;
+    }
+
+    // Spawn a new escort - wider orbit so they're hittable
+    let escort_radius = 130.0 + boss.stage as f32 * 8.0;
+    let escort_speed = 1.0 + boss.stage as f32 * 0.12;
+    let escort_hp = (2 + boss.stage.min(4)) as u8;
+    let angle = rng.random::<f32>() * std::f32::consts::TAU;
+    let dir = if rng.random::<bool>() { 1.0 } else { -1.0 };
+
+    cmd.spawn((
+        Sprite::from_atlas_image(
+            sprites.enemy_bonbon_texture.clone(),
+            TextureAtlas {
+                layout: sprites.enemy_bonbon_layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_xyz(boss_t.translation.x, boss_t.translation.y, 1.1)
+            .with_scale(Vec3::splat(SPRITE_SCALE)),
+        Enemy { points: 150 },
+        EnemyHp { current: escort_hp },
+        BossEscort {
+            angle,
+            radius: escort_radius,
+            speed: escort_speed * dir,
+        },
+        EscortShooter {
+            timer: Timer::from_seconds(0.8 + rng.random::<f32>() * 0.5, TimerMode::Once),
+        },
+        AnimationIndices { first: 0, last: 3 },
+        AnimationTimer(Timer::from_seconds(1.0 / ANIM_FPS, TimerMode::Repeating)),
+        GameEntity,
+    ));
+
+    // Cooldown based on stage (longer at lower stages)
+    let cd = match boss.stage {
+        2 => 9.0,
+        3 => 7.0,
+        _ => 5.0,
+    };
+    *cooldown = Timer::from_seconds(cd + rng.random::<f32>() * 2.0, TimerMode::Once);
+}
+
 pub fn boss_shooting(
     mut cmd: Commands,
     time: Res<Time>,
     sprites: Res<SpriteAssets>,
-    mut boss_q: Query<(&Transform, &Boss, &BossEnergy, &mut BossWeapon)>,
+    mut boss_q: Query<(&Transform, &Boss, &BossEnergy, &BossRage, &mut BossWeapon)>,
     player: Query<&Transform, With<Player>>,
     enemy_bullets: Query<Entity, With<EnemyBullet>>,
     mut rng: Local<Option<SmallRng>>,
 ) {
-    let Ok((boss_t, boss, energy, mut weapon)) = boss_q.single_mut() else {
+    let Ok((boss_t, boss, energy, rage, mut weapon)) = boss_q.single_mut() else {
         return;
     };
     let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
@@ -1910,7 +2211,8 @@ pub fn boss_shooting(
     } else {
         0.0
     };
-    let cap = (8 + (stage as usize).min(8) * 2).min(22);
+    let rage_cap_bonus = if rage.active { 6 } else { 0 };
+    let cap = (8 + (stage as usize).min(8) * 2 + rage_cap_bonus).min(28);
     if enemy_bullets.iter().count() >= cap {
         weapon.timer = Timer::from_seconds(0.35 + rng.random::<f32>() * 0.25, TimerMode::Once);
         return;
@@ -1977,11 +2279,686 @@ pub fn boss_shooting(
         spawn_bullet(origin + Vec3::new(28.0, 10.0, 0.0), wall);
     }
 
-    // Variable cooldown (faster as HP drops, but with jitter).
+    // Variable cooldown (faster as HP drops, but with jitter). Even faster in rage mode.
     let base = (0.85 - (stage as f32 - 1.0) * 0.06).max(0.48);
     let phase_boost = 0.35 + (1.0 - frac) * 0.55;
+    let rage_boost = if rage.active { 1.4 } else { 1.0 };
     let jitter = 0.10 + rng.random::<f32>() * 0.18;
-    weapon.timer = Timer::from_seconds((base / phase_boost + jitter).max(0.30), TimerMode::Once);
+    weapon.timer = Timer::from_seconds(
+        (base / (phase_boost * rage_boost) + jitter).max(0.22),
+        TimerMode::Once,
+    );
+}
+
+/// Activates rage mode when boss HP drops below 25%.
+/// Rage mode: faster movement, faster attacks, red glow effect.
+pub fn boss_rage_update(
+    time: Res<Time>,
+    mut boss_q: Query<(&BossEnergy, &mut BossRage, &mut Sprite), With<Boss>>,
+    mut shake: ResMut<ScreenShake>,
+) {
+    for (energy, mut rage, mut sprite) in boss_q.iter_mut() {
+        let frac = if energy.max > 0 {
+            energy.current as f32 / energy.max as f32
+        } else {
+            0.0
+        };
+
+        // Activate rage at 25% HP
+        if frac < 0.25 && !rage.active {
+            rage.active = true;
+            // Big screen shake on rage activation
+            shake.trauma = 0.8;
+        }
+
+        if rage.active {
+            rage.flash_timer.tick(time.delta());
+
+            // Pulsing red glow effect
+            let pulse = (time.elapsed_secs() * 8.0).sin() * 0.3 + 0.7;
+            let base_red = 1.0;
+            let base_green = 0.3 + pulse * 0.2;
+            let base_blue = 0.3 + pulse * 0.2;
+            sprite.color = Color::srgb(base_red, base_green, base_blue);
+        }
+    }
+}
+
+/// Boss charge attack system - telegraphed big attack.
+#[allow(clippy::too_many_arguments)]
+pub fn boss_charge_attack(
+    mut cmd: Commands,
+    time: Res<Time>,
+    sprites: Res<SpriteAssets>,
+    mut boss_q: Query<
+        (
+            &Transform,
+            &Boss,
+            &BossEnergy,
+            &BossRage,
+            &mut BossChargeAttack,
+            &mut Sprite,
+        ),
+        Without<ChargeWarning>,
+    >,
+    player: Query<&Transform, (With<Player>, Without<Boss>, Without<ChargeWarning>)>,
+    mut warnings: Query<
+        (Entity, &mut Transform, &mut Sprite),
+        (With<ChargeWarning>, Without<Boss>),
+    >,
+    mut shake: ResMut<ScreenShake>,
+    mut rng: Local<Option<SmallRng>>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
+    for (boss_t, boss, energy, rage, mut charge, mut sprite) in boss_q.iter_mut() {
+        // Stage 1: no charge attack
+        if boss.stage < 2 {
+            continue;
+        }
+
+        let frac = if energy.max > 0 {
+            energy.current as f32 / energy.max as f32
+        } else {
+            0.0
+        };
+
+        // Charge attack more frequent in rage mode, at lower HP, and at higher stages
+        let charge_cooldown = if rage.active {
+            3.5
+        } else if frac < 0.5 {
+            5.0
+        } else {
+            8.0
+        };
+
+        // Charge chance increases with stage
+        let charge_chance = match boss.stage {
+            2 => 0.004,
+            3 => 0.006,
+            _ => 0.008,
+        };
+
+        match charge.state {
+            ChargeState::Ready => {
+                // Start charging randomly
+                if rng.random::<f32>() < charge_chance {
+                    charge.state = ChargeState::Charging;
+                    charge.timer = Timer::from_seconds(1.2, TimerMode::Once);
+
+                    // Spawn warning indicator ring
+                    let warn_color = if rage.active {
+                        Color::srgba(1.0, 0.2, 0.1, 0.6)
+                    } else {
+                        Color::srgba(1.0, 0.8, 0.1, 0.6)
+                    };
+                    cmd.spawn((
+                        Sprite {
+                            image: sprites.ring_texture.clone(),
+                            color: warn_color,
+                            custom_size: Some(Vec2::splat(40.0)),
+                            ..default()
+                        },
+                        Transform::from_translation(boss_t.translation + Vec3::new(0.0, 0.0, 0.5)),
+                        ChargeWarning,
+                        GameEntity,
+                    ));
+                }
+            }
+            ChargeState::Charging => {
+                charge.timer.tick(time.delta());
+
+                // Telegraph effect: boss glows bright, pulses
+                let t = 1.0 - charge.timer.fraction_remaining();
+                let pulse = (t * 20.0).sin().abs();
+                let intensity = 0.5 + t * 0.5 + pulse * 0.3;
+
+                // Yellow-white glow during charge
+                if !rage.active {
+                    sprite.color = Color::srgb(1.0, 0.8 + intensity * 0.2, 0.3 + intensity * 0.5);
+                } else {
+                    // Red-orange in rage mode
+                    sprite.color = Color::srgb(1.0, 0.4 + pulse * 0.3, 0.2);
+                }
+
+                // Update warning ring - grows and spins
+                for (_e, mut warn_t, mut warn_s) in warnings.iter_mut() {
+                    warn_t.translation.x = boss_t.translation.x;
+                    warn_t.translation.y = boss_t.translation.y;
+                    let scale = 1.0 + t * 2.5; // Grow from 1x to 3.5x
+                    warn_t.scale = Vec3::splat(scale);
+                    warn_t.rotate_z(time.delta_secs() * 5.0);
+                    // Pulse alpha
+                    let alpha = 0.4 + pulse * 0.4;
+                    if rage.active {
+                        warn_s.color = Color::srgba(1.0, 0.2, 0.1, alpha);
+                    } else {
+                        warn_s.color = Color::srgba(1.0, 0.8, 0.1, alpha);
+                    }
+                }
+
+                // Small shake buildup
+                shake.trauma = (shake.trauma + 0.02 * t).min(0.3);
+
+                if charge.timer.just_finished() {
+                    charge.state = ChargeState::Firing;
+                    charge.timer = Timer::from_seconds(0.1, TimerMode::Once);
+                    // Remove warning rings
+                    for (e, _, _) in warnings.iter() {
+                        cmd.entity(e).try_despawn();
+                    }
+                }
+            }
+            ChargeState::Firing => {
+                charge.timer.tick(time.delta());
+
+                if charge.timer.just_finished() {
+                    // Fire the big attack!
+                    let origin = Vec3::new(
+                        boss_t.translation.x,
+                        boss_t.translation.y - BOSS_HIT_RADIUS,
+                        1.0,
+                    );
+
+                    let player_x = player.iter().next().map(|t| t.translation.x).unwrap_or(0.0);
+                    let dx = player_x - origin.x;
+
+                    // Spiral burst pattern
+                    let bullet_count = if rage.active { 24 } else { 16 };
+                    let base_speed = ENEMY_BULLET_SPEED * 0.9;
+
+                    for i in 0..bullet_count {
+                        let angle = (i as f32 / bullet_count as f32) * std::f32::consts::TAU;
+                        let spiral_offset = (i as f32) * 0.15;
+                        let speed = base_speed * (0.8 + spiral_offset * 0.1);
+
+                        let vx = angle.cos() * speed + dx * 0.15;
+                        let vy = angle.sin() * speed - 50.0; // Slight downward bias
+
+                        let bullet_idx = rng.random_range(0..3);
+                        cmd.spawn((
+                            Sprite::from_atlas_image(
+                                sprites.enemy_bullet_texture.clone(),
+                                TextureAtlas {
+                                    layout: sprites.enemy_bullet_layout.clone(),
+                                    index: bullet_idx,
+                                },
+                            ),
+                            Transform::from_translation(origin)
+                                .with_scale(Vec3::splat(SPRITE_SCALE * 0.65)),
+                            EnemyBullet,
+                            BulletVelocity(Vec2::new(vx, vy)),
+                            TrailEmitter {
+                                timer: Timer::from_seconds(0.04, TimerMode::Repeating),
+                                alpha: 0.28,
+                            },
+                            GameEntity,
+                        ));
+                    }
+
+                    // Big screen shake on fire
+                    shake.trauma = 0.6;
+
+                    // Reset sprite color
+                    if !rage.active {
+                        sprite.color = Color::WHITE;
+                    }
+
+                    charge.state = ChargeState::Cooldown;
+                    charge.cooldown = Timer::from_seconds(charge_cooldown, TimerMode::Once);
+                }
+            }
+            ChargeState::Cooldown => {
+                charge.cooldown.tick(time.delta());
+                if charge.cooldown.just_finished() {
+                    charge.state = ChargeState::Ready;
+                }
+            }
+        }
+    }
+}
+
+/// HP phase transitions - triggers effects at 75%, 50%, 25% HP.
+#[allow(clippy::too_many_arguments)]
+pub fn boss_phase_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    sprites: Res<SpriteAssets>,
+    powerups: Res<PowerUpState>,
+    player_energy: Res<PlayerEnergy>,
+    mut boss_q: Query<(&Transform, &BossEnergy, &mut BossPhase, &mut Sprite), With<Boss>>,
+    powerups_on_screen: Query<&PowerUp>,
+    mut shake: ResMut<ScreenShake>,
+    mut flash: ResMut<ScreenFlash>,
+    mut rng: Local<Option<SmallRng>>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
+    for (transform, energy, mut phase, mut sprite) in boss_q.iter_mut() {
+        // Handle transition animation
+        if let Some(ref mut timer) = phase.transition_timer {
+            timer.tick(time.delta());
+            let t = timer.fraction();
+            // Flash effect during transition
+            let pulse = (t * 12.0).sin().abs();
+            sprite.color = Color::srgb(1.0, 0.5 + pulse * 0.5, 0.5 + pulse * 0.5);
+
+            if timer.just_finished() {
+                phase.transition_timer = None;
+                sprite.color = Color::WHITE;
+            }
+            continue;
+        }
+
+        let frac = if energy.max > 0 {
+            energy.current as f32 / energy.max as f32
+        } else {
+            0.0
+        };
+
+        // Check for phase transitions
+        let new_phase = if frac <= 0.25 {
+            3
+        } else if frac <= 0.50 {
+            2
+        } else if frac <= 0.75 {
+            1
+        } else {
+            0
+        };
+
+        if new_phase > phase.current {
+            phase.current = new_phase;
+            phase.transition_timer = Some(Timer::from_seconds(0.8, TimerMode::Once));
+            shake.trauma = 0.7;
+            flash.trigger(0.15, Color::srgba(1.0, 0.3, 0.3, 0.2));
+
+            // Drop a power-up at each phase transition
+            let on_screen_count = powerups_on_screen.iter().count();
+            if on_screen_count < 3 {
+                // Collect on-screen kinds to avoid duplicates
+                let mut on_screen_kinds: [PowerUpType; 2] = [PowerUpType::Heal, PowerUpType::Heal];
+                let mut kinds_len = 0usize;
+                for p in powerups_on_screen.iter() {
+                    if kinds_len < 2 && !on_screen_kinds[..kinds_len].contains(&p.kind) {
+                        on_screen_kinds[kinds_len] = p.kind;
+                        kinds_len += 1;
+                    }
+                }
+
+                // Spawn power-up below boss
+                let drop_pos = transform.translation - Vec3::new(0.0, 60.0, 0.0);
+                spawn_powerup(
+                    &mut cmd,
+                    drop_pos,
+                    &sprites,
+                    &powerups,
+                    &player_energy,
+                    &on_screen_kinds[..kinds_len],
+                    rng,
+                );
+            }
+        }
+    }
+}
+
+/// Boss shield system - activates shield at certain phases.
+#[allow(clippy::too_many_arguments)]
+pub fn boss_shield_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    sprites: Res<SpriteAssets>,
+    mut boss_q: Query<(Entity, &Transform, &Boss, &BossPhase, &mut BossShield), With<Boss>>,
+    shield_bubbles: Query<Entity, With<BossShieldBubble>>,
+) {
+    for (_boss_entity, boss_t, boss, phase, mut shield) in boss_q.iter_mut() {
+        shield.cooldown.tick(time.delta());
+
+        if shield.active {
+            shield.timer.tick(time.delta());
+            if shield.timer.just_finished() {
+                shield.active = false;
+                shield.cooldown = Timer::from_seconds(12.0, TimerMode::Once);
+                // Remove shield bubble
+                for e in shield_bubbles.iter() {
+                    cmd.entity(e).try_despawn();
+                }
+            }
+        } else if shield.cooldown.is_finished() && boss.stage >= 2 && phase.current >= 2 {
+            // Stage 2+: Activate shield at phase 2+ (50% HP or less)
+            shield.active = true;
+            shield.timer = Timer::from_seconds(2.5, TimerMode::Once);
+
+            // Spawn shield ring visual (using ring texture for better effect)
+            cmd.spawn((
+                Sprite {
+                    image: sprites.ring_texture.clone(),
+                    color: Color::srgba(0.3, 0.7, 1.0, 0.5),
+                    custom_size: Some(Vec2::splat(160.0)),
+                    ..default()
+                },
+                Transform::from_translation(boss_t.translation + Vec3::new(0.0, 0.0, -0.1)),
+                BossShieldBubble,
+                GameEntity,
+            ));
+        }
+    }
+}
+
+/// Update shield bubble position and animate it.
+pub fn boss_shield_bubble_follow(
+    time: Res<Time>,
+    boss_q: Query<(&Transform, &BossShield), With<Boss>>,
+    mut bubbles: Query<(&mut Transform, &mut Sprite), (With<BossShieldBubble>, Without<Boss>)>,
+) {
+    let Ok((boss_t, shield)) = boss_q.single() else {
+        return;
+    };
+    let dt = time.delta_secs();
+
+    for (mut bubble_t, mut bubble_s) in bubbles.iter_mut() {
+        bubble_t.translation.x = boss_t.translation.x;
+        bubble_t.translation.y = boss_t.translation.y;
+
+        // Pulsing scale
+        let pulse = (time.elapsed_secs() * 4.0).sin() * 0.08 + 1.0;
+        bubble_t.scale = Vec3::splat(pulse);
+
+        // Spin effect
+        bubble_t.rotate_z(dt * 2.0);
+
+        // Fade out as shield depletes
+        let remaining = shield.timer.fraction_remaining();
+        let alpha = 0.3 + remaining * 0.4;
+        bubble_s.color = Color::srgba(0.3, 0.7, 1.0, alpha);
+    }
+}
+
+/// Spawn homing missiles from boss.
+#[allow(clippy::too_many_arguments)]
+pub fn boss_homing_missile_spawn(
+    mut cmd: Commands,
+    time: Res<Time>,
+    sprites: Res<SpriteAssets>,
+    boss_q: Query<(&Transform, &Boss, &BossPhase, &BossRage, &BossShield), With<Boss>>,
+    player: Query<&Transform, With<Player>>,
+    missiles: Query<Entity, With<HomingMissile>>,
+    mut rng: Local<Option<SmallRng>>,
+    mut cooldown: Local<Timer>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
+    // Initialize cooldown
+    if cooldown.duration().is_zero() {
+        *cooldown = Timer::from_seconds(6.0, TimerMode::Once);
+    }
+    cooldown.tick(time.delta());
+
+    let Ok((boss_t, boss, phase, rage, shield)) = boss_q.single() else {
+        return;
+    };
+
+    // Don't spawn while shielded
+    if shield.active {
+        return;
+    }
+
+    // Stage 1: no homing missiles
+    // Stage 2+: spawn at phase 1+ (75% HP or less)
+    if boss.stage < 2 {
+        return;
+    }
+    if phase.current < 1 {
+        return;
+    }
+
+    // Limit active missiles
+    let max_missiles = if rage.active { 4 } else { 2 };
+    if missiles.iter().count() >= max_missiles {
+        return;
+    }
+
+    if !cooldown.is_finished() {
+        return;
+    }
+
+    // Spawn missile - larger, red-orange glow, distinctive look
+    let Ok(pt) = player.single() else { return };
+    let dir = (pt.translation.truncate() - boss_t.translation.truncate()).normalize_or_zero();
+
+    let origin = boss_t.translation + Vec3::new(0.0, -40.0, 0.0);
+    cmd.spawn((
+        Sprite {
+            image: sprites.ring_texture.clone(),
+            color: Color::srgb(1.0, 0.3, 0.1), // Red-orange glow
+            custom_size: Some(Vec2::splat(20.0)),
+            ..default()
+        },
+        Transform::from_translation(origin).with_scale(Vec3::splat(1.0)),
+        HomingMissile {
+            speed: 160.0,
+            turn_rate: 2.0,
+            lifetime: Timer::from_seconds(6.0, TimerMode::Once),
+            velocity: dir * 160.0,
+        },
+        EnemyBullet,
+        TrailEmitter {
+            timer: Timer::from_seconds(0.04, TimerMode::Repeating),
+            alpha: 0.5,
+        },
+        GameEntity,
+    ));
+
+    // Cooldown decreases with stage (stage 2 = 5s, stage 3 = 4s, stage 4+ = 3s)
+    let stage_factor = (6.0 - boss.stage as f32).max(3.0);
+    let cd = if rage.active {
+        stage_factor * 0.6
+    } else {
+        stage_factor
+    };
+    *cooldown = Timer::from_seconds(cd + rng.random::<f32>() * 1.5, TimerMode::Once);
+}
+
+/// Update homing missile movement.
+pub fn homing_missile_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    screen: Res<ScreenSize>,
+    player: Query<&Transform, (With<Player>, Without<HomingMissile>)>,
+    mut missiles: Query<(Entity, &mut Transform, &mut HomingMissile), Without<Player>>,
+) {
+    let dt = time.delta_secs();
+    let player_pos = player.iter().next().map(|t| t.translation.truncate());
+
+    for (entity, mut tr, mut missile) in missiles.iter_mut() {
+        missile.lifetime.tick(time.delta());
+
+        if missile.lifetime.is_finished() {
+            cmd.entity(entity).try_despawn();
+            continue;
+        }
+
+        // Homing behavior
+        if let Some(target) = player_pos {
+            let to_target = target - tr.translation.truncate();
+            let desired_dir = to_target.normalize_or_zero();
+            let current_dir = missile.velocity.normalize_or_zero();
+
+            // Gradually turn toward target
+            let new_dir = current_dir
+                .lerp(desired_dir, missile.turn_rate * dt)
+                .normalize_or_zero();
+            missile.velocity = new_dir * missile.speed;
+        }
+
+        // Update position
+        tr.translation.x += missile.velocity.x * dt;
+        tr.translation.y += missile.velocity.y * dt;
+
+        // Pulsing scale for visibility
+        let pulse = (time.elapsed_secs() * 12.0).sin() * 0.2 + 1.0;
+        tr.scale = Vec3::splat(pulse);
+
+        // Spin effect (ring texture looks good spinning)
+        tr.rotate_z(dt * 8.0);
+
+        // Remove if off screen
+        if tr.translation.x.abs() > screen.half_width + 50.0
+            || tr.translation.y.abs() > screen.half_height + 50.0
+        {
+            cmd.entity(entity).try_despawn();
+        }
+    }
+}
+
+/// Spawn bombs from boss.
+#[allow(clippy::too_many_arguments)]
+pub fn boss_bomb_spawn(
+    mut cmd: Commands,
+    time: Res<Time>,
+    sprites: Res<SpriteAssets>,
+    screen: Res<ScreenSize>,
+    boss_q: Query<(&Transform, &Boss, &BossPhase, &BossRage, &BossShield), With<Boss>>,
+    bombs: Query<Entity, With<BossBomb>>,
+    mut rng: Local<Option<SmallRng>>,
+    mut cooldown: Local<Timer>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
+    if cooldown.duration().is_zero() {
+        *cooldown = Timer::from_seconds(7.0, TimerMode::Once);
+    }
+    cooldown.tick(time.delta());
+
+    let Ok((boss_t, boss, phase, rage, shield)) = boss_q.single() else {
+        return;
+    };
+
+    if shield.active {
+        return;
+    }
+
+    // Stage 1-2: no bombs
+    // Stage 3+: spawn at phase 2+ (50% HP or less)
+    if boss.stage < 3 {
+        return;
+    }
+    if phase.current < 2 {
+        return;
+    }
+
+    // Limit active bombs
+    let max_bombs = if rage.active { 3 } else { 2 };
+    if bombs.iter().count() >= max_bombs {
+        return;
+    }
+
+    if !cooldown.is_finished() {
+        return;
+    }
+
+    // Spawn bomb - uses enemy bullet sprite with orange tint
+    let origin = boss_t.translation + Vec3::new(rng.random_range(-30.0..30.0), -50.0, 0.0);
+    // Explode below screen so player sees it disappear
+    let explode_y = -screen.half_height - 40.0;
+
+    cmd.spawn((
+        Sprite::from_atlas_image(
+            sprites.enemy_bullet_texture.clone(),
+            TextureAtlas {
+                layout: sprites.enemy_bullet_layout.clone(),
+                index: 1, // Larger bullet style
+            },
+        ),
+        Transform::from_translation(origin).with_scale(Vec3::splat(SPRITE_SCALE * 1.8)),
+        BossBomb {
+            fall_speed: 280.0,
+            explode_y,
+        },
+        EnemyBullet,
+        GameEntity,
+    ));
+
+    let cd = if rage.active { 2.5 } else { 4.0 };
+    *cooldown = Timer::from_seconds(cd + rng.random::<f32>() * 1.5, TimerMode::Once);
+}
+
+/// Update bomb falling - bombs are just fast-falling projectiles.
+pub fn boss_bomb_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut bombs: Query<(Entity, &mut Transform, &BossBomb)>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, mut tr, bomb) in bombs.iter_mut() {
+        tr.translation.y -= bomb.fall_speed * dt;
+
+        // Rotation and pulsing effect as it falls
+        tr.rotate_z(dt * 6.0);
+        let base_scale = SPRITE_SCALE * 1.8;
+        let pulse = (time.elapsed_secs() * 10.0).sin() * 0.1 + 1.0;
+        tr.scale = Vec3::splat(base_scale * pulse);
+
+        // Remove when off screen
+        if tr.translation.y <= bomb.explode_y {
+            cmd.entity(entity).try_despawn();
+        }
+    }
+}
+
+/// Bomb explosion spawns ring of bullets.
+#[allow(clippy::too_many_arguments)]
+pub fn bomb_explosion_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    sprites: Res<SpriteAssets>,
+    mut explosions: Query<(Entity, &mut BombExplosion)>,
+    mut rng: Local<Option<SmallRng>>,
+) {
+    let rng = rng.get_or_insert_with(SmallRng::from_os_rng);
+
+    for (entity, mut explosion) in explosions.iter_mut() {
+        explosion.timer.tick(time.delta());
+
+        // Spawn bullet waves
+        let wave_interval = 0.15;
+        let expected_wave = (explosion.timer.elapsed_secs() / wave_interval) as u8;
+
+        if expected_wave > explosion.wave && explosion.wave < 3 {
+            explosion.wave = expected_wave;
+
+            // Spawn ring of bullets
+            let bullet_count = 8 + explosion.wave * 4;
+            let speed = 150.0 + explosion.wave as f32 * 30.0;
+            let origin = Vec3::new(explosion.origin.x, explosion.origin.y, 1.0);
+
+            for i in 0..bullet_count {
+                let angle = (i as f32 / bullet_count as f32) * std::f32::consts::TAU
+                    + rng.random::<f32>() * 0.1;
+                let vx = angle.cos() * speed;
+                let vy = angle.sin() * speed;
+
+                cmd.spawn((
+                    Sprite::from_atlas_image(
+                        sprites.enemy_bullet_texture.clone(),
+                        TextureAtlas {
+                            layout: sprites.enemy_bullet_layout.clone(),
+                            index: rng.random_range(0..3),
+                        },
+                    ),
+                    Transform::from_translation(origin).with_scale(Vec3::splat(SPRITE_SCALE * 0.5)),
+                    EnemyBullet,
+                    BulletVelocity(Vec2::new(vx, vy)),
+                    GameEntity,
+                ));
+            }
+        }
+
+        if explosion.timer.just_finished() {
+            cmd.entity(entity).try_despawn();
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2375,6 +3352,11 @@ pub fn boss_death_fx_update(
 
 // === Collisions ===
 
+/// Tick the power-up drop boost timer
+pub fn powerup_drop_boost_tick(time: Res<Time>, mut drop_boost: ResMut<PowerUpDropBoost>) {
+    drop_boost.tick(time.delta());
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn collisions(
     mut cmd: Commands,
@@ -2385,9 +3367,20 @@ pub fn collisions(
     mut vfx: CollisionVfx,
     mut extra: MessageWriter<ExtraLifeMsg>,
     mut sfx: MessageWriter<PlaySfxMsg>,
-    mut boss_q: Query<(Entity, &Transform, &Sprite, &Boss, &mut BossEnergy), With<Boss>>,
+    mut boss_q: Query<
+        (
+            Entity,
+            &Transform,
+            &Sprite,
+            &Boss,
+            &mut BossEnergy,
+            &BossShield,
+        ),
+        With<Boss>,
+    >,
     boss_bars: BossUiQuery<'_, '_>,
     boss_escorts: Query<Entity, With<BossEscort>>,
+    bombs: Query<(Entity, &Transform), With<BossBomb>>,
     invincible_player: Query<(), (With<Player>, With<Invincible>)>,
     powerups_on_screen: Query<&PowerUp>,
     mut energy: ResMut<PlayerEnergy>,
@@ -2400,13 +3393,26 @@ pub fn collisions(
         let bp = bt.translation.truncate();
 
         // Boss hit check first (so bullets don't "pass through" into the formation).
-        if let Ok((boss_entity, boss_t, boss_sprite, boss, mut boss_energy)) = boss_q.single_mut()
+        if let Ok((boss_entity, boss_t, boss_sprite, boss, mut boss_energy, boss_shield)) =
+            boss_q.single_mut()
             && boss_energy.current > 0
             && bp.distance(boss_t.translation.truncate()) < BULLET_SIZE.y / 2.0 + BOSS_HIT_RADIUS
         {
             cmd.entity(be).try_despawn();
+
+            // Shield blocks damage
+            if boss_shield.active {
+                // Visual feedback for blocked hit
+                vfx.shake.add_trauma(0.05);
+                continue;
+            }
+
             let dmg = damage.map(|d| d.0 as i32).unwrap_or(1);
             boss_energy.current = boss_energy.current.saturating_sub(dmg);
+
+            // Score for hitting the boss (10 points per damage)
+            let hit_points = (dmg as u32) * 10;
+            award_points(&mut gd, hit_points, &mut extra);
 
             // Subtle boss hit flash (avoid harsh screen flashes).
             let mut flash_sprite = boss_sprite.clone();
@@ -2423,6 +3429,11 @@ pub fn collisions(
                 },
                 GameEntity,
             ));
+
+            // Sparkle effect at bullet hit position
+            let hit_pos = bt.translation;
+            spawn_boss_hit_sparkles(&mut cmd, hit_pos, &ctx.sprites);
+
             vfx.shake.add_trauma(SHAKE_TRAUMA_EXPLOSION * 0.22);
 
             if boss_energy.current <= 0 {
@@ -2474,6 +3485,30 @@ pub fn collisions(
             continue;
         }
 
+        // Bomb hit check - player can shoot down boss bombs
+        let mut bomb_hit = false;
+        for (bomb_e, bomb_t) in bombs.iter() {
+            let bomb_radius = 18.0; // Bomb hitbox size
+            if bp.distance(bomb_t.translation.truncate()) < BULLET_SIZE.y / 2.0 + bomb_radius {
+                cmd.entity(be).try_despawn();
+                cmd.entity(bomb_e).try_despawn();
+
+                // Small explosion effect
+                spawn_explosion(&mut cmd, bomb_t.translation, &ctx.sprites);
+                vfx.shake.add_trauma(SHAKE_TRAUMA_EXPLOSION * 0.3);
+
+                // Award points for shooting bomb
+                award_points(&mut gd, 25, &mut extra);
+                spawn_score_popup(&mut cmd, &vfx.fonts, bomb_t.translation, 25, 1);
+
+                bomb_hit = true;
+                break;
+            }
+        }
+        if bomb_hit {
+            continue;
+        }
+
         for (ee, et, enemy_sprite, enemy, escort, mut enemy_hp) in queries.enemies.iter_mut() {
             if bp.distance(et.translation.truncate()) < BULLET_SIZE.y / 2.0 + ENEMY_SIZE.x / 2.0 {
                 cmd.entity(be).try_despawn();
@@ -2482,17 +3517,17 @@ pub fn collisions(
                 let remaining = enemy_hp.current.saturating_sub(dmg);
                 if remaining > 0 {
                     enemy_hp.current = remaining;
-                    // Non-lethal hit feedback (no explosion, keeps the screen readable).
+                    // Non-lethal hit feedback - red flash to show damage taken
                     let mut flash_sprite = enemy_sprite.clone();
-                    flash_sprite.color = Color::srgba(1.0, 1.0, 1.0, 0.35);
-                    let base_scale = et.scale * 1.03;
+                    flash_sprite.color = Color::srgba(1.0, 0.2, 0.2, 0.7); // Red tint
+                    let base_scale = et.scale * 1.08;
                     cmd.spawn((
                         flash_sprite,
                         Transform::from_translation(et.translation + Vec3::new(0.0, 0.0, 1.2))
                             .with_scale(base_scale),
                         HitFlash {
-                            timer: Timer::from_seconds(0.05, TimerMode::Once),
-                            start_alpha: 0.35,
+                            timer: Timer::from_seconds(0.12, TimerMode::Once),
+                            start_alpha: 0.7,
                             base_scale,
                         },
                         GameEntity,
@@ -2550,11 +3585,14 @@ pub fn collisions(
                 let on_screen_kinds = &on_screen_kinds[..kinds_len];
 
                 // Random chance to spawn power-up (cap: max 2, different kinds).
-                // Boss escorts never drop power-ups to keep drops readable/rare.
-                if escort.is_none()
-                    && on_screen_count < 2
-                    && rng.random::<f32>() < POWERUP_DROP_CHANCE
-                {
+                // Boss escorts have higher drop chance to provide power-ups during boss fight.
+                // Drop chance is boosted after player respawns.
+                let drop_chance = if escort.is_some() {
+                    ctx.drop_boost.drop_chance() * 2.5 // Higher chance for escorts
+                } else {
+                    ctx.drop_boost.drop_chance()
+                };
+                if on_screen_count < 2 && rng.random::<f32>() < drop_chance {
                     spawn_powerup(
                         &mut cmd,
                         et.translation,
@@ -2652,6 +3690,30 @@ fn spawn_player_death_explosions(cmd: &mut Commands, pos: Vec3, sprites: &Sprite
     for offset in offsets {
         spawn_explosion(cmd, pos + offset, sprites);
     }
+}
+
+/// Spawn sparkle effect when boss is hit
+fn spawn_boss_hit_sparkles(cmd: &mut Commands, pos: Vec3, sprites: &SpriteAssets) {
+    // Small ring burst at hit location
+    cmd.spawn((
+        Sprite {
+            image: sprites.ring_texture.clone(),
+            color: Color::srgba(1.0, 0.7, 0.2, 0.5),
+            ..default()
+        },
+        Transform::from_translation(pos + Vec3::new(0.0, 0.0, 0.9))
+            .with_scale(Vec3::splat(SPRITE_SCALE * 0.15)),
+        ExplosionRing {
+            timer: Timer::from_seconds(0.15, TimerMode::Once),
+            start_scale: SPRITE_SCALE * 0.15,
+            end_scale: SPRITE_SCALE * 0.6,
+            start_alpha: 0.5,
+        },
+        GameEntity,
+    ));
+
+    // Spawn a few sparkle particles
+    spawn_pickup_particles(cmd, pos, Color::srgb(1.0, 0.8, 0.3), 4);
 }
 
 fn spawn_boss_death_explosions(cmd: &mut Commands, pos: Vec3, sprites: &SpriteAssets) {
@@ -3083,6 +4145,7 @@ pub fn game_restart(
         flash.trigger(0.22, Color::srgba(0.35, 0.55, 1.0, 0.25));
 
         spawn_life_icons(&mut cmd, &spawn.sprites, &spawn.screen, state.data.lives);
+        spawn_exhaustion_bar(&mut cmd, &spawn.screen);
         spawn_score_digits(
             &mut cmd,
             &spawn.sprites,
@@ -3463,13 +4526,14 @@ pub fn high_scores_fade(
     time: Res<Time>,
     fade: Res<ScreenFade>,
     new_hs_index: Res<NewHighScoreIndex>,
-    mut q: Query<(&mut TextColor, Option<&HighScoreRow>), With<HighScoresUi>>,
+    mut q: Query<(&mut TextColor, &mut Node, Option<&HighScoreRow>), With<HighScoresUi>>,
 ) {
+    let t = time.elapsed_secs();
     let alpha = fade.alpha;
     let highlight_idx = new_hs_index.0;
-    let blink = (time.elapsed_secs() * 6.0).sin() > 0.0;
+    let blink = (t * 6.0).sin() > 0.0;
 
-    for (mut color, row) in q.iter_mut() {
+    for (mut color, mut node, row) in q.iter_mut() {
         let base = color.0.to_srgba();
 
         // Apply highlight blink if this is the new high score row
@@ -3481,6 +4545,12 @@ pub fn high_scores_fade(
         };
 
         color.0 = Color::srgba(base.red, base.green, base.blue, row_alpha);
+
+        // Per-row bob with phase offset - only upward
+        let row_idx = row.map(|r| r.0).unwrap_or(0) as f32;
+        let phase = row_idx * 0.5;
+        let bob_y = (t * 2.0 + phase).sin() * 2.5 - 2.5; // Range: -5 to 0 (up only)
+        node.margin.top = Val::Px(bob_y);
     }
 }
 
