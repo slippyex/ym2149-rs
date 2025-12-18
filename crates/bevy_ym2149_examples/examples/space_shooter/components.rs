@@ -428,6 +428,14 @@ pub struct ExplosionRing {
     pub start_alpha: f32,
 }
 
+/// Power-up pickup particle that bursts outward and fades.
+#[derive(Component)]
+pub struct PickupParticle {
+    pub timer: Timer,
+    pub velocity: Vec2,
+    pub start_alpha: f32,
+}
+
 // === Wave Transition FX ===
 
 /// Letterbox bar (top/bottom) used for wave transitions.
@@ -440,4 +448,68 @@ pub struct LetterboxBar {
 #[derive(Component)]
 pub struct WaveBanner {
     pub timer: Timer,
+}
+
+/// Player flyout state during wave transitions.
+/// Player accelerates up, wraps to bottom, then flies back to start position.
+#[derive(Component)]
+pub struct WaveFlyout {
+    pub phase: WaveFlyoutPhase,
+    pub velocity: f32,
+    pub target_y: f32,
+}
+
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum WaveFlyoutPhase {
+    #[default]
+    AccelerateUp,
+    WrapToBottom,
+    ReturnToPosition,
+}
+
+/// Enemy entrance animation - flies in from off-screen to formation position.
+#[derive(Component)]
+pub struct EnemyEntrance {
+    pub start: Vec2,
+    pub target: Vec2,
+    pub progress: f32,
+    pub duration: f32,
+    pub pattern: EntrancePattern,
+    pub delay: f32,
+    pub sine_amp: f32,
+    pub sine_freq: f32,
+}
+
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum EntrancePattern {
+    #[default]
+    FromTop,
+    FromLeft,
+    FromRight,
+    SweepLeft,
+    SweepRight,
+}
+
+/// Overall entrance formation style for a wave.
+#[derive(Clone, Copy, PartialEq, Default)]
+pub enum EntranceFormation {
+    /// Classic: top row sweeps, others from sides based on position
+    #[default]
+    ClassicSweep,
+    /// All enemies cascade from top
+    TopCascade,
+    /// Left half from left, right half from right (pincer)
+    Pincer,
+    /// All from left side in sequence
+    LeftWave,
+    /// All from right side in sequence
+    RightWave,
+    /// Center columns first, then expanding outward
+    CenterOut,
+    /// Outer columns first, then collapsing inward
+    OuterIn,
+    /// Diagonal sweep from top-left to bottom-right
+    DiagonalLeft,
+    /// Diagonal sweep from top-right to bottom-left
+    DiagonalRight,
 }

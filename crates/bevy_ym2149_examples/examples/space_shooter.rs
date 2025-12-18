@@ -187,6 +187,7 @@ fn main() {
                     .run_if(in_state(GameState::Playing)),
                 (
                     bullet_movement,
+                    enemy_entrance_system,
                     enemy_formation_movement,
                     boss_movement,
                     boss_escort_movement,
@@ -339,11 +340,14 @@ fn main() {
                     .run_if(resource_changed::<GameData>),
                 combo_ui_update.run_if(in_state(GameState::Playing)),
                 wave_transition_update.run_if(in_state(GameState::Playing)),
+                wave_flyout_system.run_if(in_state(GameState::Playing)),
                 animate_sprites,
                 explosion_update,
                 explosion_ring_update,
                 trail_ghost_update,
                 hit_flash_update,
+                pickup_particle_update,
+                booster_intensity_system.run_if(in_state(GameState::Playing)),
             ),
         )
         .add_systems(

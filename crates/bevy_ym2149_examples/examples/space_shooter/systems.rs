@@ -25,6 +25,7 @@ type FormationEnemyQuery<'w, 's> = Query<
         Without<DivingEnemy>,
         Without<SpiralEnemy>,
         Without<BossEscort>,
+        Without<EnemyEntrance>,
     ),
 >;
 type AllBulletsQuery<'w, 's> = Query<'w, 's, Entity, Or<(With<PlayerBullet>, With<EnemyBullet>)>>;
@@ -261,6 +262,7 @@ type FormationMovementQuery<'w, 's> = Query<
         Without<DivingEnemy>,
         Without<SpiralEnemy>,
         Without<BossEscort>,
+        Without<EnemyEntrance>,
     ),
 >;
 
@@ -276,6 +278,20 @@ type ParallaxStarQuery<'w, 's> = Query<
         &'static StarTwinkle,
     ),
     Without<Player>,
+>;
+
+type SideBoosterQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Transform, &'static mut Sprite),
+    (With<SideBooster>, Without<Booster>),
+>;
+
+type PlayerMovementQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Transform, &'static mut Sprite),
+    (With<Player>, Without<WaveFlyout>),
 >;
 
 // === Helper Functions ===
@@ -981,11 +997,13 @@ pub fn handle_wave_complete(
     mut cmd: Commands,
     mut events: MessageReader<WaveCompleteMsg>,
     gd: Res<GameData>,
+    screen: Res<ScreenSize>,
     fonts: Res<FontAssets>,
     mut flash: ResMut<ScreenFlash>,
     mut drop_queue: ResMut<PowerUpDropQueue>,
     mut powerup_cd: ResMut<PowerUpSpawnCooldown>,
     mut intermission: ResMut<WaveIntermission>,
+    player_q: Query<(Entity, &Transform), With<Player>>,
 ) {
     for _ in events.read() {
         // Prevent re-triggering while we are already transitioning.
@@ -1015,7 +1033,18 @@ pub fn handle_wave_complete(
             Color::srgba(0.35, 1.0, 0.55, 1.0),
             false,
         );
-        intermission.start(next_wave, 3.0);
+
+        // Start player flyout animation (accelerate up, wrap to bottom, return)
+        let player_y = -screen.half_height + 60.0;
+        if let Ok((entity, _)) = player_q.single() {
+            cmd.entity(entity).insert(WaveFlyout {
+                phase: WaveFlyoutPhase::AccelerateUp,
+                velocity: 200.0,
+                target_y: player_y,
+            });
+        }
+
+        intermission.start(next_wave, 3.5); // Slightly longer for flyout
         powerup_cd.0 = Timer::from_seconds(2.0, TimerMode::Once);
         flash.trigger(0.18, Color::srgba(0.25, 0.45, 1.0, 0.12));
     }
@@ -1224,7 +1253,7 @@ pub fn fading_text_update(
 pub fn player_movement(
     kb: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut q: Query<(&mut Transform, &mut Sprite), With<Player>>,
+    mut q: PlayerMovementQuery,
     screen: Res<ScreenSize>,
     powerups: Res<PowerUpState>,
 ) {
@@ -1249,13 +1278,74 @@ pub fn player_movement(
     }
 }
 
+/// Animate player flyout during wave transitions
+pub fn wave_flyout_system(
+    mut cmd: Commands,
+    time: Res<Time>,
+    screen: Res<ScreenSize>,
+    mut q: Query<(Entity, &mut Transform, &mut WaveFlyout), With<Player>>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, mut transform, mut flyout) in q.iter_mut() {
+        match flyout.phase {
+            WaveFlyoutPhase::AccelerateUp => {
+                // Accelerate upward
+                flyout.velocity += 800.0 * dt;
+                flyout.velocity = flyout.velocity.min(1200.0);
+                transform.translation.y += flyout.velocity * dt;
+
+                // Center the ship horizontally while flying
+                let center_speed = 200.0 * dt;
+                if transform.translation.x.abs() > center_speed {
+                    transform.translation.x -= transform.translation.x.signum() * center_speed;
+                } else {
+                    transform.translation.x = 0.0;
+                }
+
+                // When off the top of screen, wrap to bottom
+                if transform.translation.y > screen.half_height + 50.0 {
+                    flyout.phase = WaveFlyoutPhase::WrapToBottom;
+                }
+            }
+            WaveFlyoutPhase::WrapToBottom => {
+                // Teleport to bottom of screen
+                transform.translation.y = -screen.half_height - 50.0;
+                transform.translation.x = 0.0;
+                flyout.velocity = 400.0;
+                flyout.phase = WaveFlyoutPhase::ReturnToPosition;
+            }
+            WaveFlyoutPhase::ReturnToPosition => {
+                // Decelerate as we approach target
+                let dist = flyout.target_y - transform.translation.y;
+                if dist > 0.0 {
+                    // Still below target, move up
+                    let approach_speed = (dist * 3.0).min(flyout.velocity);
+                    transform.translation.y += approach_speed * dt;
+
+                    // Slow down as we get close
+                    if dist < 100.0 {
+                        flyout.velocity = (flyout.velocity - 400.0 * dt).max(100.0);
+                    }
+                }
+
+                // Reached target position
+                if transform.translation.y >= flyout.target_y - 2.0 {
+                    transform.translation.y = flyout.target_y;
+                    cmd.entity(entity).remove::<WaveFlyout>();
+                }
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn player_shooting(
     mut cmd: Commands,
     kb: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut timers: ResMut<GameTimers>,
-    pq: Query<&Transform, With<Player>>,
+    pq: Query<&Transform, (With<Player>, Without<WaveFlyout>)>,
     player_bullets: Query<Entity, With<PlayerBullet>>,
     ctx: ShootingContext,
     mut sfx: MessageWriter<PlaySfxMsg>,
@@ -1469,6 +1559,67 @@ pub fn enemy_formation_movement(
         }
         if t.translation.y < min_y {
             t.translation.y = min_y;
+        }
+    }
+}
+
+/// Animate enemies flying in from off-screen to their formation positions.
+pub fn enemy_entrance_system(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut q: Query<(Entity, &mut Transform, &mut EnemyEntrance), With<Enemy>>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, mut transform, mut entrance) in q.iter_mut() {
+        // Handle delay before starting animation
+        if entrance.delay > 0.0 {
+            entrance.delay -= dt;
+            continue;
+        }
+
+        // Update progress
+        entrance.progress += dt / entrance.duration;
+        let t = entrance.progress.clamp(0.0, 1.0);
+
+        // Smooth easing (ease-out cubic for deceleration feel)
+        let eased = 1.0 - (1.0 - t).powi(3);
+
+        // Calculate base position along the path
+        let base_pos = entrance.start.lerp(entrance.target, eased);
+
+        // Add sine wave wobble perpendicular to movement direction
+        let sine_offset =
+            (t * entrance.sine_freq * std::f32::consts::TAU).sin() * entrance.sine_amp;
+
+        // Calculate perpendicular direction for sine offset
+        let dir = (entrance.target - entrance.start).normalize_or_zero();
+        let perp = Vec2::new(-dir.y, dir.x);
+
+        // Apply wobble (decreases as we approach target)
+        let wobble_factor = 1.0 - eased;
+        let final_pos = base_pos + perp * sine_offset * wobble_factor;
+
+        transform.translation.x = final_pos.x;
+        transform.translation.y = final_pos.y;
+
+        // Slight rotation based on pattern and wobble for dynamic feel
+        let roll = match entrance.pattern {
+            EntrancePattern::SweepLeft | EntrancePattern::SweepRight => {
+                sine_offset * 0.008 * wobble_factor
+            }
+            EntrancePattern::FromLeft => -0.15 * wobble_factor,
+            EntrancePattern::FromRight => 0.15 * wobble_factor,
+            EntrancePattern::FromTop => sine_offset * 0.005 * wobble_factor,
+        };
+        transform.rotation = Quat::from_rotation_z(roll);
+
+        // Remove component when animation is complete
+        if entrance.progress >= 1.0 {
+            transform.translation.x = entrance.target.x;
+            transform.translation.y = entrance.target.y;
+            transform.rotation = Quat::IDENTITY;
+            cmd.entity(entity).remove::<EnemyEntrance>();
         }
     }
 }
@@ -2531,20 +2682,38 @@ pub fn combo_tick(time: Res<Time>, mut combo: ResMut<ComboTracker>) {
 }
 
 pub fn energy_bar_update(
+    time: Res<Time>,
     energy: Res<PlayerEnergy>,
     mut q: Query<(&mut Sprite, &mut Transform, &EnergyBarFill)>,
 ) {
-    if !energy.is_changed() {
+    let frac = energy.fraction();
+    let is_critical = frac <= 0.33 && frac > 0.0;
+
+    // Only update when energy changes, unless we need to pulse for critical health
+    if !energy.is_changed() && !is_critical {
         return;
     }
 
-    let frac = energy.fraction();
-    let color = if frac > 0.66 {
+    let base_color = if frac > 0.66 {
         Color::srgb(0.35, 1.0, 0.45)
     } else if frac > 0.33 {
         Color::srgb(1.0, 0.9, 0.35)
     } else {
         Color::srgb(1.0, 0.35, 0.35)
+    };
+
+    // Critical health pulse effect - flash between red and white
+    let color = if is_critical {
+        let t = time.elapsed_secs();
+        let pulse = ((t * 8.0).sin() + 1.0) * 0.5; // 0.0 - 1.0
+        let base = base_color.to_srgba();
+        Color::srgb(
+            base.red + (1.0 - base.red) * pulse * 0.5,
+            base.green + (1.0 - base.green) * pulse * 0.3,
+            base.blue + (1.0 - base.blue) * pulse * 0.3,
+        )
+    } else {
+        base_color
     };
 
     for (mut sprite, mut transform, info) in q.iter_mut() {
@@ -2703,6 +2872,46 @@ pub fn powerup_animate(
     }
 }
 
+/// Dynamic booster visual intensity based on speed boost power-up
+pub fn booster_intensity_system(
+    time: Res<Time>,
+    powerups: Res<PowerUpState>,
+    mut boosters: Query<(&mut Transform, &mut Sprite), With<Booster>>,
+    mut side_boosters: SideBoosterQuery,
+) {
+    let t = time.elapsed_secs();
+    let has_speed = powerups.speed_boost;
+
+    // Pulsing effect when speed boost is active
+    let pulse = if has_speed {
+        1.0 + (t * 12.0).sin() * 0.15
+    } else {
+        1.0
+    };
+
+    // Scale and color adjustments
+    let scale_mult = if has_speed { 1.35 * pulse } else { 1.0 };
+    let color = if has_speed {
+        // Cyan-tinted flame with pulsing brightness
+        let brightness = 0.85 + (t * 8.0).sin() * 0.15;
+        Color::srgba(0.4 * brightness, 0.9 * brightness, 1.0 * brightness, 1.0)
+    } else {
+        Color::WHITE
+    };
+
+    // Update main booster (child of player)
+    for (mut transform, mut sprite) in boosters.iter_mut() {
+        transform.scale = Vec3::splat(scale_mult);
+        sprite.color = color;
+    }
+
+    // Update side boosters
+    for (mut transform, mut sprite) in side_boosters.iter_mut() {
+        transform.scale = Vec3::splat(scale_mult);
+        sprite.color = color;
+    }
+}
+
 pub fn explosion_update(
     mut cmd: Commands,
     time: Res<Time>,
@@ -2776,6 +2985,58 @@ pub fn hit_flash_update(
         sprite.color = Color::srgba(base.red, base.green, base.blue, alpha);
 
         if flash.timer.just_finished() {
+            cmd.entity(entity).try_despawn();
+        }
+    }
+}
+
+/// Spawn burst of particles when a power-up is collected
+pub fn spawn_pickup_particles(cmd: &mut Commands, pos: Vec3, color: Color, count: usize) {
+    let base = color.to_srgba();
+    for i in 0..count {
+        let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
+        let speed = 120.0 + (i as f32 % 3.0) * 40.0;
+        let velocity = Vec2::new(angle.cos(), angle.sin()) * speed;
+
+        cmd.spawn((
+            Sprite {
+                color: Color::srgba(base.red, base.green, base.blue, 0.9),
+                custom_size: Some(Vec2::splat(6.0)),
+                ..default()
+            },
+            Transform::from_translation(pos + Vec3::new(0.0, 0.0, 0.5)),
+            PickupParticle {
+                timer: Timer::from_seconds(0.4, TimerMode::Once),
+                velocity,
+                start_alpha: 0.9,
+            },
+            GameEntity,
+        ));
+    }
+}
+
+pub fn pickup_particle_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut q: Query<(Entity, &mut Transform, &mut Sprite, &mut PickupParticle)>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut transform, mut sprite, mut particle) in q.iter_mut() {
+        particle.timer.tick(time.delta());
+        let progress = particle.timer.fraction().clamp(0.0, 1.0);
+
+        // Move outward with deceleration
+        let decel = 1.0 - progress * 0.7;
+        transform.translation.x += particle.velocity.x * dt * decel;
+        transform.translation.y += particle.velocity.y * dt * decel;
+
+        // Fade out and shrink
+        let alpha = particle.start_alpha * (1.0 - progress);
+        let base = sprite.color.to_srgba();
+        sprite.color = Color::srgba(base.red, base.green, base.blue, alpha);
+        sprite.custom_size = Some(Vec2::splat(6.0 * (1.0 - progress * 0.5)));
+
+        if particle.timer.just_finished() {
             cmd.entity(entity).try_despawn();
         }
     }
@@ -3496,6 +3757,17 @@ pub fn handle_powerup_collected(
         // Trigger screen flash
         let duration = if applied { 0.18 } else { 0.10 };
         ctx.flash.trigger(duration, flash_color);
+
+        // Spawn pickup particles (brighter version of flash color)
+        let particle_color = match kind {
+            PowerUpType::Heal => Color::srgb(0.4, 1.0, 0.5),
+            PowerUpType::RapidFire => Color::srgb(1.0, 0.5, 0.4),
+            PowerUpType::TripleShot => Color::srgb(1.0, 0.45, 1.0),
+            PowerUpType::SpeedBoost => Color::srgb(0.5, 0.7, 1.0),
+            PowerUpType::PowerShot => Color::srgb(1.0, 1.0, 0.5),
+        };
+        let particle_count = if applied { 12 } else { 6 };
+        spawn_pickup_particles(&mut cmd, pos, particle_color, particle_count);
 
         // Spawn side boosters if we have any power-up and don't have them yet
         if ctx.state.has_any()

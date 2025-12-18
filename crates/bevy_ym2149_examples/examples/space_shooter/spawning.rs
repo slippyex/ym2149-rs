@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 
-use rand::Rng;
 use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 
 use super::components::*;
 use super::config::*;
@@ -82,6 +82,9 @@ pub fn spawn_enemies_for_wave(
         return;
     }
 
+    // Randomly select entrance formation based on wave and pattern offset
+    let entrance_formation = select_entrance_formation(wave, pattern_offset);
+
     // 8 columns; bitmask per row (LSB = col 0).
     const PATTERNS: [[u8; 4]; 6] = [
         // Wave 1: classic full block.
@@ -156,6 +159,20 @@ pub fn spawn_enemies_for_wave(
                 continue;
             }
 
+            let target = Vec2::new(
+                start_x + col as f32 * ENEMY_SPACING.x + stagger,
+                base_y - row as f32 * ENEMY_SPACING.y,
+            );
+            let entrance = entrance_for_enemy(
+                row,
+                col,
+                total_rows,
+                screen,
+                target,
+                wave,
+                entrance_formation,
+            );
+
             cmd.spawn((
                 Sprite::from_atlas_image(
                     texture.clone(),
@@ -164,15 +181,12 @@ pub fn spawn_enemies_for_wave(
                         index: 0,
                     },
                 ),
-                Transform::from_xyz(
-                    start_x + col as f32 * ENEMY_SPACING.x + stagger,
-                    base_y - row as f32 * ENEMY_SPACING.y,
-                    1.0,
-                )
-                .with_scale(Vec3::splat(SPRITE_SCALE)),
+                Transform::from_xyz(entrance.start.x, entrance.start.y, 1.0)
+                    .with_scale(Vec3::splat(SPRITE_SCALE)),
                 Enemy { points: pts },
                 EnemyHp { current: hp },
                 GameEntity,
+                entrance,
                 AnimationIndices {
                     first: 0,
                     last: last_frame,
@@ -204,6 +218,20 @@ pub fn spawn_enemies_for_wave(
                 continue;
             }
 
+            let target = Vec2::new(
+                start_x + col as f32 * ENEMY_SPACING.x + stagger,
+                base_y - row as f32 * ENEMY_SPACING.y,
+            );
+            let entrance = entrance_for_enemy(
+                row,
+                col,
+                total_rows,
+                screen,
+                target,
+                wave,
+                entrance_formation,
+            );
+
             cmd.spawn((
                 Sprite::from_atlas_image(
                     texture.clone(),
@@ -212,15 +240,12 @@ pub fn spawn_enemies_for_wave(
                         index: 0,
                     },
                 ),
-                Transform::from_xyz(
-                    start_x + col as f32 * ENEMY_SPACING.x + stagger,
-                    base_y - row as f32 * ENEMY_SPACING.y,
-                    1.0,
-                )
-                .with_scale(Vec3::splat(SPRITE_SCALE)),
+                Transform::from_xyz(entrance.start.x, entrance.start.y, 1.0)
+                    .with_scale(Vec3::splat(SPRITE_SCALE)),
                 Enemy { points: pts },
                 EnemyHp { current: hp },
                 GameEntity,
+                entrance,
                 AnimationIndices {
                     first: 0,
                     last: last_frame,
@@ -229,6 +254,201 @@ pub fn spawn_enemies_for_wave(
             ));
         }
     }
+}
+
+/// Select a random entrance formation based on wave and pattern offset.
+fn select_entrance_formation(wave: u32, pattern_offset: usize) -> EntranceFormation {
+    // Wave 1 always uses classic sweep for familiarity
+    if wave <= 1 {
+        return EntranceFormation::ClassicSweep;
+    }
+
+    // Use deterministic randomness based on wave + offset
+    let seed = (wave as u64)
+        .wrapping_mul(31)
+        .wrapping_add(pattern_offset as u64);
+    let mut rng = SmallRng::seed_from_u64(seed);
+
+    // All formations available
+    const FORMATIONS: [EntranceFormation; 9] = [
+        EntranceFormation::ClassicSweep,
+        EntranceFormation::TopCascade,
+        EntranceFormation::Pincer,
+        EntranceFormation::LeftWave,
+        EntranceFormation::RightWave,
+        EntranceFormation::CenterOut,
+        EntranceFormation::OuterIn,
+        EntranceFormation::DiagonalLeft,
+        EntranceFormation::DiagonalRight,
+    ];
+
+    FORMATIONS[rng.random_range(0..FORMATIONS.len())]
+}
+
+/// Generate entrance animation parameters for an enemy based on position and formation.
+#[allow(clippy::too_many_arguments)]
+fn entrance_for_enemy(
+    row: usize,
+    col: usize,
+    total_rows: usize,
+    screen: &ScreenSize,
+    target: Vec2,
+    wave: u32,
+    formation: EntranceFormation,
+) -> EnemyEntrance {
+    // Determine pattern based on formation style
+    let pattern = match formation {
+        EntranceFormation::ClassicSweep => {
+            // Top row sweeps, others from sides based on position
+            match row % 4 {
+                0 => {
+                    if col < 4 {
+                        EntrancePattern::SweepRight
+                    } else {
+                        EntrancePattern::SweepLeft
+                    }
+                }
+                1 => EntrancePattern::FromTop,
+                2 => {
+                    if col < 4 {
+                        EntrancePattern::FromLeft
+                    } else {
+                        EntrancePattern::FromRight
+                    }
+                }
+                _ => {
+                    if col % 2 == 0 {
+                        EntrancePattern::FromLeft
+                    } else {
+                        EntrancePattern::FromRight
+                    }
+                }
+            }
+        }
+        EntranceFormation::TopCascade => EntrancePattern::FromTop,
+        EntranceFormation::Pincer => {
+            if col < 4 {
+                EntrancePattern::FromLeft
+            } else {
+                EntrancePattern::FromRight
+            }
+        }
+        EntranceFormation::LeftWave => EntrancePattern::FromLeft,
+        EntranceFormation::RightWave => EntrancePattern::FromRight,
+        EntranceFormation::CenterOut => EntrancePattern::FromTop,
+        EntranceFormation::OuterIn => EntrancePattern::FromTop,
+        EntranceFormation::DiagonalLeft => {
+            if col < 4 {
+                EntrancePattern::SweepRight
+            } else {
+                EntrancePattern::FromTop
+            }
+        }
+        EntranceFormation::DiagonalRight => {
+            if col >= 4 {
+                EntrancePattern::SweepLeft
+            } else {
+                EntrancePattern::FromTop
+            }
+        }
+    };
+
+    // Calculate start position based on pattern
+    let margin = 80.0;
+    let start = match pattern {
+        EntrancePattern::FromTop => Vec2::new(target.x, screen.half_height + margin),
+        EntrancePattern::FromLeft => Vec2::new(-screen.half_width - margin, target.y + 100.0),
+        EntrancePattern::FromRight => Vec2::new(screen.half_width + margin, target.y + 100.0),
+        EntrancePattern::SweepLeft => Vec2::new(screen.half_width + margin, screen.half_height),
+        EntrancePattern::SweepRight => Vec2::new(-screen.half_width - margin, screen.half_height),
+    };
+
+    // Calculate delay based on formation style
+    let delay = calculate_entrance_delay(row, col, total_rows, formation, pattern);
+
+    // Duration gets slightly faster in later waves
+    let base_duration = 1.2 - (wave.min(10) as f32 * 0.03);
+
+    // Sine wave parameters for wobbly entrance
+    let sine_amp = match pattern {
+        EntrancePattern::FromTop => 30.0 + (col as f32 - 3.5).abs() * 8.0,
+        EntrancePattern::FromLeft | EntrancePattern::FromRight => 25.0,
+        EntrancePattern::SweepLeft | EntrancePattern::SweepRight => 40.0,
+    };
+    let sine_freq = 2.5 + (row as f32 * 0.3);
+
+    EnemyEntrance {
+        start,
+        target,
+        progress: 0.0,
+        duration: base_duration,
+        pattern,
+        delay,
+        sine_amp,
+        sine_freq,
+    }
+}
+
+/// Calculate entrance delay based on formation style for interesting visual patterns.
+fn calculate_entrance_delay(
+    row: usize,
+    col: usize,
+    total_rows: usize,
+    formation: EntranceFormation,
+    pattern: EntrancePattern,
+) -> f32 {
+    let base_delay = match formation {
+        EntranceFormation::ClassicSweep => {
+            // Original staggered delay
+            let row_delay = row as f32 * 0.15;
+            let col_delay = match pattern {
+                EntrancePattern::SweepLeft => (7 - col) as f32 * 0.06,
+                EntrancePattern::SweepRight => col as f32 * 0.06,
+                EntrancePattern::FromLeft => col as f32 * 0.05,
+                EntrancePattern::FromRight => (7 - col) as f32 * 0.05,
+                EntrancePattern::FromTop => ((col as i32 - 4).abs() as f32) * 0.04,
+            };
+            row_delay + col_delay
+        }
+        EntranceFormation::TopCascade => {
+            // Cascade from center outward, row by row
+            let col_dist = (col as i32 - 4).abs() as f32;
+            row as f32 * 0.12 + col_dist * 0.04
+        }
+        EntranceFormation::Pincer => {
+            // Both sides come in simultaneously, meeting in middle
+            let col_dist = if col < 4 { col } else { 7 - col };
+            row as f32 * 0.1 + (3 - col_dist) as f32 * 0.08
+        }
+        EntranceFormation::LeftWave => {
+            // Wave from left, each column after the previous
+            col as f32 * 0.1 + row as f32 * 0.03
+        }
+        EntranceFormation::RightWave => {
+            // Wave from right
+            (7 - col) as f32 * 0.1 + row as f32 * 0.03
+        }
+        EntranceFormation::CenterOut => {
+            // Center columns first, expanding outward
+            let col_dist = (col as i32 - 4).abs() as f32;
+            col_dist * 0.12 + row as f32 * 0.04
+        }
+        EntranceFormation::OuterIn => {
+            // Outer columns first, collapsing inward
+            let col_dist = (col as i32 - 4).abs() as f32;
+            (4.0 - col_dist) * 0.12 + row as f32 * 0.04
+        }
+        EntranceFormation::DiagonalLeft => {
+            // Diagonal sweep from top-left
+            (row + col) as f32 * 0.06
+        }
+        EntranceFormation::DiagonalRight => {
+            // Diagonal sweep from top-right
+            (row + (7 - col)) as f32 * 0.06
+        }
+    };
+    // Add small offset based on total_rows to avoid all finishing at once
+    base_delay + (total_rows.saturating_sub(row) as f32 * 0.02)
 }
 
 fn enemy_hp_for_row(wave: u32, row: usize) -> u8 {
