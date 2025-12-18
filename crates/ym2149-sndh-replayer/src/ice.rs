@@ -59,16 +59,14 @@ pub fn ice_depack(src: &[u8]) -> Result<Vec<u8>> {
 
     if src.len() < packed_size {
         return Err(SndhError::IceDepackError(format!(
-            "Data too short: expected {} bytes, got {}",
-            packed_size,
+            "Data too short: expected {packed_size} bytes, got {}",
             src.len()
         )));
     }
 
     if orig_size == 0 || orig_size > 16 * 1024 * 1024 {
         return Err(SndhError::IceDepackError(format!(
-            "Invalid original size: {}",
-            orig_size
+            "Invalid original size: {orig_size}"
         )));
     }
 

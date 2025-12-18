@@ -2,12 +2,16 @@
 
 use bevy::prelude::*;
 use directories::ProjectDirs;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use ym2149_gist_replayer::{GistPlayer, GistSound};
 
+use super::components::PowerUpType;
 use super::config::{EXTRA_LIFE_SCORE, FadePhase, MAX_HIGH_SCORES, STARTING_LIVES};
 use super::crt::CrtMaterial;
 
@@ -37,11 +41,135 @@ pub struct GameData {
     pub high_score: u32,
     pub lives: u32,
     pub wave: u32,
-    pub shoot_timer: Timer,
-    pub enemy_shoot_timer: Timer,
     pub enemy_direction: f32,
-    pub dive_timer: Timer,
     pub next_extra_life: u32,
+}
+
+/// Timers that tick every frame during gameplay.
+///
+/// Keeping these out of `GameData` avoids triggering `resource_changed::<GameData>` every frame,
+/// which would otherwise cause UI update systems to run constantly.
+#[derive(Resource, Debug)]
+pub struct GameTimers {
+    pub shoot: Timer,
+    pub enemy_shoot: Timer,
+    pub dive: Timer,
+    pub spiral: Timer,
+}
+
+impl Default for GameTimers {
+    fn default() -> Self {
+        Self {
+            shoot: Timer::from_seconds(0.0, TimerMode::Once),
+            enemy_shoot: Timer::from_seconds(1.5, TimerMode::Once),
+            dive: Timer::from_seconds(3.0, TimerMode::Once),
+            spiral: Timer::from_seconds(6.0, TimerMode::Once),
+        }
+    }
+}
+
+/// Player energy (health) within a life.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct PlayerEnergy {
+    pub current: u8,
+    pub max: u8,
+}
+
+/// Per-run offset used to rotate wave formation patterns (avoids predictable ordering).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct WavePatternRotation {
+    pub offset: usize,
+}
+
+impl Default for WavePatternRotation {
+    fn default() -> Self {
+        let mut rng = SmallRng::from_os_rng();
+        Self {
+            offset: rng.random_range(0..1024),
+        }
+    }
+}
+
+/// Queue of power-ups to spawn over time (used for wave-clear drops while enforcing an on-screen cap).
+#[derive(Resource, Default, Debug)]
+pub struct PowerUpDropQueue(pub VecDeque<PowerUpType>);
+
+/// Cooldown for spawning queued power-ups so players can't vacuum all wave-clear drops instantly.
+#[derive(Resource, Debug)]
+pub struct PowerUpSpawnCooldown(pub Timer);
+
+impl Default for PowerUpSpawnCooldown {
+    fn default() -> Self {
+        Self(Timer::from_seconds(0.0, TimerMode::Once))
+    }
+}
+
+/// Between waves we show a short "wave cleared" and wait before spawning the next wave.
+#[derive(Resource, Debug)]
+pub struct WaveIntermission {
+    pub timer: Timer,
+    pub pending_wave: Option<u32>,
+}
+
+impl Default for WaveIntermission {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(0.0, TimerMode::Once),
+            pending_wave: None,
+        }
+    }
+}
+
+impl WaveIntermission {
+    pub fn is_active(&self) -> bool {
+        self.pending_wave.is_some()
+    }
+
+    pub fn start(&mut self, next_wave: u32, seconds: f32) {
+        self.pending_wave = Some(next_wave);
+        self.timer = Timer::from_seconds(seconds.max(0.0), TimerMode::Once);
+    }
+
+    pub fn cancel(&mut self) {
+        self.pending_wave = None;
+        self.timer = Timer::from_seconds(0.0, TimerMode::Once);
+    }
+}
+
+impl Default for PlayerEnergy {
+    fn default() -> Self {
+        Self { current: 5, max: 5 }
+    }
+}
+
+impl PlayerEnergy {
+    pub fn reset(&mut self) {
+        self.current = self.max;
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.current >= self.max
+    }
+
+    /// Returns `true` if the hit depleted energy (player should lose a life).
+    pub fn take_hit(&mut self) -> bool {
+        self.current = self.current.saturating_sub(1);
+        self.current == 0
+    }
+
+    /// Returns `true` if energy actually increased.
+    pub fn heal(&mut self, amount: u8) -> bool {
+        let before = self.current;
+        self.current = self.current.saturating_add(amount).min(self.max);
+        self.current != before
+    }
+
+    pub fn fraction(&self) -> f32 {
+        if self.max == 0 {
+            return 0.0;
+        }
+        (self.current as f32 / self.max as f32).clamp(0.0, 1.0)
+    }
 }
 
 impl GameData {
@@ -51,9 +179,6 @@ impl GameData {
             wave: 1,
             enemy_direction: 1.0,
             next_extra_life: EXTRA_LIFE_SCORE,
-            shoot_timer: Timer::from_seconds(0.0, TimerMode::Once),
-            enemy_shoot_timer: Timer::from_seconds(1.5, TimerMode::Once),
-            dive_timer: Timer::from_seconds(3.0, TimerMode::Once),
             score: 0,
             high_score: 0,
         }
@@ -66,15 +191,30 @@ impl GameData {
     }
 
     pub fn dive_interval(&self) -> f32 {
-        (3.0 - (self.wave as f32 - 1.0) * 0.2).max(0.8)
+        // Galaxian-like: readable early, ramps up later.
+        let w = (self.wave.saturating_sub(1) as f32).sqrt();
+        (3.2 - w * 0.55).max(0.95)
     }
 
     pub fn max_divers(&self) -> usize {
-        (1 + self.wave as usize / 2).min(5)
+        let w = (self.wave.saturating_sub(1) as f32).sqrt();
+        (1 + (w * 1.25) as usize).min(7)
     }
 
     pub fn enemy_shoot_rate(&self) -> f32 {
-        (1.5 - (self.wave as f32 - 1.0) * 0.1).max(0.5)
+        let w = (self.wave.saturating_sub(1) as f32).sqrt();
+        (1.45 - w * 0.32).max(0.55)
+    }
+
+    pub fn spiral_interval(&self) -> f32 {
+        // Spirals start later and ramp gently.
+        let w = (self.wave.saturating_sub(8) as f32).max(0.0).sqrt();
+        (5.0 - w * 0.55).max(1.8)
+    }
+
+    pub fn max_spirals(&self) -> usize {
+        let w = (self.wave.saturating_sub(8) as f32).max(0.0).sqrt();
+        (1 + (w * 1.2) as usize).min(6)
     }
 }
 
@@ -107,6 +247,7 @@ pub struct Sfx {
     pub laser: GistSound,
     pub explode: GistSound,
     pub death: GistSound,
+    pub powerup_pickup: GistSound,
 }
 
 #[derive(Resource, Clone)]
@@ -144,7 +285,10 @@ pub struct SpriteAssets {
     pub number_font_layout: Handle<TextureAtlasLayout>,
     pub powerup_texture: Handle<Image>,
     pub powerup_layout: Handle<TextureAtlasLayout>,
+    pub boss_texture: Handle<Image>,
+    pub boss_layout: Handle<TextureAtlasLayout>,
     pub bubble_texture: Handle<Image>,
+    pub ring_texture: Handle<Image>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -389,7 +533,24 @@ impl ComboTracker {
 #[derive(Resource, Default)]
 pub struct ScreenFlash {
     pub timer: f32,
+    pub duration: f32,
     pub color: Color,
+}
+
+impl ScreenFlash {
+    pub fn trigger(&mut self, duration: f32, color: Color) {
+        let duration = duration.max(0.001);
+        self.timer = duration;
+        self.duration = duration;
+        self.color = color;
+    }
+
+    pub fn strength(&self) -> f32 {
+        if self.duration <= 0.0 {
+            return 0.0;
+        }
+        (self.timer / self.duration).clamp(0.0, 1.0)
+    }
 }
 
 /// Delayed player respawn timer

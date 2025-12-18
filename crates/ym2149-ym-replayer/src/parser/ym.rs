@@ -207,7 +207,7 @@ impl YmParser {
             }
             "YM4" => Self::parse_ym4_full(data),
             "YM5" => Self::parse_ym5_full(data),
-            _ => Err(format!("Unsupported YM version: {}", version).into()),
+            _ => Err(format!("Unsupported YM version: {version}").into()),
         }
     }
 
@@ -312,8 +312,7 @@ impl YmParser {
         }
         if frame_count as u32 > MAX_REASONABLE_FRAMES {
             return Err(format!(
-                "YM4 frame count {} exceeds limit of {}",
-                frame_count, MAX_REASONABLE_FRAMES
+                "YM4 frame count {frame_count} exceeds limit of {MAX_REASONABLE_FRAMES}"
             )
             .into());
         }
@@ -356,8 +355,7 @@ impl YmParser {
         }
         if frame_count as u32 > MAX_REASONABLE_FRAMES {
             return Err(format!(
-                "YM5 frame count {} exceeds limit of {}",
-                frame_count, MAX_REASONABLE_FRAMES
+                "YM5 frame count {frame_count} exceeds limit of {MAX_REASONABLE_FRAMES}"
             )
             .into());
         }
@@ -391,10 +389,10 @@ impl YmParser {
         for _ in 0..count {
             offset = offset
                 .checked_add(4)
-                .ok_or(format!("{} digidrum offset overflow", format_name))?;
+                .ok_or(format!("{format_name} digidrum offset overflow"))?;
 
             if offset > data.len() {
-                return Err(format!("{} truncated in digidrum size header", format_name).into());
+                return Err(format!("{format_name} truncated in digidrum size header").into());
             }
 
             let sample_size = u32::from_be_bytes([
@@ -406,10 +404,10 @@ impl YmParser {
 
             offset = offset
                 .checked_add(sample_size)
-                .ok_or(format!("{} digidrum data offset overflow", format_name))?;
+                .ok_or(format!("{format_name} digidrum data offset overflow"))?;
 
             if offset > data.len() {
-                return Err(format!("{} truncated in digidrum data", format_name).into());
+                return Err(format!("{format_name} truncated in digidrum data").into());
             }
         }
         Ok(offset)
@@ -458,14 +456,14 @@ impl YmParser {
     ) -> Result<Vec<[u8; 16]>> {
         let frame_data_size = frame_count
             .checked_mul(registers_per_frame)
-            .ok_or(format!("{} frame data size overflow", format_name))?;
+            .ok_or(format!("{format_name} frame data size overflow"))?;
 
         let end_offset = offset
             .checked_add(frame_data_size)
-            .ok_or(format!("{} frame data offset overflow", format_name))?;
+            .ok_or(format!("{format_name} frame data offset overflow"))?;
 
         if end_offset > data.len() {
-            return Err(format!("{} truncated in frame data", format_name).into());
+            return Err(format!("{format_name} truncated in frame data").into());
         }
 
         let frame_data = &data[offset..end_offset];
@@ -478,7 +476,7 @@ impl YmParser {
                     let idx = reg
                         .checked_mul(frame_count)
                         .and_then(|i| i.checked_add(frame_idx))
-                        .ok_or(format!("{} interleaved index overflow", format_name))?;
+                        .ok_or(format!("{format_name} interleaved index overflow"))?;
                     if reg < 16 {
                         frame[reg] = frame_data[idx];
                     }
@@ -489,10 +487,10 @@ impl YmParser {
             for (frame_idx, frame) in frames.iter_mut().enumerate() {
                 let start = frame_idx
                     .checked_mul(registers_per_frame)
-                    .ok_or(format!("{} non-interleaved index overflow", format_name))?;
+                    .ok_or(format!("{format_name} non-interleaved index overflow"))?;
                 let _end = start
                     .checked_add(registers_per_frame)
-                    .ok_or(format!("{} non-interleaved range overflow", format_name))?;
+                    .ok_or(format!("{format_name} non-interleaved range overflow"))?;
                 // Copy available registers up to 16
                 let copy_len = registers_per_frame.min(16);
                 frame[..copy_len].copy_from_slice(&frame_data[start..start + copy_len]);
@@ -583,7 +581,7 @@ impl FormatParser for YmParser {
             }
             "YM4" => Self::parse_ym4(data),
             "YM5" => Self::parse_ym5(data),
-            _ => Err(format!("Unsupported YM version: {}", version).into()),
+            _ => Err(format!("Unsupported YM version: {version}").into()),
         }
     }
 
@@ -713,7 +711,7 @@ mod tests {
         // Verify frame 1 has correct values
         for (reg, frame_byte) in frames[1].iter().enumerate().take(14) {
             let expected = ((reg as u8) << 4) | 1;
-            assert_eq!(*frame_byte, expected, "Frame 1 register {} mismatch", reg);
+            assert_eq!(*frame_byte, expected, "Frame 1 register {reg} mismatch");
         }
     }
 
@@ -747,8 +745,7 @@ mod tests {
             assert_eq!(
                 *frame_byte,
                 (14 + reg) as u8,
-                "Frame 1 register {} mismatch",
-                reg
+                "Frame 1 register {reg} mismatch"
             );
         }
 

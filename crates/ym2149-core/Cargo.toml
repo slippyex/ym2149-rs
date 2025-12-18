@@ -28,7 +28,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-# Default: Only the core emulator (zero non-essential dependencies)
+# Legacy feature kept for backwards compatibility: this crate always includes the emulator.
 default = ["emulator"]
 
 # Core YM2149 emulator

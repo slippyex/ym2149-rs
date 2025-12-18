@@ -603,9 +603,8 @@ mod tests {
         // C1=0, C2=4, C3=8, C4=12, A4≈15
         let bin = freq_to_bin(440.0);
         assert!(
-            bin >= 14 && bin <= 16,
-            "A4 should be around bin 15, got {}",
-            bin
+            (14..=16).contains(&bin),
+            "A4 should be around bin 15, got {bin}"
         );
     }
 

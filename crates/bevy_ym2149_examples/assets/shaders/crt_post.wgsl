@@ -4,7 +4,12 @@ struct CrtParams {
     time: f32,
     width: f32,
     height: f32,
-    crt_enabled: u32,
+    crt_enabled: f32,
+    impact: f32,
+    chroma_px: f32,
+    grain: f32,
+    vignette: f32,
+    flash: vec4<f32>,
 };
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
@@ -53,8 +58,19 @@ fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
     );
 }
 
+fn rand2(p: vec2<f32>) -> f32 {
+    return fract(sin(dot(p, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+}
+
 fn sample_scene(uv: vec2<f32>) -> vec3<f32> {
-    return textureSample(scene_texture, scene_sampler, uv).rgb;
+    let res = vec2<f32>(U.width, U.height);
+    let chroma_uv = vec2<f32>(U.chroma_px, 0.0) / max(res, vec2<f32>(1.0));
+    let ca = chroma_uv * (0.35 + 0.9 * U.impact);
+
+    let r = textureSample(scene_texture, scene_sampler, uv + ca).r;
+    let g = textureSample(scene_texture, scene_sampler, uv).g;
+    let b = textureSample(scene_texture, scene_sampler, uv - ca).b;
+    return vec3<f32>(r, g, b);
 }
 
 fn crt_fetch(pos: vec2<f32>, offset: vec2<f32>, emu_res: vec2<f32>) -> vec3<f32> {
@@ -155,12 +171,30 @@ fn crt_shadow_mask(pos: vec2<f32>) -> vec3<f32> {
 fn apply_crt_effect(frag_coord: vec2<f32>, uv: vec2<f32>) -> vec3<f32> {
     let resolution = vec2<f32>(U.width, U.height);
     let emu_res = resolution / CRT_EMU_SCALE;
-    let warped_position = crt_warp(uv);
+    // Subtle scanline shimmer + impact wobble.
+    let scan = sin(frag_coord.y * 0.15 + U.time * 60.0);
+    let wobble = (scan * 0.00025) * (0.5 + 1.5 * U.impact);
+    let warped_position = crt_warp(uv + vec2<f32>(wobble, 0.0));
 
     let filtered = crt_triangle_filter(warped_position, emu_res);
     let masked = filtered * crt_shadow_mask(frag_coord);
 
-    return srgb_to_linear(max(masked, vec3<f32>(0.0)));
+    var color = srgb_to_linear(max(masked, vec3<f32>(0.0)));
+
+    // Vignette.
+    let p = uv * 2.0 - 1.0;
+    let vig = 1.0 - smoothstep(0.6, 1.25, length(p));
+    color *= mix(1.0, vig, clamp(U.vignette, 0.0, 1.0));
+
+    // Film grain (subtle).
+    let n = rand2(frag_coord + vec2<f32>(U.time * 120.0, U.time * 47.0));
+    let grain = (n - 0.5) * (U.grain * (0.25 + 0.35 * U.impact));
+    color += vec3<f32>(grain);
+
+    // Flash (additive).
+    color += U.flash.rgb * U.flash.a;
+
+    return color;
 }
 
 @fragment
@@ -169,7 +203,7 @@ fn fragment(vertex: VertexOutput) -> @location(0) vec4<f32> {
     let frag_coord = vec2<f32>(uv.x * U.width, (1.0 - uv.y) * U.height);
     let base_color = sample_scene(uv);
 
-    if (U.crt_enabled == 0u) {
+    if (U.crt_enabled < 0.5) {
         return vec4<f32>(base_color, 1.0);
     }
 

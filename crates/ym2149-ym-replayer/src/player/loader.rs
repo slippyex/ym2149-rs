@@ -300,7 +300,7 @@ impl<B: Ym2149Backend> YmPlayerGeneric<B> {
         let mut offset = 12;
         let nb_voice = read_be_u16(data, &mut offset)? as usize;
         if nb_voice == 0 || nb_voice > 8 {
-            return Err(format!("Unsupported tracker voice count: {}", nb_voice).into());
+            return Err(format!("Unsupported tracker voice count: {nb_voice}").into());
         }
 
         let player_rate = read_be_u16(data, &mut offset)?;

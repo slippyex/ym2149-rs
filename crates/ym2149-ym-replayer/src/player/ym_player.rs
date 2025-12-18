@@ -427,8 +427,7 @@ mod tests {
         let duration = player.get_duration_seconds();
         assert!(
             (duration - 5.0).abs() < 0.01,
-            "Expected ~5.0s, got {}",
-            duration
+            "Expected ~5.0s, got {duration}"
         );
 
         // Verify samples per frame was calculated for 60Hz: 44100 / 60 = 735 samples
@@ -449,8 +448,7 @@ mod tests {
         let duration = player.get_duration_seconds();
         assert!(
             (duration - 5.0).abs() < 0.01,
-            "Expected ~5.0s, got {}",
-            duration
+            "Expected ~5.0s, got {duration}"
         );
     }
 

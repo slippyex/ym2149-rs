@@ -614,7 +614,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         Span::styled(&title, Style::default().fg(Color::Cyan).bold()),
         Span::raw("  "),
         Span::styled(
-            format!("{} / {}", elapsed_str, duration_str),
+            format!("{elapsed_str} / {duration_str}"),
             Style::default().fg(Color::Yellow),
         ),
         Span::raw("  "),
@@ -911,7 +911,7 @@ fn draw_note_history_table(f: &mut Frame, area: Rect, app: &App) {
                     } else {
                         format!("{:>5}", format!("{:.0}", note.freq))
                     };
-                    format!("{} {}", note_str, freq_str)
+                    format!("{note_str} {freq_str}")
                 } else {
                     format!("{:^width$}", "---", width = col_width)
                 }
@@ -959,7 +959,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
 
     let subsong_info = app
         .subsong
-        .map(|(cur, total)| format!("  Subsong: {}/{}", cur, total))
+        .map(|(cur, total)| format!("  Subsong: {cur}/{total}"))
         .unwrap_or_default();
 
     let playlist_info = app
@@ -989,7 +989,7 @@ fn format_time(seconds: f32) -> String {
     let clamped = seconds.min(5999.0);
     let mins = (clamped / 60.0) as u32;
     let secs = (clamped % 60.0) as u32;
-    format!("{:02}:{:02}", mins, secs)
+    format!("{mins:02}:{secs:02}")
 }
 
 /// Convert frequency to note name (e.g., "A4", "C#5")

@@ -28,8 +28,7 @@ impl<B: Ym2149Backend> YmPlayerGeneric<B> {
         }
         if samples > 10000 {
             return Err(format!(
-                "samples_per_frame {} exceeds reasonable limit of 10000 (implies < 4.41Hz frame rate)",
-                samples
+                "samples_per_frame {samples} exceeds reasonable limit of 10000 (implies < 4.41Hz frame rate)"
             ).into());
         }
         self.sequencer.set_samples_per_frame(samples);

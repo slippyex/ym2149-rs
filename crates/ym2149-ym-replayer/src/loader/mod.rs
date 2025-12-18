@@ -14,8 +14,7 @@ impl YmFileLoader {
     /// Load a YM file from disk, auto-detecting format and handling decompression
     pub fn load(path: &str) -> Result<Vec<[u8; 16]>> {
         // Read raw file data
-        let file_data =
-            fs::read(path).map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
+        let file_data = fs::read(path).map_err(|e| format!("Failed to read file '{path}': {e}"))?;
 
         // Load from in-memory bytes (handles decompression + parse)
         Self::load_from_bytes(&file_data)

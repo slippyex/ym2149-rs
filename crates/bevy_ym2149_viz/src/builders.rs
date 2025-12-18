@@ -173,7 +173,7 @@ pub fn create_oscilloscope(commands: &mut Commands) -> Entity {
                                 .with_children(|column| {
                                     let label_char = char::from(b'A' + channel_index as u8);
                                     column.spawn((
-                                        Text::new(format!("CH {}", label_char)),
+                                        Text::new(format!("CH {label_char}")),
                                         TextFont {
                                             font_size: 12.0,
                                             ..default()
@@ -459,7 +459,7 @@ pub fn create_channel_visualization(commands: &mut Commands, num_channels: usize
                         },))
                         .with_children(|column| {
                             column.spawn((
-                                Text::new(format!("CH {}", label_char)),
+                                Text::new(format!("CH {label_char}")),
                                 TextFont {
                                     font_size: 12.0,
                                     ..default()

@@ -1563,9 +1563,7 @@ dependencies = [
 name = "bevy_ym2149"
 version = "0.8.1"
 dependencies = [
- "anyhow",
  "bevy",
- "bevy_mesh",
  "parking_lot",
  "ron",
  "serde",

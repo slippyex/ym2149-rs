@@ -146,14 +146,10 @@ pub fn run_visualization_loop(context: &StreamingContext) {
 
     if has_subsongs {
         println!(
-            "Playback running — keys: {}, [+/-]=subsong, [space]=pause/resume, [q]=quit\n",
-            mute_keys
+            "Playback running — keys: {mute_keys}, [+/-]=subsong, [space]=pause/resume, [q]=quit\n"
         );
     } else {
-        println!(
-            "Playback running — keys: {}, [space]=pause/resume, [q]=quit\n",
-            mute_keys
-        );
+        println!("Playback running — keys: {mute_keys}, [space]=pause/resume, [q]=quit\n");
     }
     let playback_start = Instant::now();
 
@@ -478,17 +474,17 @@ fn display_frame(
     // Move cursor up: 1 status line + 3 lines per PSG + separators between PSGs
     let separator_lines = psg_count.saturating_sub(1);
     let lines_up = 1 + psg_count * 3 + separator_lines;
-    print!("\x1B[{}A", lines_up);
+    print!("\x1B[{lines_up}A");
 
     // Format subsong info if available
     let subsong_str = match subsong_info {
-        Some((current, total)) => format!(" | Subsong: {}/{}", current, total),
+        Some((current, total)) => format!(" | Subsong: {current}/{total}"),
         None => String::new(),
     };
 
     // PSG count indicator for multi-PSG songs
     let psg_str = if psg_count > 1 {
-        format!(" | PSGs: {}", psg_count)
+        format!(" | PSGs: {psg_count}")
     } else {
         String::new()
     };
@@ -510,7 +506,7 @@ fn display_frame(
     for psg_idx in 0..psg_count {
         // Print separator between PSGs (not before the first one)
         if psg_idx > 0 {
-            print!("\x1B[2K\r{}\n", separator);
+            print!("\x1B[2K\r{separator}\n");
         }
 
         let regs = &snapshot.registers[psg_idx];

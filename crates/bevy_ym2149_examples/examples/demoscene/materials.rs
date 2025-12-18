@@ -58,7 +58,18 @@ pub struct CrtParams {
     pub time: f32,
     pub width: f32,
     pub height: f32,
-    pub crt_enabled: u32,
+    /// 0.0 = off, 1.0 = on
+    pub crt_enabled: f32,
+    /// 0.0..1.0 impact intensity (kept at 0 in demoscene by default)
+    pub impact: f32,
+    /// Chromatic aberration strength in pixels.
+    pub chroma_px: f32,
+    /// Grain amount (0.0..1.0 typical range).
+    pub grain: f32,
+    /// Vignette strength (0.0..1.0).
+    pub vignette: f32,
+    /// Flash overlay in linear space: rgb = color, a = strength.
+    pub flash: Vec4,
 }
 impl Default for CrtParams {
     fn default() -> Self {
@@ -66,7 +77,12 @@ impl Default for CrtParams {
             time: 0.0,
             width: 1280.0,
             height: 720.0,
-            crt_enabled: 1,
+            crt_enabled: 1.0,
+            impact: 0.0,
+            chroma_px: 0.6,
+            grain: 0.004,
+            vignette: 0.15,
+            flash: Vec4::ZERO,
         }
     }
 }
@@ -104,10 +120,14 @@ pub fn update_uniforms(
         return;
     };
 
-    let crt_enabled_flag = if let Some(crt_state) = crt.as_ref() {
-        if crt_state.enabled { 1 } else { 0 }
+    let (crt_enabled_u32, crt_enabled_f32) = if let Some(crt_state) = crt.as_ref() {
+        if crt_state.enabled {
+            (1, 1.0)
+        } else {
+            (0, 0.0)
+        }
     } else {
-        1
+        (1, 1.0)
     };
 
     let scale_factor = window.resolution.scale_factor();
@@ -118,7 +138,7 @@ pub fn update_uniforms(
     material.params.width = physical_width;
     material.params.height = physical_height;
     material.params.frame = material.params.frame.wrapping_add(1);
-    material.params.crt_enabled = crt_enabled_flag;
+    material.params.crt_enabled = crt_enabled_u32;
 
     if let Some(crt_mat) = crt_mat
         && let Some(crt_material) = crt_materials.get_mut(&crt_mat.0)
@@ -126,6 +146,11 @@ pub fn update_uniforms(
         crt_material.params.time = time.elapsed_secs();
         crt_material.params.width = physical_width;
         crt_material.params.height = physical_height;
-        crt_material.params.crt_enabled = crt_enabled_flag;
+        crt_material.params.crt_enabled = crt_enabled_f32;
+        crt_material.params.impact = 0.0;
+        crt_material.params.chroma_px = 0.6;
+        crt_material.params.grain = 0.008;
+        crt_material.params.vignette = 0.15;
+        crt_material.params.flash = Vec4::ZERO;
     }
 }

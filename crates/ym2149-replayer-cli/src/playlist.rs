@@ -41,7 +41,7 @@ impl PlaylistEntry {
                 let clamped = d.min(5999.0); // Cap at 99:59
                 let mins = (clamped / 60.0) as u32;
                 let secs = (clamped % 60.0) as u32;
-                format!(" ({:02}:{:02})", mins, secs)
+                format!(" ({mins:02}:{secs:02})")
             })
             .unwrap_or_default();
 
@@ -52,11 +52,11 @@ impl PlaylistEntry {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("???");
-            format!("{}{}", filename, duration_str)
+            format!("{filename}{duration_str}")
         } else if self.author.is_empty() || self.author == "(unknown)" {
-            format!("{}{}", self.title, duration_str)
+            format!("{}{duration_str}", self.title)
         } else {
-            format!("{} - {}{}", self.author, self.title, duration_str)
+            format!("{} - {}{duration_str}", self.author, self.title)
         }
     }
 }

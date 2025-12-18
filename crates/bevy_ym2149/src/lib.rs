@@ -118,7 +118,8 @@ pub mod diagnostics;
 pub(crate) mod song_player;
 pub(crate) mod streaming;
 
-// Re-export ym2149 core types
+// Re-export ym2149 core types (kept for backwards compatibility; prefer importing from `ym2149`).
+#[doc(hidden)]
 pub use ::ym2149::*;
 
 // Re-export common types from ym2149-common for unified API

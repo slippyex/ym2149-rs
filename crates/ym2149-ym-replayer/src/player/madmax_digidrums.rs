@@ -108,7 +108,7 @@ mod tests {
     fn test_madmax_samples_have_data() {
         // Verify samples are not empty
         for (i, sample) in MADMAX_SAMPLES.iter().enumerate() {
-            assert!(!sample.is_empty(), "Sample {} should not be empty", i);
+            assert!(!sample.is_empty(), "Sample {i} should not be empty");
         }
     }
 }

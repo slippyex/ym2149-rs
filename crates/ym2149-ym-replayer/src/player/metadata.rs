@@ -56,19 +56,12 @@ impl<B: Ym2149Backend> YmPlayerGeneric<B> {
 
         if let Some(info) = self.info() {
             format!(
-                "  Song: {}\n  Author: {}\n  Comment: {}\n  Duration: {:.2}s ({} frames @ {}Hz)\n  Master Clock: {} Hz",
-                info.song_name,
-                info.author,
-                info.comment,
-                duration,
-                frame_count,
-                info.frame_rate,
-                info.master_clock
+                "  Song: {}\n  Author: {}\n  Comment: {}\n  Duration: {duration:.2}s ({frame_count} frames @ {}Hz)\n  Master Clock: {} Hz",
+                info.song_name, info.author, info.comment, info.frame_rate, info.master_clock
             )
         } else {
             format!(
-                "  Duration: {:.2}s ({} frames @ 50Hz)\n  Master Clock: 2,000,000 Hz",
-                duration, frame_count
+                "  Duration: {duration:.2}s ({frame_count} frames @ 50Hz)\n  Master Clock: 2,000,000 Hz"
             )
         }
     }

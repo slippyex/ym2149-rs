@@ -296,7 +296,7 @@ mod tests {
 
         // Frequency should be ~440Hz (A4)
         let freq = states.channels[0].frequency_hz.unwrap();
-        assert!((freq - 440.0).abs() < 5.0, "Expected ~440Hz, got {}", freq);
+        assert!((freq - 440.0).abs() < 5.0, "Expected ~440Hz, got {freq}");
     }
 
     #[test]

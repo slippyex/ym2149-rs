@@ -55,7 +55,7 @@ use crate::synth::{YmSynthController, YmSynthPlayer};
 use bevy::audio::{AudioPlayer, AudioSink, PlaybackSettings};
 use bevy::prelude::*;
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use ym2149::Ym2149Backend;
 use ym2149_common::{PSG_MASTER_CLOCK_HZ, channel_frequencies};
@@ -196,9 +196,9 @@ pub(in crate::plugin) fn publish_bridge_audio(
         if !targets.0.contains(&frame.entity) {
             continue;
         }
-        buffers
-            .0
-            .insert(frame.entity, frame.stereo.as_ref().to_vec());
+        let entry = buffers.0.entry(frame.entity).or_default();
+        entry.clear();
+        entry.extend_from_slice(frame.stereo.as_ref());
     }
 }
 
@@ -398,10 +398,10 @@ pub(in crate::plugin) fn initialize_playback(
     mut pending_reads: Local<HashMap<(Entity, PendingSlot), PendingFileRead>>,
     audio_sinks: Query<&AudioSink>,
 ) {
-    let mut alive = Vec::new();
+    let mut alive = HashSet::new();
 
     for (entity, mut playback, runtime_state) in playbacks.iter_mut() {
-        alive.push(entity);
+        alive.insert(entity);
 
         if runtime_state.is_none() {
             commands

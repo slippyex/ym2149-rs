@@ -67,8 +67,7 @@ impl RingBuffer {
         const MAX_CAPACITY: usize = 512 * 1024 * 1024 / std::mem::size_of::<f32>();
         if capacity > MAX_CAPACITY {
             return Err(RingBufferError(format!(
-                "Ring buffer capacity {} exceeds maximum safe size {}",
-                capacity, MAX_CAPACITY
+                "Ring buffer capacity {capacity} exceeds maximum safe size {MAX_CAPACITY}"
             )));
         }
 
@@ -280,12 +279,12 @@ mod tests {
 
         rb.write(&vec![1.0; 64]);
         let fill = rb.fill_percentage();
-        assert!(fill > 0.45 && fill < 0.55, "Fill percentage {}", fill);
+        assert!(fill > 0.45 && fill < 0.55, "Fill percentage {fill}");
 
         rb.write(&vec![1.0; 63]);
         let fill = rb.fill_percentage();
         // Should be nearly full (1 sample gap due to ring buffer invariant)
-        assert!(fill > 0.95, "Fill percentage {}", fill);
+        assert!(fill > 0.95, "Fill percentage {fill}");
     }
 
     #[test]

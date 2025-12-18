@@ -60,7 +60,7 @@ pub fn create_channel_status(
 
     // Envelope effect indicator
     if envelope_enabled && !envelope_shape.is_empty() {
-        write!(status, " {}", envelope_shape).ok();
+        write!(status, " {envelope_shape}").ok();
     }
 
     // Special effects indicators
@@ -99,7 +99,7 @@ pub fn create_volume_bar(amplitude: f32, max_length: usize) -> String {
     let block_count = (normalized * max_length as f32) as usize;
     let blocks = "█".repeat(block_count.min(max_length));
     let spaces = " ".repeat(max_length.saturating_sub(block_count));
-    format!("{}{}", blocks, spaces)
+    format!("{blocks}{spaces}")
 }
 
 #[cfg(test)]

@@ -9,6 +9,8 @@ use bevy::image::ImagePlugin;
 use bevy::prelude::DefaultPlugins;
 use bevy_embedded_assets::{EmbeddedAssetPlugin, PluginMode};
 
+pub mod gist_audio;
+
 /// Asset base path resolved at compile time to ensure examples work from any directory.
 ///
 /// This path points to the examples crate's asset directory, allowing examples
@@ -62,4 +64,21 @@ pub fn example_plugins() -> impl PluginGroup {
             ..Default::default()
         })
         .set(ImagePlugin::default_nearest()) // Pixel-perfect rendering for retro graphics
+}
+
+/// Configure DefaultPlugins with the correct asset path and a custom primary window.
+///
+/// This is a convenience helper for examples that need a specific window title/resolution
+/// while still sharing the standard example asset configuration.
+pub fn example_plugins_with_window(primary_window: bevy::window::Window) -> impl PluginGroup {
+    DefaultPlugins
+        .set(bevy::window::WindowPlugin {
+            primary_window: Some(primary_window),
+            ..Default::default()
+        })
+        .set(AssetPlugin {
+            file_path: ASSET_BASE.into(),
+            ..Default::default()
+        })
+        .set(ImagePlugin::default_nearest())
 }

@@ -74,9 +74,7 @@ mod tests {
             let val = get_volume(amplitude);
             assert!(
                 (0.0..=1.0).contains(&val),
-                "Volume table value {} at index {} out of range [0.0, 1.0]",
-                val,
-                amplitude
+                "Volume table value {val} at index {amplitude} out of range [0.0, 1.0]"
             );
         }
     }

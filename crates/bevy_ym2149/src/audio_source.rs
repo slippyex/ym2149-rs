@@ -241,7 +241,7 @@ impl AssetLoader for Ym2149Loader {
         reader
             .read_to_end(&mut data)
             .await
-            .map_err(|e| Ym2149LoadError(format!("Failed to read asset: {}", e)))?;
+            .map_err(|e| Ym2149LoadError(format!("Failed to read asset: {e}")))?;
 
         Ym2149AudioSource::new(data).map_err(|e| Ym2149LoadError(e.to_string()))
     }

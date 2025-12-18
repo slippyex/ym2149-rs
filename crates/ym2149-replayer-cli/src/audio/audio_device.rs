@@ -138,11 +138,11 @@ impl AudioDevice {
     ) -> Result<Self, AudioDeviceError> {
         // Create output stream
         let (stream, stream_handle) = OutputStream::try_default()
-            .map_err(|e| AudioDeviceError(format!("Failed to create audio stream: {}", e)))?;
+            .map_err(|e| AudioDeviceError(format!("Failed to create audio stream: {e}")))?;
 
         // Create sink for playback
         let sink = Sink::try_new(&stream_handle)
-            .map_err(|e| AudioDeviceError(format!("Failed to create audio sink: {}", e)))?;
+            .map_err(|e| AudioDeviceError(format!("Failed to create audio sink: {e}")))?;
 
         // Create finished signal for shutdown coordination
         let finished = Arc::new(AtomicBool::new(false));
@@ -214,10 +214,7 @@ mod tests {
         match AudioDevice::new(sample_rate, channels, Arc::clone(&ring_buffer)) {
             Ok(device) => Some((device, ring_buffer)),
             Err(err) => {
-                eprintln!(
-                    "Skipping audio::audio_device test (audio backend unavailable): {}",
-                    err
-                );
+                eprintln!("Skipping audio::audio_device test (audio backend unavailable): {err}");
                 None
             }
         }

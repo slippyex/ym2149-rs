@@ -3,8 +3,22 @@
 use bevy::prelude::*;
 
 use super::components::*;
+use super::config::BOSS_WAVE_INTERVAL;
 use super::resources::*;
 use super::spawning::*;
+
+type ComboUiQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Text,
+        &'static mut TextColor,
+        &'static mut TextFont,
+        &'static mut Visibility,
+        &'static UiMarker,
+        Option<&'static UiShadow>,
+    ),
+>;
 
 pub fn spawn_ui(cmd: &mut Commands, fonts: &FontAssets) {
     let ui_elements = [
@@ -79,14 +93,24 @@ pub fn spawn_ui(cmd: &mut Commands, fonts: &FontAssets) {
             UiMarker::PressEnter,
         ),
         (
-            "",
-            0.0,
-            Color::NONE,
-            Val::Percent(0.0),
+            "ARROWS  MOVE   SPACE  FIRE   ENTER  START   C  CRT   M  MUSIC",
+            22.0,
+            Color::srgba(0.7, 0.85, 1.0, 0.85),
+            Val::Percent(65.0),
+            None,
+            None,
+            true,
+            UiMarker::Subtitle,
+        ),
+        (
+            "COMBO  x2",
+            28.0,
+            Color::srgb(1.0, 0.3, 0.9),
+            Val::Px(80.0),
             None,
             None,
             false,
-            UiMarker::Subtitle,
+            UiMarker::Combo,
         ),
     ];
 
@@ -106,6 +130,37 @@ pub fn spawn_ui(cmd: &mut Commands, fonts: &FontAssets) {
             node.right = r;
             node.width = Val::Auto;
         }
+
+        let visibility = if vis {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+
+        // Cheap but effective drop shadow for better readability (especially with CRT off).
+        if size > 0.0 && color != Color::NONE && !txt.is_empty() {
+            let mut shadow_node = node.clone();
+            shadow_node.margin = UiRect {
+                left: Val::Px(2.0),
+                top: Val::Px(2.0),
+                ..default()
+            };
+            cmd.spawn((
+                Text::new(txt),
+                TextFont {
+                    font: fonts.arcade.clone(),
+                    font_size: size,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.0, 0.0, 0.0, 0.65)),
+                TextLayout::new_with_justify(bevy::text::Justify::Center),
+                shadow_node,
+                visibility,
+                marker,
+                UiShadow,
+            ));
+        }
+
         cmd.spawn((
             Text::new(txt),
             TextFont {
@@ -116,11 +171,7 @@ pub fn spawn_ui(cmd: &mut Commands, fonts: &FontAssets) {
             TextColor(color),
             TextLayout::new_with_justify(bevy::text::Justify::Center),
             node,
-            if vis {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            },
+            visibility,
             marker,
         ));
     }
@@ -154,7 +205,7 @@ pub fn spawn_name_entry_ui(cmd: &mut Commands, fonts: &FontAssets, score: u32, w
 
         // Score display
         parent.spawn((
-            Text::new(format!("{}", score)),
+            Text::new(format!("{score}")),
             TextFont {
                 font: fonts.arcade.clone(),
                 font_size: 64.0,
@@ -165,7 +216,7 @@ pub fn spawn_name_entry_ui(cmd: &mut Commands, fonts: &FontAssets, score: u32, w
 
         // Wave display
         parent.spawn((
-            Text::new(format!("WAVE  {}", wave)),
+            Text::new(format!("WAVE  {wave}")),
             TextFont {
                 font: fonts.arcade.clone(),
                 font_size: 32.0,
@@ -344,10 +395,263 @@ pub fn spawn_high_scores_ui(cmd: &mut Commands, fonts: &FontAssets, scores: &Hig
     });
 }
 
-pub fn update_ui(gd: Res<GameData>, mut q: Query<(&mut Text, &UiMarker)>) {
+pub fn update_ui(
+    gd: Res<GameData>,
+    mut last_wave: Local<u32>,
+    mut q: Query<(&mut Text, &UiMarker)>,
+) {
+    if *last_wave == gd.wave {
+        return;
+    }
+    *last_wave = gd.wave;
+
     for (mut t, m) in q.iter_mut() {
         if *m == UiMarker::Wave {
             t.0 = format!("WAVE {}", gd.wave);
+        }
+    }
+}
+
+pub fn combo_ui_update(
+    time: Res<Time>,
+    combo: Res<ComboTracker>,
+    mut last_combo: Local<u32>,
+    mut pulse: Local<f32>,
+    mut q: ComboUiQuery<'_, '_>,
+) {
+    const PULSE_DURATION: f32 = 0.28;
+    let dt = time.delta_secs();
+    *pulse = (*pulse - dt).max(0.0);
+
+    let count = combo.count;
+    if count > *last_combo {
+        *pulse = PULSE_DURATION;
+        *last_combo = count;
+    } else if combo.timer <= 0.0 {
+        *last_combo = 0;
+    }
+
+    for (mut text, mut color, mut font, mut vis, marker, shadow) in q.iter_mut() {
+        if *marker != UiMarker::Combo {
+            continue;
+        }
+
+        if combo.count <= 1 || combo.timer <= 0.0 {
+            *vis = Visibility::Hidden;
+            continue;
+        }
+
+        *vis = Visibility::Visible;
+        text.0 = format!("COMBO  x{}", combo.count);
+
+        let alpha = (combo.timer / 1.0).clamp(0.0, 1.0);
+        let t = time.elapsed_secs();
+        let glow = (t * 8.0).sin() * 0.15 + 0.85;
+        // Bigger "pop" on each new combo, then zoom while fading out.
+        let pulse_t = (*pulse / PULSE_DURATION).clamp(0.0, 1.0);
+        let pulse_pop = 1.0 + pulse_t.powf(0.6) * 0.95;
+        let fade_zoom = 1.0 + (1.0 - alpha).powf(1.6) * 0.85;
+        font.font_size = 28.0 * pulse_pop * fade_zoom;
+        if shadow.is_some() {
+            color.0 = Color::srgba(0.0, 0.0, 0.0, alpha * 0.55);
+        } else {
+            color.0 = Color::srgba(1.0, 0.3, 0.9, alpha * glow);
+        }
+    }
+}
+
+pub fn spawn_wave_transition_fx(
+    cmd: &mut Commands,
+    fonts: &FontAssets,
+    screen: &ScreenSize,
+    wave: u32,
+    duration: f32,
+) {
+    let duration = duration.max(0.4);
+
+    for is_top in [true, false] {
+        cmd.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: if is_top { Val::Px(0.0) } else { Val::Auto },
+                bottom: if is_top { Val::Auto } else { Val::Px(0.0) },
+                width: Val::Percent(100.0),
+                height: Val::Px(0.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
+            LetterboxBar {
+                timer: Timer::from_seconds(duration, TimerMode::Once),
+            },
+        ));
+    }
+
+    // Center banner with subtle background.
+    cmd.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Percent(40.0),
+            width: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        WaveBanner {
+            timer: Timer::from_seconds(duration, TimerMode::Once),
+        },
+    ))
+    .with_children(|parent| {
+        let label = if wave % BOSS_WAVE_INTERVAL == 0 {
+            format!("BOSS  {}", (wave / BOSS_WAVE_INTERVAL).max(1))
+        } else {
+            format!("WAVE  {wave}")
+        };
+
+        // Container with background + border; text as child so it doesn't appear as a separate "block".
+        parent
+            .spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(18.0), Val::Px(10.0)),
+                    border: UiRect::all(Val::Px(2.0)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.08, 0.1, 0.14, 0.0)),
+                BorderColor::all(Color::srgba(0.35, 0.6, 1.0, 0.0)),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    Text::new(label),
+                    TextFont {
+                        font: fonts.arcade.clone(),
+                        font_size: 46.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgba(0.45, 0.8, 1.0, 0.0)),
+                    TextLayout::new_with_justify(bevy::text::Justify::Center),
+                ));
+            });
+    });
+
+    // Subtle full-screen tint overlay behind UI to reinforce the transition (no extra shader needed).
+    cmd.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.0),
+            left: Val::Px(0.0),
+            width: Val::Px(screen.width),
+            height: Val::Px(screen.height),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.35, 0.55, 1.0, 0.0)),
+        WaveBanner {
+            timer: Timer::from_seconds(duration, TimerMode::Once),
+        },
+    ));
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub fn wave_transition_update(
+    mut cmd: Commands,
+    time: Res<Time>,
+    mut set: ParamSet<(
+        Query<(Entity, &mut Node, &mut BackgroundColor, &mut LetterboxBar), Without<WaveBanner>>,
+        Query<
+            (Entity, &mut BackgroundColor, &mut WaveBanner),
+            (Without<Children>, Without<LetterboxBar>),
+        >,
+        Query<
+            (&mut BackgroundColor, &mut BorderColor),
+            (Without<WaveBanner>, Without<LetterboxBar>),
+        >,
+    )>,
+    mut banners: Query<(Entity, &Children, &mut WaveBanner)>,
+    child_nodes: Query<&Children>,
+    mut texts: Query<(&mut TextColor, &mut TextFont, Option<&UiShadow>)>,
+) {
+    for (entity, mut node, mut bg, mut bar) in set.p0().iter_mut() {
+        bar.timer.tick(time.delta());
+        let progress = bar.timer.fraction().clamp(0.0, 1.0);
+
+        // Ease in/out.
+        let ease = if progress < 0.25 {
+            progress / 0.25
+        } else if progress > 0.75 {
+            (1.0 - progress) / 0.25
+        } else {
+            1.0
+        };
+
+        let target = 62.0;
+        node.height = Val::Px(target * ease);
+        bg.0 = Color::srgba(0.0, 0.0, 0.0, 0.85 * ease);
+
+        if bar.timer.just_finished() {
+            cmd.entity(entity).try_despawn();
+        }
+    }
+
+    for (entity, children, mut banner) in banners.iter_mut() {
+        banner.timer.tick(time.delta());
+        let progress = banner.timer.fraction().clamp(0.0, 1.0);
+        let ease = if progress < 0.2 {
+            progress / 0.2
+        } else if progress > 0.8 {
+            (1.0 - progress) / 0.2
+        } else {
+            1.0
+        };
+
+        for child in children.iter() {
+            if let Ok((mut bg, mut border)) = set.p2().get_mut(child) {
+                bg.0 = Color::srgba(0.08, 0.1, 0.14, 0.75 * ease);
+                *border = BorderColor::all(Color::srgba(0.35, 0.6, 1.0, 0.9 * ease));
+            }
+
+            // Text lives inside the banner panel node; update its children too.
+            let panel_children = child_nodes.get(child).ok();
+            for &text_entity in panel_children.into_iter().flatten() {
+                if let Ok((mut text_color, mut font, shadow)) = texts.get_mut(text_entity) {
+                    let is_shadow = shadow.is_some();
+                    let alpha = if is_shadow { 0.55 } else { 1.0 };
+                    let tint = if is_shadow {
+                        Color::srgba(0.0, 0.0, 0.0, alpha * ease)
+                    } else {
+                        Color::srgba(0.45, 0.8, 1.0, alpha * ease)
+                    };
+                    text_color.0 = tint;
+
+                    // Mild breathing to feel alive.
+                    if !is_shadow {
+                        let t = time.elapsed_secs();
+                        font.font_size = 46.0 * (1.0 + (t * 2.0).sin() * 0.02);
+                    }
+                }
+            }
+        }
+
+        if banner.timer.just_finished() {
+            for child in children.iter() {
+                cmd.entity(child).try_despawn();
+            }
+            cmd.entity(entity).try_despawn();
+        }
+    }
+
+    for (entity, mut bg, mut overlay) in set.p1().iter_mut() {
+        overlay.timer.tick(time.delta());
+        let progress = overlay.timer.fraction().clamp(0.0, 1.0);
+        let ease = if progress < 0.2 {
+            progress / 0.2
+        } else if progress > 0.8 {
+            (1.0 - progress) / 0.2
+        } else {
+            1.0
+        };
+        bg.0 = Color::srgba(0.35, 0.55, 1.0, 0.12 * ease);
+        if overlay.timer.just_finished() {
+            cmd.entity(entity).try_despawn();
         }
     }
 }
@@ -371,8 +675,15 @@ pub fn update_life_icons(
 
 pub fn update_score_digits(
     gd: Res<GameData>,
+    mut last: Local<(u32, u32)>,
     mut score_digits: Query<(&mut Sprite, &DigitSprite, &ScoreType)>,
 ) {
+    if last.0 == gd.score && last.1 == gd.high_score {
+        return;
+    }
+    last.0 = gd.score;
+    last.1 = gd.high_score;
+
     let score_str = format!("{:06}", gd.score.min(999999));
     let high_str = format!("{:06}", gd.high_score.min(999999));
 
@@ -392,21 +703,24 @@ pub fn update_score_digits(
 }
 
 pub fn update_wave_digits(
-    mut cmd: Commands,
     gd: Res<GameData>,
-    sprites: Res<SpriteAssets>,
-    screen: Res<ScreenSize>,
-    wave_digits: Query<Entity, With<WaveDigit>>,
+    mut last_wave: Local<u32>,
+    mut wave_digits: Query<(&mut Sprite, &WaveDigit)>,
 ) {
-    let current_digits: Vec<_> = wave_digits.iter().collect();
-    if current_digits.len() != 2 {
+    if *last_wave == gd.wave {
         return;
     }
+    *last_wave = gd.wave;
 
-    for entity in current_digits {
-        cmd.entity(entity).try_despawn();
+    let wave_str = format!("{:02}", gd.wave.min(99));
+    for (mut sprite, digit_sprite) in wave_digits.iter_mut() {
+        if let Some(digit_char) = wave_str.chars().nth(digit_sprite.position)
+            && let Some(atlas) = &mut sprite.texture_atlas
+        {
+            let digit = digit_char.to_digit(10).unwrap_or(0) as u8;
+            atlas.index = digit_to_atlas_index(digit);
+        }
     }
-    spawn_wave_digits(&mut cmd, &sprites, &screen, gd.wave);
 }
 
 pub fn spawn_powerups_ui(
@@ -417,12 +731,13 @@ pub fn spawn_powerups_ui(
 ) {
     use super::spawning::POWERUP_ANIM;
 
-    // Text colors matching the new Bonuses sprite sheet
-    const POWERUP_TEXT_COLORS: [Color; 4] = [
-        Color::srgb(1.0, 0.3, 0.3), // RapidFire - red star
-        Color::srgb(0.3, 0.9, 0.3), // TripleShot - green cross
-        Color::srgb(0.3, 0.6, 1.0), // SpeedBoost - blue shield
-        Color::srgb(1.0, 0.9, 0.2), // PowerShot - yellow 2x
+    // Text colors matching Bonuses-0001.png columns.
+    const POWERUP_TEXT_COLORS: [Color; 5] = [
+        Color::srgb(0.3, 0.95, 0.3),  // Heal - green cross
+        Color::srgb(1.0, 0.3, 0.3),   // RapidFire - red star
+        Color::srgb(1.0, 0.35, 0.95), // TripleShot - magenta
+        Color::srgb(0.3, 0.6, 1.0),   // SpeedBoost - blue shield
+        Color::srgb(1.0, 0.9, 0.2),   // PowerShot - yellow 2x
     ];
 
     // Title
@@ -452,10 +767,11 @@ pub fn spawn_powerups_ui(
 
     // (description, visual_index)
     let powerups = [
-        ("Faster  shooting", 0),  // Rapid Fire
-        ("Spread  pattern", 1),   // Triple Shot
-        ("Faster  movement", 2),  // Speed Boost
-        ("Stronger  bullets", 3), // Power Shot
+        ("Restore  energy", 0),   // Heal
+        ("Faster  shooting", 1),  // Rapid Fire
+        ("Spread  pattern", 2),   // Triple Shot
+        ("Faster  movement", 3),  // Speed Boost
+        ("Stronger  bullets", 4), // Power Shot
     ];
 
     let sprite_x = -100.0;

@@ -5,14 +5,13 @@
 //! - File drag-and-drop loading
 //! - Keyboard-based playback control
 
-use bevy::asset::AssetPlugin;
 use bevy::prelude::*;
 use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{
     PatternTrigger, PatternTriggerSet, PatternTriggered, PlaybackState, Ym2149Playback,
     Ym2149Plugin, Ym2149Settings,
 };
-use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
+use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins_with_window};
 use bevy_ym2149_viz::{
     Ym2149VizPlugin, create_channel_visualization, create_detailed_channel_display,
     create_oscilloscope, create_status_display,
@@ -21,20 +20,10 @@ use bevy_ym2149_viz::{
 fn main() {
     App::new()
         .add_plugins(embedded_asset_plugin())
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "YM2149 goes Bevy".into(),
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    file_path: ASSET_BASE.into(),
-                    ..default()
-                }),
-        )
+        .add_plugins(example_plugins_with_window(Window {
+            title: "YM2149 goes Bevy".into(),
+            ..default()
+        }))
         .add_plugins(Ym2149Plugin::default())
         .add_plugins(Ym2149VizPlugin)
         .add_systems(Startup, setup)

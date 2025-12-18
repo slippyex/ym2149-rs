@@ -272,7 +272,7 @@ impl StreamingContext {
         self.running.store(false, Ordering::Relaxed);
         if let Err(e) = self.producer_thread.join() {
             // Log but don't panic - we need to clean up the audio device
-            eprintln!("Warning: Producer thread panicked during shutdown: {:?}", e);
+            eprintln!("Warning: Producer thread panicked during shutdown: {e:?}");
         }
         self.audio_device.finish();
     }

@@ -72,11 +72,10 @@ pub fn update_status_display(
                 .unwrap_or(0);
 
             let status_text = format!(
-                "Status: {}\n\
-                 Frame: {}\n\
-                 Volume: {}%\n\
-                 Buffer: {}%",
-                state_str, frame_pos, volume_percent, buffer_fill
+                "Status: {state_str}\n\
+                 Frame: {frame_pos}\n\
+                 Volume: {volume_percent}%\n\
+                 Buffer: {buffer_fill}%"
             );
 
             text.0 = status_text;
@@ -187,7 +186,7 @@ pub fn update_song_progress(
     }
 
     for mut text in labels.p0().iter_mut() {
-        text.0 = format!("Progress {:03.0}%", percent);
+        text.0 = format!("Progress {percent:03.0}%");
     }
 
     for mut text in labels.p1().iter_mut() {

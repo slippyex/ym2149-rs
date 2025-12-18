@@ -245,11 +245,11 @@ pub fn draw_oscilloscope(f: &mut Frame, area: Rect, app: &App) {
                     color
                 };
                 let label_text = if is_drum {
-                    format!("{}♪", label)
+                    format!("{label}♪")
                 } else if is_sid {
-                    format!("{}~", label)
+                    format!("{label}~")
                 } else if is_buzz {
-                    format!("{}≈", label) // ≈ symbol for buzz/envelope
+                    format!("{label}≈") // ≈ symbol for buzz/envelope
                 } else {
                     label.to_string()
                 };

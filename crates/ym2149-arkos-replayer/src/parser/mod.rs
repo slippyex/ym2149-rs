@@ -135,7 +135,7 @@ fn load_aks_zip(data: &[u8]) -> Result<AksSong> {
 
     let cursor = Cursor::new(data);
     let mut archive = ZipArchive::new(cursor)
-        .map_err(|e| ArkosError::InvalidFormat(format!("Not a valid ZIP file: {}", e)))?;
+        .map_err(|e| ArkosError::InvalidFormat(format!("Not a valid ZIP file: {e}")))?;
 
     // AKS ZIP files contain a single .aks file with the same name
     if archive.len() != 1 {
@@ -147,7 +147,7 @@ fn load_aks_zip(data: &[u8]) -> Result<AksSong> {
 
     let mut file = archive
         .by_index(0)
-        .map_err(|e| ArkosError::InvalidFormat(format!("Cannot read ZIP entry: {}", e)))?;
+        .map_err(|e| ArkosError::InvalidFormat(format!("Cannot read ZIP entry: {e}")))?;
 
     let mut xml_data = Vec::new();
     file.read_to_end(&mut xml_data)

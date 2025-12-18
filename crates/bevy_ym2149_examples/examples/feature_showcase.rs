@@ -11,7 +11,6 @@
 //!
 //! This example shows how to build a sophisticated music system without relying solely on UI.
 
-use bevy::asset::AssetPlugin;
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use bevy_ym2149::audio_bridge::{AudioBridgeMix, AudioBridgeMixes};
@@ -22,7 +21,7 @@ use bevy_ym2149::{
     AudioBridgeTargets, FRAME_POSITION_PATH, Ym2149Playback, Ym2149Plugin, Ym2149PluginConfig,
     Ym2149Settings,
 };
-use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
+use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins};
 
 #[derive(Resource)]
 struct DemoPlayback(Entity);
@@ -39,10 +38,7 @@ struct BridgeMixLabel;
 fn main() {
     App::new()
         .add_plugins(embedded_asset_plugin())
-        .add_plugins(DefaultPlugins.set(AssetPlugin {
-            file_path: ASSET_BASE.into(),
-            ..default()
-        }))
+        .add_plugins(example_plugins())
         .add_plugins(Ym2149Plugin::with_config(Ym2149PluginConfig {
             bevy_audio_bridge: true, // Enable audio bridge for this example
             ..Default::default()

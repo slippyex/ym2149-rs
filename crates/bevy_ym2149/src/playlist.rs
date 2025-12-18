@@ -16,6 +16,7 @@
 //! ```
 
 use crate::audio_source::Ym2149AudioSource;
+use crate::error::BevyYm2149Error;
 use crate::events::{PlaylistAdvanceRequest, TrackFinished};
 use crate::playback::{CrossfadeRequest, TrackSource, YM2149_SAMPLE_RATE_F32, Ym2149Playback};
 use bevy::asset::{AssetLoader, LoadContext, io::Reader};
@@ -161,7 +162,7 @@ pub struct Ym2149PlaylistLoader;
 impl AssetLoader for Ym2149PlaylistLoader {
     type Asset = Ym2149Playlist;
     type Settings = ();
-    type Error = anyhow::Error;
+    type Error = BevyYm2149Error;
 
     async fn load(
         &self,
@@ -170,8 +171,12 @@ impl AssetLoader for Ym2149PlaylistLoader {
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
         let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
-        let playlist: Ym2149Playlist = ron::de::from_bytes(&bytes)?;
+        reader
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|e| BevyYm2149Error::AssetLoad(e.to_string()))?;
+        let playlist: Ym2149Playlist =
+            ron::de::from_bytes(&bytes).map_err(|e| BevyYm2149Error::AssetLoad(e.to_string()))?;
         Ok(playlist)
     }
 

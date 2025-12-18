@@ -30,6 +30,130 @@ pub struct Enemy {
     pub points: u32,
 }
 
+#[derive(Component, Clone, Copy)]
+pub struct EnemyHp {
+    pub current: u8,
+}
+
+#[derive(Component)]
+pub struct Boss {
+    pub stage: u32,
+    pub points: u32,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct BossEnergy {
+    pub current: i32,
+    pub max: i32,
+}
+
+#[derive(Component)]
+pub struct BossWeapon {
+    pub timer: Timer,
+}
+
+#[derive(Component)]
+pub struct BossTarget {
+    pub target: Vec2,
+    pub timer: Timer,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct BossEscort {
+    pub angle: f32,
+    pub radius: f32,
+    pub speed: f32,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct BulletDamage(pub u8);
+
+#[derive(Component, Clone, Copy)]
+pub struct BulletVelocity(pub Vec2);
+
+#[derive(Component)]
+pub struct DiveShooter {
+    pub timer: Timer,
+}
+
+#[derive(Component)]
+pub struct EscortShooter {
+    pub timer: Timer,
+}
+
+/// Enemy performs a sinus-spiral approach and then returns to its original formation slot.
+#[derive(Component, Clone, Copy)]
+pub struct SpiralEnemy {
+    pub target_x: f32,
+    pub returning: bool,
+    pub start_y: f32,
+    pub original: Vec2,
+    pub progress: f32,
+    pub radius: f32,
+    pub turns: f32,
+    pub curve_dir: f32,
+    pub wobble_amp: f32,
+    pub wobble_freq: f32,
+}
+
+#[derive(Component)]
+pub struct BossDeathFx {
+    pub origin: Vec3,
+    pub pulse: Timer,
+    pub remaining: u8,
+    pub total: u8,
+}
+
+#[derive(Component)]
+pub struct TitleSceneEntity;
+
+#[derive(Component, Clone, Copy)]
+pub struct TitleDecor {
+    pub base: Vec3,
+    pub amp: Vec2,
+    pub speed: Vec2,
+    pub rot_speed: f32,
+    pub scale_base: f32,
+    pub scale_pulse: f32,
+    pub alpha: f32,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct TitleFlyby {
+    pub dir: f32,
+    pub progress: f32,
+    pub duration: f32,
+    pub wait: f32,
+    pub wait_after: f32,
+    pub y: f32,
+    pub z: f32,
+    pub scale: f32,
+    pub alpha: f32,
+    pub bob_amp: f32,
+    pub bob_freq: f32,
+    pub roll_amp: f32,
+    pub roll_freq: f32,
+    pub phase: f32,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct TitleSpiralFlyby {
+    pub dir: f32,
+    pub progress: f32,
+    pub duration: f32,
+    pub wait: f32,
+    pub wait_after: f32,
+    pub base_y: f32,
+    pub z: f32,
+    pub scale: f32,
+    pub alpha: f32,
+    pub radius: f32,
+    pub turns: f32,
+    pub drift_amp: f32,
+    pub drift_freq: f32,
+    pub phase: f32,
+}
+
 #[derive(Component)]
 pub struct AnimationIndices {
     pub first: usize,
@@ -48,6 +172,22 @@ pub struct Explosion;
 #[derive(Component)]
 pub struct Star {
     pub speed: f32,
+}
+
+/// Twinkle parameters for star sprites.
+#[derive(Component)]
+pub struct StarTwinkle {
+    pub phase: f32,
+    pub speed: f32,
+    pub base: f32,
+    pub amplitude: f32,
+    pub tint: Vec3,
+}
+
+/// Anchor position used for camera/parallax-relative background elements.
+#[derive(Component)]
+pub struct ParallaxAnchor {
+    pub base_x: f32,
 }
 
 #[derive(Component)]
@@ -104,7 +244,30 @@ pub enum ScoreType {
 }
 
 #[derive(Component, Clone, Copy)]
-pub struct WaveDigit;
+pub struct WaveDigit {
+    pub position: usize,
+}
+
+// === Energy UI ===
+#[derive(Component)]
+pub struct EnergyBarBg;
+
+#[derive(Component)]
+pub struct EnergyBarFill {
+    pub left_x: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Component)]
+pub struct BossBarBg;
+
+#[derive(Component)]
+pub struct BossBarFill {
+    pub left_x: f32,
+    pub width: f32,
+    pub height: f32,
+}
 
 #[derive(Component, Clone, Copy, PartialEq)]
 pub enum UiMarker {
@@ -116,7 +279,12 @@ pub enum UiMarker {
     Title,
     PressEnter,
     Subtitle,
+    Combo,
 }
+
+/// Marker for UI drop shadows so animation systems can ignore them.
+#[derive(Component)]
+pub struct UiShadow;
 
 // === Name Entry UI ===
 #[derive(Component)]
@@ -176,6 +344,8 @@ pub struct StarLayer(pub u8); // 0 = far/slow, 1 = mid, 2 = near/fast
 // === Power-ups ===
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PowerUpType {
+    /// Restore player energy (green cross).
+    Heal,
     /// Faster shooting rate
     RapidFire,
     /// Triple shot (spread)
@@ -204,8 +374,17 @@ pub struct Nebula {
     pub speed: f32,
 }
 
-/// Power-up animation (4x4 grid, column = type, row = frame)
-/// Frames step by 4: column 0 uses indices 0,4,8,12
+/// Pulse and drift parameters for nebula sprites.
+#[derive(Component)]
+pub struct NebulaPulse {
+    pub phase: f32,
+    pub speed: f32,
+    pub base_alpha: f32,
+    pub amplitude: f32,
+}
+
+/// Power-up animation (Bonuses-0001.png is a 5x5 grid; column = type, row = frame)
+/// Frames step by 5: column 0 uses indices 0,5,10,15,20
 #[derive(Component)]
 pub struct PowerUpAnimation {
     pub first: usize,
@@ -215,3 +394,50 @@ pub struct PowerUpAnimation {
 /// Shield bubble that protects the player during invincibility
 #[derive(Component)]
 pub struct ShieldBubble;
+
+// === Bullet Trails / Impact FX ===
+
+/// Emits bullet trail afterimages at a fixed cadence.
+#[derive(Component)]
+pub struct TrailEmitter {
+    pub timer: Timer,
+    pub alpha: f32,
+}
+
+/// A short-lived trail sprite that fades out.
+#[derive(Component)]
+pub struct TrailGhost {
+    pub timer: Timer,
+    pub start_alpha: f32,
+}
+
+/// A short-lived hit flash sprite that fades out quickly.
+#[derive(Component)]
+pub struct HitFlash {
+    pub timer: Timer,
+    pub start_alpha: f32,
+    pub base_scale: Vec3,
+}
+
+/// Expanding ring burst used alongside explosions.
+#[derive(Component)]
+pub struct ExplosionRing {
+    pub timer: Timer,
+    pub start_scale: f32,
+    pub end_scale: f32,
+    pub start_alpha: f32,
+}
+
+// === Wave Transition FX ===
+
+/// Letterbox bar (top/bottom) used for wave transitions.
+#[derive(Component)]
+pub struct LetterboxBar {
+    pub timer: Timer,
+}
+
+/// Center banner displayed during wave transitions.
+#[derive(Component)]
+pub struct WaveBanner {
+    pub timer: Timer,
+}

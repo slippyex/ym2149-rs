@@ -355,7 +355,7 @@ pub(crate) fn load_song_from_bytes(
                 });
                 (player, metrics, metadata)
             })
-            .map_err(|e| format!("Failed to load SNDH: {}", e));
+            .map_err(|e| format!("Failed to load SNDH: {e}"));
     }
 
     // Try other formats in order
@@ -383,7 +383,7 @@ pub(crate) fn load_song_from_bytes(
         Ok((player, metrics, metadata))
     } else {
         let player =
-            YmSongPlayer::new_ay(data).map_err(|e| format!("Failed to load AY song: {}", e))?;
+            YmSongPlayer::new_ay(data).map_err(|e| format!("Failed to load AY song: {e}"))?;
         let metadata = player.metadata().clone();
         let metrics = PlaybackMetrics {
             frame_count: metadata.frame_count,

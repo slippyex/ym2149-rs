@@ -15,6 +15,7 @@ mod space_shooter {
 
 use bevy::audio::{AddAudioSource, AudioPlayer};
 use bevy::camera::{ClearColorConfig, RenderTarget};
+use bevy::ecs::schedule::IntoScheduleConfigs;
 use bevy::math::primitives::Rectangle;
 use bevy::prelude::*;
 use bevy::render::render_resource::{
@@ -102,6 +103,7 @@ fn main() {
         .add_audio_source::<GistAudio>()
         .init_state::<GameState>()
         .insert_resource(GameData::new())
+        .insert_resource(GameTimers::default())
         .insert_resource(CrtState { enabled: true })
         .insert_resource(MusicFade::default())
         .insert_resource(HighScoreList::load())
@@ -116,6 +118,11 @@ fn main() {
         .insert_resource(ComboTracker::default())
         .insert_resource(ScreenFlash::default())
         .insert_resource(PlayerRespawnTimer::default())
+        .insert_resource(PlayerEnergy::default())
+        .insert_resource(WavePatternRotation::default())
+        .insert_resource(PowerUpDropQueue::default())
+        .insert_resource(PowerUpSpawnCooldown::default())
+        .insert_resource(WaveIntermission::default())
         .add_message::<PlaySfxMsg>()
         .add_message::<WaveCompleteMsg>()
         .add_message::<PlayerHitMsg>()
@@ -138,13 +145,21 @@ fn main() {
         // Title screen
         .add_systems(
             Update,
-            (
-                title_input.in_set(GameSet::Input),
-                title_anim,
-                title_auto_cycle,
-                screen_fade_update,
-            )
+            title_input
+                .in_set(GameSet::Input)
                 .run_if(in_state(GameState::TitleScreen)),
+        )
+        .add_systems(
+            Update,
+            (
+                ensure_title_screen_scene.run_if(in_state(GameState::TitleScreen)),
+                title_anim.run_if(in_state(GameState::TitleScreen)),
+                title_subtitle_anim.run_if(in_state(GameState::TitleScreen)),
+                title_decor_update.run_if(in_state(GameState::TitleScreen)),
+                title_flyby_update.run_if(in_state(GameState::TitleScreen)),
+                title_auto_cycle.run_if(in_state(GameState::TitleScreen)),
+                screen_fade_update.run_if(in_state(GameState::TitleScreen)),
+            ),
         )
         .add_systems(
             OnEnter(GameState::TitleScreen),
@@ -155,7 +170,10 @@ fn main() {
                 start_screen_fade_in,
             ),
         )
-        .add_systems(OnExit(GameState::TitleScreen), hide_title_ui)
+        .add_systems(
+            OnExit(GameState::TitleScreen),
+            (hide_title_ui, exit_title_screen),
+        )
         // Playing state
         .add_systems(
             OnEnter(GameState::Playing),
@@ -164,26 +182,48 @@ fn main() {
         .add_systems(
             Update,
             (
-                (player_movement, player_shooting).in_set(GameSet::Input),
+                (player_movement, player_shooting)
+                    .in_set(GameSet::Input)
+                    .run_if(in_state(GameState::Playing)),
                 (
                     bullet_movement,
                     enemy_formation_movement,
+                    boss_movement,
+                    boss_escort_movement,
                     diving_movement,
+                    spiral_movement,
                     fading_text_update,
                     powerup_movement,
                     powerup_animate,
                 )
-                    .in_set(GameSet::Movement),
-                (collisions, powerup_collection).in_set(GameSet::Collision),
-                (enemy_shooting, initiate_dives, check_wave_complete).in_set(GameSet::Spawn),
-                screen_shake_system,
-                score_popup_system,
-                combo_tick,
-                invincibility_system,
-                player_respawn_system,
-                shield_bubble_system,
-            )
-                .run_if(in_state(GameState::Playing)),
+                    .in_set(GameSet::Movement)
+                    .run_if(in_state(GameState::Playing)),
+                (collisions, powerup_collection)
+                    .in_set(GameSet::Collision)
+                    .run_if(in_state(GameState::Playing)),
+                (
+                    enemy_shooting,
+                    diver_shooting,
+                    boss_shooting,
+                    boss_escort_shooting,
+                    initiate_dives,
+                    initiate_spirals,
+                    spawn_queued_powerups,
+                    wave_intermission_update,
+                    check_wave_complete,
+                )
+                    .in_set(GameSet::Spawn)
+                    .run_if(in_state(GameState::Playing)),
+                screen_shake_system.run_if(in_state(GameState::Playing)),
+                boss_death_fx_update.run_if(in_state(GameState::Playing)),
+                score_popup_system.run_if(in_state(GameState::Playing)),
+                combo_tick.run_if(in_state(GameState::Playing)),
+                energy_bar_update.run_if(in_state(GameState::Playing)),
+                boss_bar_update.run_if(in_state(GameState::Playing)),
+                invincibility_system.run_if(in_state(GameState::Playing)),
+                player_respawn_system.run_if(in_state(GameState::Playing)),
+                shield_bubble_system.run_if(in_state(GameState::Playing)),
+            ),
         )
         .add_systems(
             Update,
@@ -205,8 +245,11 @@ fn main() {
         )
         .add_systems(
             Update,
-            (name_entry_input, name_entry_blink, gameover_enemy_movement)
-                .run_if(in_state(GameState::NameEntry)),
+            (
+                name_entry_input.run_if(in_state(GameState::NameEntry)),
+                name_entry_blink.run_if(in_state(GameState::NameEntry)),
+                gameover_enemy_movement.run_if(in_state(GameState::NameEntry)),
+            ),
         )
         .add_systems(OnExit(GameState::NameEntry), exit_name_entry)
         // High scores state
@@ -217,13 +260,12 @@ fn main() {
         .add_systems(
             Update,
             (
-                high_scores_input,
-                high_scores_fade,
-                high_scores_auto_return,
-                screen_fade_update,
-                gameover_enemy_movement,
-            )
-                .run_if(in_state(GameState::HighScores)),
+                high_scores_input.run_if(in_state(GameState::HighScores)),
+                high_scores_fade.run_if(in_state(GameState::HighScores)),
+                high_scores_auto_return.run_if(in_state(GameState::HighScores)),
+                screen_fade_update.run_if(in_state(GameState::HighScores)),
+                gameover_enemy_movement.run_if(in_state(GameState::HighScores)),
+            ),
         )
         .add_systems(OnExit(GameState::HighScores), exit_high_scores)
         // Power-ups screen state
@@ -234,14 +276,13 @@ fn main() {
         .add_systems(
             Update,
             (
-                powerups_screen_input,
-                powerups_screen_fade,
-                powerups_screen_auto_cycle,
-                screen_fade_update,
-                wavy_text_animation,
-                wavy_sprite_animation,
-            )
-                .run_if(in_state(GameState::PowerUpsScreen)),
+                powerups_screen_input.run_if(in_state(GameState::PowerUpsScreen)),
+                powerups_screen_fade.run_if(in_state(GameState::PowerUpsScreen)),
+                powerups_screen_auto_cycle.run_if(in_state(GameState::PowerUpsScreen)),
+                screen_fade_update.run_if(in_state(GameState::PowerUpsScreen)),
+                wavy_text_animation.run_if(in_state(GameState::PowerUpsScreen)),
+                wavy_sprite_animation.run_if(in_state(GameState::PowerUpsScreen)),
+            ),
         )
         .add_systems(OnExit(GameState::PowerUpsScreen), exit_powerups_screen)
         // Enemy scores screen state
@@ -252,15 +293,14 @@ fn main() {
         .add_systems(
             Update,
             (
-                enemy_scores_screen_input,
-                enemy_scores_screen_fade,
-                enemy_scores_screen_auto_cycle,
-                screen_fade_update,
-                wavy_text_animation,
-                wavy_sprite_animation,
-                animate_sprites,
-            )
-                .run_if(in_state(GameState::EnemyScoresScreen)),
+                enemy_scores_screen_input.run_if(in_state(GameState::EnemyScoresScreen)),
+                enemy_scores_screen_fade.run_if(in_state(GameState::EnemyScoresScreen)),
+                enemy_scores_screen_auto_cycle.run_if(in_state(GameState::EnemyScoresScreen)),
+                screen_fade_update.run_if(in_state(GameState::EnemyScoresScreen)),
+                wavy_text_animation.run_if(in_state(GameState::EnemyScoresScreen)),
+                wavy_sprite_animation.run_if(in_state(GameState::EnemyScoresScreen)),
+                animate_sprites.run_if(in_state(GameState::EnemyScoresScreen)),
+            ),
         )
         .add_systems(
             OnExit(GameState::EnemyScoresScreen),
@@ -274,11 +314,10 @@ fn main() {
         .add_systems(
             Update,
             (
-                gameover_enemy_movement,
-                gameover_ui_animation,
-                gameover_auto_return,
-            )
-                .run_if(in_state(GameState::GameOver)),
+                gameover_enemy_movement.run_if(in_state(GameState::GameOver)),
+                gameover_ui_animation.run_if(in_state(GameState::GameOver)),
+                gameover_auto_return.run_if(in_state(GameState::GameOver)),
+            ),
         )
         .add_systems(OnExit(GameState::GameOver), exit_gameover)
         // Global systems
@@ -298,8 +337,13 @@ fn main() {
                     update_wave_digits,
                 )
                     .run_if(resource_changed::<GameData>),
+                combo_ui_update.run_if(in_state(GameState::Playing)),
+                wave_transition_update.run_if(in_state(GameState::Playing)),
                 animate_sprites,
                 explosion_update,
+                explosion_ring_update,
+                trail_ghost_update,
+                hit_flash_update,
             ),
         )
         .add_systems(
@@ -309,6 +353,7 @@ fn main() {
         .run();
 }
 
+#[allow(clippy::too_many_arguments)]
 fn setup(
     mut cmd: Commands,
     mut gist_assets: ResMut<Assets<GistAudio>>,
@@ -316,11 +361,14 @@ fn setup(
     server: Res<AssetServer>,
     window: Single<&Window, With<PrimaryWindow>>,
     music_enabled: Res<MusicEnabled>,
+    scores: Res<HighScoreList>,
+    mut gd: ResMut<GameData>,
 ) {
     let (ww, wh) = (window.width(), window.height());
     let (hw, hh) = (ww / 2.0, wh / 2.0);
 
     cmd.insert_resource(ScreenSize::from_window(&window));
+    gd.high_score = scores.entries.first().map(|e| e.score).unwrap_or(0);
 
     // Render target for CRT effect
     let extent = Extent3d {
@@ -333,7 +381,9 @@ fn setup(
             label: Some("game_scene"),
             size: extent,
             dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba16Float,
+            // `Rgba16Float` is overkill for this retro CRT pass and can cost a lot of bandwidth,
+            // especially on high-DPI displays. `Rgba8UnormSrgb` is plenty and improves framerate.
+            format: TextureFormat::Rgba8UnormSrgb,
             mip_level_count: 1,
             sample_count: 1,
             usage: TextureUsages::TEXTURE_BINDING
@@ -371,13 +421,26 @@ fn setup(
         Name::new("DisplayCamera"),
     ));
 
+    // Persistent screen-flash overlay (avoid per-event spawn/despawn).
+    cmd.spawn((
+        Sprite {
+            color: Color::NONE,
+            custom_size: Some(Vec2::new(ww * 2.0, wh * 2.0)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 0.0, 50.0),
+        Visibility::Hidden,
+        space_shooter::components::ScreenFlashOverlay,
+        Name::new("ScreenFlashOverlay"),
+    ));
+
     // CRT fullscreen quad
     let crt_mat = setup_assets.crt_materials.add(CrtMaterial {
         scene_texture: render_target,
         params: CrtParams {
             width: ww,
             height: wh,
-            crt_enabled: 1,
+            crt_enabled: 1.0,
             ..default()
         },
     });
@@ -414,6 +477,7 @@ fn setup(
         laser: GistSound::load(format!("{dir}/laser.snd")).unwrap(),
         explode: GistSound::load(format!("{dir}/explode.snd")).unwrap(),
         death: GistSound::load(format!("{dir}/falling.snd")).unwrap(),
+        powerup_pickup: GistSound::load(format!("{dir}/percbell.snd")).unwrap(),
     });
 
     // Create soft circle texture for shield bubble (64x64 with radial gradient)
@@ -446,6 +510,41 @@ fn setup(
         bevy::asset::RenderAssetUsages::RENDER_WORLD,
     );
     let bubble_texture = setup_assets.images.add(bubble_img);
+
+    // Ring texture for explosions / impact bursts (64x64; alpha peaks at a radius).
+    let ring_size = 64u32;
+    let mut ring_data = Vec::with_capacity((ring_size * ring_size * 4) as usize);
+    let center = ring_size as f32 / 2.0;
+    for y in 0..ring_size {
+        for x in 0..ring_size {
+            let dx = x as f32 - center;
+            let dy = y as f32 - center;
+            let dist = (dx * dx + dy * dy).sqrt() / center; // 0..~1
+
+            let ring_center = 0.72;
+            let ring_width = 0.08;
+            let falloff = ((dist - ring_center) / ring_width).abs();
+            let alpha = if dist > 1.0 {
+                0
+            } else {
+                // Smooth peak around ring_center.
+                (255.0 * (-falloff * falloff * 6.0).exp()).min(255.0) as u8
+            };
+            ring_data.extend_from_slice(&[255, 255, 255, alpha]);
+        }
+    }
+    let ring_img = Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: ring_size,
+            height: ring_size,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        ring_data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    );
+    let ring_texture = setup_assets.images.add(ring_img);
 
     // Load sprite assets
     let sprite_dir = "Mini Pixel Pack 3";
@@ -604,7 +703,18 @@ fn setup(
                 None,
                 None,
             )),
+        boss_texture: server.load(format!("{sprite_dir}/SpaceShip_Boss-0001.png")),
+        boss_layout: setup_assets
+            .atlas_layouts
+            .add(TextureAtlasLayout::from_grid(
+                UVec2::splat(128),
+                2,
+                3,
+                None,
+                Some(UVec2::new(0, 32)),
+            )),
         bubble_texture,
+        ring_texture,
     });
 
     // Load arcade font
@@ -638,15 +748,21 @@ fn setup(
     for (layer, count, min_b, max_b, min_s, max_s) in star_configs {
         for _ in 0..count {
             let b = rng.random_range(min_b..max_b);
+            let (tint_r, tint_g, tint_b) = match layer {
+                0 => (0.75, 0.85, 1.0), // Far: cool
+                1 => (0.9, 0.95, 1.0),  // Mid: neutral
+                _ => (1.0, 0.95, 0.8),  // Near: warm
+            };
+            let x = rng.random_range(-hw..hw);
             cmd.spawn((
                 Sprite {
                     image: star_texture.clone(),
-                    color: Color::srgb(b, b, b),
+                    color: Color::srgb(b * tint_r, b * tint_g, b * tint_b),
                     custom_size: Some(Vec2::splat(rng.random_range(min_s..max_s))),
                     ..default()
                 },
                 Transform::from_xyz(
-                    rng.random_range(-hw..hw),
+                    x,
                     rng.random_range(-hh..hh),
                     0.1 + layer as f32 * 0.1, // Behind game entities (z=1.0)
                 ),
@@ -654,6 +770,18 @@ fn setup(
                     speed: rng.random_range(40.0..150.0),
                 },
                 StarLayer(layer),
+                ParallaxAnchor { base_x: x },
+                StarTwinkle {
+                    phase: rng.random_range(0.0..std::f32::consts::TAU),
+                    speed: rng.random_range(0.8..2.4),
+                    base: b,
+                    amplitude: match layer {
+                        0 => 0.10,
+                        1 => 0.16,
+                        _ => 0.22,
+                    },
+                    tint: Vec3::new(tint_r, tint_g, tint_b),
+                },
             ));
         }
     }
@@ -707,6 +835,13 @@ fn setup(
             },
             Transform::from_xyz(x, y, 0.05).with_scale(Vec3::splat(scale)),
             Nebula { speed },
+            ParallaxAnchor { base_x: x },
+            NebulaPulse {
+                phase: rng.random_range(0.0..std::f32::consts::TAU),
+                speed: rng.random_range(0.08..0.22),
+                base_alpha: color.to_srgba().alpha,
+                amplitude: 0.12,
+            },
         ));
     }
 

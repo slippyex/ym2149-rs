@@ -6,7 +6,7 @@ use bevy_ym2149::playlist::{
     Ym2149PlaylistPlayer,
 };
 use bevy_ym2149::{Ym2149Playback, Ym2149Plugin};
-use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
+use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin, example_plugins};
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -47,13 +47,10 @@ struct DisplaySong {
 fn main() {
     App::new()
         .add_plugins(embedded_asset_plugin())
-        .add_plugins(DefaultPlugins.set(AssetPlugin {
-            file_path: ASSET_BASE.into(),
-            ..default()
-        }))
+        .add_plugins(example_plugins())
         .add_plugins(Ym2149Plugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_input, update_ui))
+        .add_systems(Update, (handle_input, update_ui).chain())
         .run();
 }
 
@@ -197,7 +194,7 @@ fn load_metadata(path: &str) -> (String, String) {
     }
 
     // Fallback to reading from disk (useful during development with hot assets)
-    let disk_path = format!("{}/{}", ASSET_BASE, path);
+    let disk_path = format!("{ASSET_BASE}/{path}");
     if let Ok(bytes) = std::fs::read(disk_path)
         && let Some(info) = decode_metadata(&bytes)
     {

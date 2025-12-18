@@ -10,9 +10,10 @@
 //! while GIST sounds use a standalone GistPlayer that mixes its output
 //! directly. This allows independent control of music and SFX volumes.
 
-use bevy::audio::{AddAudioSource, AudioPlayer, Decodable, Source};
+use bevy::audio::{AddAudioSource, AudioPlayer};
 use bevy::prelude::*;
 use bevy_ym2149::{PlaybackState, Ym2149Playback, Ym2149Plugin};
+use bevy_ym2149_examples::gist_audio::GistAudio;
 use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins};
 use std::sync::{Arc, Mutex};
 use ym2149_gist_replayer::{GistPlayer, GistSound};
@@ -27,78 +28,21 @@ struct GistSounds {
 #[derive(Resource, Clone)]
 struct GistPlayerResource(Arc<Mutex<GistPlayer>>);
 
-/// Audio source that generates samples from the GIST player
-#[derive(Asset, TypePath, Clone)]
-struct GistAudioSource {
-    player: Arc<Mutex<GistPlayer>>,
-    sample_rate: u32,
-}
-
-impl Decodable for GistAudioSource {
-    type DecoderItem = <GistDecoder as Iterator>::Item;
-    type Decoder = GistDecoder;
-
-    fn decoder(&self) -> Self::Decoder {
-        GistDecoder {
-            player: Arc::clone(&self.player),
-            sample_rate: self.sample_rate,
-        }
-    }
-}
-
-/// Decoder that continuously generates samples from the GIST player
-struct GistDecoder {
-    player: Arc<Mutex<GistPlayer>>,
-    sample_rate: u32,
-}
-
-impl Iterator for GistDecoder {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut player = self.player.lock().unwrap();
-        let samples = player.generate_samples(1);
-        Some(samples[0])
-    }
-}
-
-impl Source for GistDecoder {
-    fn current_frame_len(&self) -> Option<usize> {
-        None // Infinite stream
-    }
-
-    fn channels(&self) -> u16 {
-        1 // Mono
-    }
-
-    fn sample_rate(&self) -> u32 {
-        self.sample_rate
-    }
-
-    fn total_duration(&self) -> Option<std::time::Duration> {
-        None // Infinite
-    }
-
-    fn try_seek(&mut self, _pos: std::time::Duration) -> Result<(), bevy::audio::SeekError> {
-        Ok(()) // No-op for SFX stream
-    }
-}
-
 fn main() {
     App::new()
         .add_plugins(embedded_asset_plugin())
         .add_plugins(example_plugins())
         .add_plugins(Ym2149Plugin::default())
-        .init_asset::<GistAudioSource>()
-        .add_audio_source::<GistAudioSource>()
+        .init_asset::<GistAudio>()
+        .add_audio_source::<GistAudio>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (handle_input, update_ui))
+        .add_systems(Update, (handle_input, update_ui).chain())
         .run();
 }
 
 fn setup(
     mut commands: Commands,
-    mut assets: ResMut<Assets<GistAudioSource>>,
+    mut assets: ResMut<Assets<GistAudio>>,
     asset_server: Res<AssetServer>,
 ) {
     // Spawn camera
@@ -113,9 +57,9 @@ fn setup(
     commands.insert_resource(GistPlayerResource(Arc::clone(&gist_player)));
 
     // Create audio source for GIST and spawn an audio player
-    let gist_source = GistAudioSource {
+    let gist_source = GistAudio {
         player: Arc::clone(&gist_player),
-        sample_rate: 44100,
+        volume: 1.0,
     };
     let gist_handle = assets.add(gist_source);
     commands.spawn(AudioPlayer(gist_handle));
@@ -136,13 +80,13 @@ fn setup(
 
     let mut sounds = Vec::new();
     for name in &sound_files {
-        let path = format!("{}/{}", gist_dir, name);
+        let path = format!("{gist_dir}/{name}");
         match GistSound::load(&path) {
             Ok(sound) => {
                 sounds.push((name.to_string(), sound));
             }
             Err(e) => {
-                warn!("Failed to load GIST sound {}: {}", name, e);
+                warn!("Failed to load GIST sound {name}: {e}");
             }
         }
     }

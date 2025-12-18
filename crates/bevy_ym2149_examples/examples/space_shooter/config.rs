@@ -8,22 +8,28 @@ pub const PLAYER_SIZE: Vec2 = Vec2::new(48.0, 48.0);
 pub const BULLET_SPEED: f32 = 600.0;
 pub const BULLET_SIZE: Vec2 = Vec2::new(24.0, 24.0);
 pub const ENEMY_SIZE: Vec2 = Vec2::new(48.0, 48.0);
-pub const ENEMY_BULLET_SPEED: f32 = 300.0;
+pub const ENEMY_BULLET_SPEED: f32 = 330.0;
 pub const ENEMY_SPACING: Vec2 = Vec2::new(56.0, 52.0);
 pub const STARTING_LIVES: u32 = 3;
-pub const EXTRA_LIFE_SCORE: u32 = 3000;
+pub const EXTRA_LIFE_SCORE: u32 = 10000;
+pub const MAX_LIVES: u32 = 9;
 pub const FADE_DURATION: f32 = 2.0;
 pub const SPRITE_SCALE: f32 = 3.0;
 pub const ANIM_FPS: f32 = 8.0;
+pub const BOSS_WAVE_INTERVAL: u32 = 5;
+pub const BOSS_SCALE: f32 = 1.05;
+pub const BOSS_HIT_RADIUS: f32 = 58.0;
 
 // === Power-up Constants ===
-pub const POWERUP_DROP_CHANCE: f32 = 0.05; // 5% chance to drop
+pub const POWERUP_DROP_CHANCE: f32 = 0.02; // 2% chance to drop (power-ups should be rare)
 pub const POWERUP_SPEED: f32 = 100.0;
 pub const POWERUP_SIZE: Vec2 = Vec2::new(32.0, 32.0); // 32x32 * 1.0 scale
 pub const POWERUP_SCALE: f32 = 1.0; // 32x32 sprites → 32px displayed
-pub const RAPID_FIRE_RATE: f32 = 0.12; // faster than normal 0.25
+pub const BASE_FIRE_RATE: f32 = 0.18;
+pub const RAPID_FIRE_RATE: f32 = 0.12;
 pub const SPEED_BOOST_MULT: f32 = 1.5;
 pub const TRIPLE_SHOT_SPREAD: f32 = 15.0; // degrees
+pub const POWERUP_DUPLICATE_SCORE: u32 = 250;
 
 // === UI Constants ===
 pub const LIFE_ICON_SCALE: f32 = 2.0;
@@ -72,7 +78,7 @@ pub struct EnemyKilledMsg(pub u32);
 pub struct ExtraLifeMsg;
 
 #[derive(bevy::ecs::message::Message)]
-pub struct PowerUpCollectedMsg(pub super::components::PowerUpType);
+pub struct PowerUpCollectedMsg(pub super::components::PowerUpType, pub Vec3);
 
 #[derive(Clone, Copy)]
 pub enum SfxType {

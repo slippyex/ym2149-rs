@@ -44,7 +44,7 @@ fn main() {
     println!("\n╔══════════════════════════════════════════════════════════╗");
     println!("║            GIST PSG Sound Player (YM2149)                ║");
     println!("╚══════════════════════════════════════════════════════════╝\n");
-    println!("Playing: {}", sound_label);
+    println!("Playing: {sound_label}");
     println!(
         "Duration: {} ticks = {:.2} seconds",
         sound.duration,
@@ -93,7 +93,7 @@ fn main() {
                     finished_clone.store(true, Ordering::Relaxed);
                 }
             },
-            |err| eprintln!("Audio error: {}", err),
+            |err| eprintln!("Audio error: {err}"),
             None,
         )
         .unwrap();

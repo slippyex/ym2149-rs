@@ -1,64 +1,6 @@
-//! Audio integration for GIST sound effects
+//! Audio integration for GIST sound effects.
+//!
+//! Thin wrapper around the shared `bevy_ym2149_examples::gist_audio` helper to keep the
+//! `space_shooter` module layout tidy.
 
-use bevy::audio::{Decodable, Source};
-use bevy::prelude::*;
-use std::sync::{Arc, Mutex};
-use ym2149_gist_replayer::GistPlayer;
-
-#[derive(Asset, TypePath, Clone)]
-pub struct GistAudio {
-    pub player: Arc<Mutex<GistPlayer>>,
-    pub volume: f32,
-}
-
-pub struct GistDec {
-    player: Arc<Mutex<GistPlayer>>,
-    volume: f32,
-}
-
-impl Decodable for GistAudio {
-    type DecoderItem = f32;
-    type Decoder = GistDec;
-
-    fn decoder(&self) -> Self::Decoder {
-        GistDec {
-            player: Arc::clone(&self.player),
-            volume: self.volume,
-        }
-    }
-}
-
-impl Iterator for GistDec {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<f32> {
-        // Use `ok()` to gracefully handle poisoned mutex (returns silence)
-        self.player
-            .lock()
-            .ok()
-            .map(|mut player| player.generate_samples(1)[0] * self.volume)
-            .or(Some(0.0))
-    }
-}
-
-impl Source for GistDec {
-    fn current_frame_len(&self) -> Option<usize> {
-        None
-    }
-
-    fn channels(&self) -> u16 {
-        1
-    }
-
-    fn sample_rate(&self) -> u32 {
-        44100
-    }
-
-    fn total_duration(&self) -> Option<std::time::Duration> {
-        None
-    }
-
-    fn try_seek(&mut self, _: std::time::Duration) -> Result<(), bevy::audio::SeekError> {
-        Ok(())
-    }
-}
+pub use bevy_ym2149_examples::gist_audio::GistAudio;

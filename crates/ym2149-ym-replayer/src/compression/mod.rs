@@ -94,7 +94,7 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
         let mut limited_reader = reader.take(MAX_DECOMPRESSED_SIZE as u64);
         limited_reader
             .read_to_end(&mut decompressed)
-            .map_err(|e| format!("LHA decompression failed: {}", e))?;
+            .map_err(|e| format!("LHA decompression failed: {e}"))?;
 
         // Verify we didn't hit the limit (would indicate truncation/attack)
         if decompressed.len() >= MAX_DECOMPRESSED_SIZE {
@@ -114,24 +114,19 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
         // Create a temporary file with automatic cleanup via Drop
         let mut temp_file = NamedTempFile::new().map_err(|e| {
             crate::ReplayerError::DecompressionError(format!(
-                "Failed to create temporary file: {}",
-                e
+                "Failed to create temporary file: {e}"
             ))
         })?;
 
         // Write compressed data to the temporary file
         temp_file.write_all(data).map_err(|e| {
             crate::ReplayerError::DecompressionError(format!(
-                "Failed to write compressed data to temporary file: {} bytes - {}",
-                data.len(),
-                e
+                "Failed to write compressed data to temporary file: {} bytes - {e}",
+                data.len()
             ))
         })?;
         temp_file.flush().map_err(|e| {
-            crate::ReplayerError::DecompressionError(format!(
-                "Failed to flush temporary file: {}",
-                e
-            ))
+            crate::ReplayerError::DecompressionError(format!("Failed to flush temporary file: {e}"))
         })?;
 
         // Get the path while keeping the file handle alive (prevents deletion)
@@ -140,9 +135,8 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
         // Parse the LHA archive from the temporary file
         let reader = delharc::parse_file(&temp_path).map_err(|e| {
             crate::ReplayerError::DecompressionError(format!(
-                "Failed to parse LHA archive from '{}': {}",
+                "Failed to parse LHA archive from '{}': {e}",
                 temp_path.display(),
-                e
             ))
         })?;
 
@@ -152,7 +146,7 @@ pub fn decompress_if_needed(data: &[u8]) -> Result<Vec<u8>> {
         let mut limited_reader = reader.take(MAX_DECOMPRESSED_SIZE as u64);
         limited_reader
             .read_to_end(&mut decompressed)
-            .map_err(|e| format!("LHA decompression failed: {}", e))?;
+            .map_err(|e| format!("LHA decompression failed: {e}"))?;
 
         // Verify we didn't hit the limit (would indicate truncation/attack)
         if decompressed.len() >= MAX_DECOMPRESSED_SIZE {
@@ -261,7 +255,7 @@ pub fn is_lha_compressed(data: &[u8]) -> bool {
 pub fn get_lha_info(data: &[u8]) -> Option<String> {
     find_lha_signature(data).map(|offset| {
         let level = data[offset + 3] as char;
-        format!("LH{} compressed (LHA/LZH archive)", level)
+        format!("LH{level} compressed (LHA/LZH archive)")
     })
 }
 
@@ -295,9 +289,8 @@ pub fn validate_uncompressed(data: &[u8]) -> Result<()> {
     if is_lha_compressed(data) {
         let info = get_lha_info(data).unwrap_or_default();
         Err(format!(
-            "File is LHA-compressed ({}).\n\
+            "File is LHA-compressed ({info}).\n\
             Use decompress_if_needed() for automatic transparent decompression.",
-            info
         )
         .into())
     } else {

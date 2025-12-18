@@ -82,7 +82,7 @@ impl CliArgs {
                         if let Some(choice) = ChipChoice::from_str(&value) {
                             args.chip_choice = choice;
                         } else {
-                            eprintln!("Unknown chip type: {}", value);
+                            eprintln!("Unknown chip type: {value}");
                             args.show_help = true;
                         }
                     } else {
@@ -95,12 +95,12 @@ impl CliArgs {
                     if let Some(choice) = ChipChoice::from_str(value) {
                         args.chip_choice = choice;
                     } else {
-                        eprintln!("Unknown chip type: {}", value);
+                        eprintln!("Unknown chip type: {value}");
                         args.show_help = true;
                     }
                 }
                 _ if arg.starts_with('-') => {
-                    eprintln!("Unknown flag: {}", arg);
+                    eprintln!("Unknown flag: {arg}");
                     args.show_help = true;
                 }
                 _ => {

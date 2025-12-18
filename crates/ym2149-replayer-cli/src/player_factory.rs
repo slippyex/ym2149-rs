@@ -43,7 +43,7 @@ fn load_arkos_file(
     _chip_choice: ChipChoice,
     color_filter_override: Option<bool>,
 ) -> ym2149_ym_replayer::Result<PlayerInfo> {
-    let song = load_aks(file_data).map_err(|e| format!("Failed to load AKS file: {}", e))?;
+    let song = load_aks(file_data).map_err(|e| format!("Failed to load AKS file: {e}"))?;
 
     if song.subsongs.is_empty() {
         return Err("AKS file does not contain any subsongs".into());
@@ -86,7 +86,7 @@ fn load_arkos_file(
 
     // Create player - song is moved, player owns Arc<AksSong>
     let player =
-        ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to create Arkos player: {}", e))?;
+        ArkosPlayer::new(song, 0).map_err(|e| format!("Failed to create Arkos player: {e}"))?;
 
     let color_filter = color_filter_override.unwrap_or(true);
 
@@ -126,8 +126,7 @@ fn load_sndh_file(
     let player_rate = metadata.frame_rate;
 
     let info_str = format!(
-        "File: {}\nFormat: SNDH (Atari ST)\nTitle: {}\nAuthor: {}\nPlayer rate: {} Hz",
-        file_path, title, author, player_rate,
+        "File: {file_path}\nFormat: SNDH (Atari ST)\nTitle: {title}\nAuthor: {author}\nPlayer rate: {player_rate} Hz"
     );
 
     // Estimate duration (3 minutes if unknown)
@@ -216,7 +215,7 @@ pub fn create_player(
 ) -> ym2149_ym_replayer::Result<PlayerInfo> {
     // Note: No println! here - TUI mode handles its own display
     let file_data =
-        fs::read(file_path).map_err(|e| format!("Failed to read file '{}': {}", file_path, e))?;
+        fs::read(file_path).map_err(|e| format!("Failed to read file '{file_path}': {e}"))?;
 
     // Check file extension
     let path = Path::new(file_path);
@@ -294,7 +293,7 @@ pub fn create_demo_player(chip_choice: ChipChoice) -> ym2149_ym_replayer::Result
 
             let duration_secs = demo_player.get_duration_seconds();
             let total_samples = (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize;
-            let info_str = format!("Demo Mode: {:.2} seconds of silence", duration_secs);
+            let info_str = format!("Demo Mode: {duration_secs:.2} seconds of silence");
 
             Ok(PlayerInfo {
                 player: Box::new(demo_player) as Box<dyn RealtimeChip>,

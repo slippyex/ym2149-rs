@@ -25,12 +25,12 @@ pub(crate) fn format_note_label(note: Option<&str>) -> String {
         Some(n) if !n.is_empty() => n,
         _ => "--",
     };
-    format!("{:^4}", value)
+    format!("{value:^4}")
 }
 
 pub(crate) fn format_freq_label(freq: Option<f32>) -> String {
     if let Some(value) = freq {
-        format!("{:>6.1}Hz", value)
+        format!("{value:>6.1}Hz")
     } else {
         " --.-Hz".to_string()
     }

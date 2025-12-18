@@ -12,7 +12,6 @@ mod demoscene {
 
 use bevy::{
     app::AppExit,
-    asset::AssetPlugin,
     camera::{ClearColorConfig, RenderTarget, visibility::RenderLayers},
     math::primitives::Rectangle,
     prelude::*,
@@ -26,7 +25,7 @@ use bevy::{
 };
 use bevy_mesh::Mesh2d;
 use bevy_ym2149::{Ym2149AudioSource, Ym2149Playback, Ym2149Plugin, Ym2149Settings};
-use bevy_ym2149_examples::{ASSET_BASE, embedded_asset_plugin};
+use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins_with_window};
 use bevy_ym2149_viz::Ym2149VizPlugin;
 
 use demoscene::{
@@ -81,23 +80,13 @@ struct SurfaceQuad;
 fn main() {
     App::new()
         .add_plugins(embedded_asset_plugin())
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "VeCTRONiX - YM2149 Emulator".into(),
-                        resolution: (1280, 720).into(),
-                        present_mode: bevy::window::PresentMode::AutoVsync,
-                        resizable: true,
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    file_path: ASSET_BASE.into(),
-                    ..default()
-                }),
-        )
+        .add_plugins(example_plugins_with_window(Window {
+            title: "VeCTRONiX - YM2149 Emulator".into(),
+            resolution: (1280, 720).into(),
+            present_mode: bevy::window::PresentMode::AutoVsync,
+            resizable: true,
+            ..default()
+        }))
         .add_plugins((
             Material2dPlugin::<CubeFacesMaterial>::default(),
             Material2dPlugin::<CrtPostMaterial>::default(),
@@ -136,7 +125,8 @@ fn main() {
                 animate_logo_hover, // Hover animation for the logo
                 animate_orbiting_stars, // Orbit + spin the star sprites
                 update_logo_material, // Update shader uniforms for logo distortion
-            ),
+            )
+                .chain(),
         )
         .run();
 }

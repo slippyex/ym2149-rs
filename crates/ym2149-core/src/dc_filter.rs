@@ -100,8 +100,7 @@ mod tests {
         let output = filter.process(dc_value);
         assert!(
             output.abs() < 10,
-            "DC filter should remove constant offset, got {}",
-            output
+            "DC filter should remove constant offset, got {output}"
         );
     }
 
@@ -120,8 +119,7 @@ mod tests {
         // Should see significant positive deviation
         assert!(
             output > 100,
-            "DC filter should pass AC component, got {}",
-            output
+            "DC filter should pass AC component, got {output}"
         );
     }
 

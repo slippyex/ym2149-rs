@@ -147,8 +147,7 @@ pub fn skip_block<R: std::io::BufRead>(
             }
             Event::Eof => {
                 return Err(ArkosError::InvalidFormat(format!(
-                    "Unexpected EOF while skipping {} block",
-                    tag
+                    "Unexpected EOF while skipping {tag} block"
                 )));
             }
             _ => {}
