@@ -3,9 +3,6 @@
 //! This module provides real-time audio playback with a ring buffer that allows
 //! concurrent sample generation and playback. Memory usage is limited to the ring buffer size.
 
-// Allow unused methods - these are part of a complete streaming API
-#![allow(dead_code)]
-
 pub mod audio_device;
 pub mod realtime;
 pub mod ring_buffer;

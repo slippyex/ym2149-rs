@@ -234,12 +234,6 @@ impl StreamingContext {
         self.volume.store(percentage, Ordering::Relaxed);
     }
 
-    /// Get the current master volume (0.0 to 1.0)
-    #[allow(dead_code)]
-    pub fn get_volume(&self) -> f32 {
-        self.volume.load(Ordering::Relaxed) as f32 / 100.0
-    }
-
     /// Replace the current player with a new one.
     ///
     /// This allows switching songs without restarting the audio stream.

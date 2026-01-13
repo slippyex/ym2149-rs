@@ -4,7 +4,7 @@
 //! for running SNDH music drivers. It includes:
 //!
 //! - 4MB RAM
-//! - Motorola 68000 CPU (via m68000 crate)
+//! - Motorola 68000 CPU (configurable backend via features)
 //! - YM2149 sound chip (via ym2149 crate)
 //! - MFP 68901 timers (for SID voice and effects)
 //!
@@ -13,11 +13,10 @@
 //! - 0xFF8800 - 0xFF88FF: YM2149 PSG
 //! - 0xFFFA00 - 0xFFFA25: MFP 68901
 
+use crate::cpu_backend::{Cpu68k, CpuMemory, DefaultCpu};
 use crate::error::{Result, SndhError};
 use crate::mfp68901::Mfp68901;
 use crate::ste_dac::SteDac;
-use m68000::cpu_details::Mc68000;
-use m68000::{M68000, MemoryAccess};
 use ym2149::Ym2149;
 
 /// RAM size (4 MB)
@@ -52,19 +51,19 @@ struct XbiosTimerConfig {
 }
 
 /// Memory and peripheral subsystem (separate from CPU to avoid borrow issues).
-struct AtariMemory {
+pub(crate) struct AtariMemory {
     /// RAM (4MB)
-    ram: Vec<u8>,
+    pub(crate) ram: Vec<u8>,
     /// YM2149 sound chip
-    ym2149: Ym2149,
+    pub(crate) ym2149: Ym2149,
     /// MFP 68901 timer chip
-    mfp: Mfp68901,
+    pub(crate) mfp: Mfp68901,
     /// STE DAC (DMA audio)
-    ste_dac: SteDac,
+    pub(crate) ste_dac: SteDac,
     /// Next GEMDOS malloc address
     next_malloc_addr: u32,
     /// Reset instruction executed flag
-    reset_triggered: bool,
+    pub(crate) reset_triggered: bool,
     /// Host sample rate
     host_rate: u32,
 }
@@ -178,7 +177,7 @@ impl AtariMemory {
         }
     }
 
-    fn read_word(&mut self, addr: u32) -> u16 {
+    pub(crate) fn read_word(&mut self, addr: u32) -> u16 {
         let addr = addr & 0x00FF_FFFF;
 
         // MFP word read
@@ -200,7 +199,7 @@ impl AtariMemory {
         ((self.read_byte(addr) as u16) << 8) | (self.read_byte(addr + 1) as u16)
     }
 
-    fn write_word(&mut self, addr: u32, value: u16) {
+    pub(crate) fn write_word(&mut self, addr: u32, value: u16) {
         let addr = addr & 0x00FF_FFFF;
 
         // YM2149 PSG word write
@@ -229,33 +228,32 @@ impl AtariMemory {
         }
     }
 
-    fn read_long(&mut self, addr: u32) -> u32 {
+    pub(crate) fn read_long(&mut self, addr: u32) -> u32 {
         ((self.read_word(addr) as u32) << 16) | (self.read_word(addr + 2) as u32)
     }
 
-    fn write_long(&mut self, addr: u32, value: u32) {
+    pub(crate) fn write_long(&mut self, addr: u32, value: u32) {
         self.write_word(addr, (value >> 16) as u16);
         self.write_word(addr + 2, value as u16);
     }
 }
 
-impl MemoryAccess for AtariMemory {
-    fn get_byte(&mut self, addr: u32) -> Option<u8> {
-        Some(self.read_byte(addr))
+// Implement our CpuMemory trait for AtariMemory
+impl CpuMemory for AtariMemory {
+    fn get_byte(&mut self, addr: u32) -> u8 {
+        self.read_byte(addr)
     }
 
-    fn get_word(&mut self, addr: u32) -> Option<u16> {
-        Some(self.read_word(addr))
+    fn get_word(&mut self, addr: u32) -> u16 {
+        self.read_word(addr)
     }
 
-    fn set_byte(&mut self, addr: u32, value: u8) -> Option<()> {
+    fn set_byte(&mut self, addr: u32, value: u8) {
         self.write_byte(addr, value);
-        Some(())
     }
 
-    fn set_word(&mut self, addr: u32, value: u16) -> Option<()> {
+    fn set_word(&mut self, addr: u32, value: u16) {
         self.write_word(addr, value);
-        Some(())
     }
 
     fn reset_instruction(&mut self) {
@@ -265,8 +263,8 @@ impl MemoryAccess for AtariMemory {
 
 /// Atari ST machine emulation for SNDH playback.
 pub struct AtariMachine {
-    /// 68000 CPU (m68000 crate)
-    cpu: M68000<Mc68000>,
+    /// 68000 CPU (backend selected via features)
+    cpu: DefaultCpu,
     /// Memory and peripherals
     memory: AtariMemory,
     /// Prevent nested interrupt execution
@@ -279,7 +277,7 @@ impl AtariMachine {
     /// Create a new Atari ST machine.
     pub fn new(sample_rate: u32) -> Self {
         let mut machine = Self {
-            cpu: M68000::new(),
+            cpu: DefaultCpu::new(),
             memory: AtariMemory::new(sample_rate),
             in_interrupt: false,
             next_gemdos_malloc: GEMDOS_MALLOC_START,
@@ -291,7 +289,7 @@ impl AtariMachine {
     /// Reset the machine to initial state.
     pub fn reset(&mut self) {
         self.memory.reset();
-        self.cpu = M68000::new();
+        self.cpu = DefaultCpu::new();
         self.in_interrupt = false;
         self.next_gemdos_malloc = GEMDOS_MALLOC_START;
     }
@@ -317,26 +315,26 @@ impl AtariMachine {
     /// Call a subroutine (JSR) with D0 parameter.
     pub fn jsr(&mut self, addr: u32, d0: u32) -> Result<bool> {
         self.configure_return_by_rts();
-        self.cpu.regs.d[0].0 = d0;
+        self.cpu.set_d(0, d0);
         self.jmp_binary(addr, INIT_TIMEOUT_FRAMES)
     }
 
     /// Call a subroutine (JSR) with D0 parameter and limited cycles.
     pub fn jsr_limited(&mut self, addr: u32, d0: u32, max_cycles: usize) -> Result<bool> {
         self.configure_return_by_rts();
-        self.cpu.regs.d[0].0 = d0;
+        self.cpu.set_d(0, d0);
 
         self.memory.write_long(0x14, RTE_INSTRUCTION_ADDR);
         self.memory.write_long(4, addr);
 
-        self.cpu.regs.pc.0 = addr;
-        self.cpu.regs.a_mut(7).0 = self.memory.read_long(0);
-        self.cpu.stop = false;
+        self.cpu.set_pc(addr);
+        self.cpu.set_a(7, self.memory.read_long(0));
+        self.cpu.set_stopped(false);
         self.memory.reset_triggered = false;
 
         let mut executed = 0;
-        while executed < max_cycles && !self.memory.reset_triggered && !self.cpu.stop {
-            executed += self.cpu.interpreter(&mut self.memory);
+        while executed < max_cycles && !self.memory.reset_triggered && !self.cpu.is_stopped() {
+            executed += self.cpu.step(&mut self.memory);
         }
 
         Ok(self.memory.reset_triggered)
@@ -389,8 +387,8 @@ impl AtariMachine {
         match func {
             0x01 => {
                 // Supervisor
-                let sr_raw: u16 = self.cpu.regs.sr.into();
-                self.cpu.regs.d[0].0 = sr_raw as u32;
+                let sr_raw: u16 = self.cpu.sr();
+                self.cpu.set_d(0, sr_raw as u32);
             }
             0x48 => {
                 // Malloc
@@ -399,17 +397,17 @@ impl AtariMachine {
                 self.next_gemdos_malloc =
                     self.next_gemdos_malloc.saturating_add(size + 1) & (!1u32);
                 if (self.next_gemdos_malloc as usize) > RAM_SIZE {
-                    self.cpu.regs.d[0].0 = 0;
+                    self.cpu.set_d(0, 0);
                 } else {
-                    self.cpu.regs.d[0].0 = addr;
+                    self.cpu.set_d(0, addr);
                 }
             }
             0x30 => {
                 // System version
-                self.cpu.regs.d[0].0 = 0x0000;
+                self.cpu.set_d(0, 0x0000);
             }
             _ => {
-                self.cpu.regs.d[0].0 = 0;
+                self.cpu.set_d(0, 0);
             }
         }
     }
@@ -474,32 +472,32 @@ impl AtariMachine {
             38 => {
                 // Supexec
                 let callback = self.memory.read_long(sp.wrapping_add(2));
-                let mut a7 = self.cpu.regs.a_mut(7).0;
+                let mut a7 = self.cpu.a(7);
                 a7 = a7.wrapping_sub(4);
                 self.memory
-                    .write_long(a7, self.cpu.regs.pc.0.wrapping_add(2));
-                self.cpu.regs.a_mut(7).0 = a7;
-                self.cpu.regs.pc.0 = callback & 0x00FF_FFFF;
+                    .write_long(a7, self.cpu.pc().wrapping_add(2));
+                self.cpu.set_a(7, a7);
+                self.cpu.set_pc(callback & 0x00FF_FFFF);
             }
             _ => {}
         }
     }
 
     fn handle_trap(&mut self, vector: u8) -> bool {
-        let sp = self.cpu.regs.a(7);
+        let sp = self.cpu.a(7);
         let func = self.memory.read_word(sp);
 
         match vector {
             1 => {
                 self.handle_gemdos(func, sp);
-                self.cpu.regs.pc.0 = self.cpu.regs.pc.0.wrapping_add(2);
+                self.cpu.set_pc(self.cpu.pc().wrapping_add(2));
                 true
             }
             14 => {
-                let old_pc = self.cpu.regs.pc.0;
+                let old_pc = self.cpu.pc();
                 self.handle_xbios(func, sp);
-                if self.cpu.regs.pc.0 == old_pc {
-                    self.cpu.regs.pc.0 = self.cpu.regs.pc.0.wrapping_add(2);
+                if self.cpu.pc() == old_pc {
+                    self.cpu.set_pc(self.cpu.pc().wrapping_add(2));
                 }
                 true
             }
@@ -551,18 +549,18 @@ impl AtariMachine {
         self.memory.write_long(0x14, RTE_INSTRUCTION_ADDR);
         self.memory.write_long(4, pc);
 
-        self.cpu.regs.pc.0 = pc;
-        self.cpu.regs.a_mut(7).0 = self.memory.read_long(0);
-        self.cpu.stop = false;
+        self.cpu.set_pc(pc);
+        self.cpu.set_a(7, self.memory.read_long(0));
+        self.cpu.set_stopped(false);
         self.memory.reset_triggered = false;
 
         let cycles_per_frame = 512 * 313;
         let total_cycles = (timeout_frames as usize) * cycles_per_frame;
         let mut executed = 0;
 
-        while executed < total_cycles && !self.memory.reset_triggered && !self.cpu.stop {
-            let pc = self.cpu.regs.pc.0;
-            let pc24 = pc & 0x00FF_FFFF;
+        while executed < total_cycles && !self.memory.reset_triggered && !self.cpu.is_stopped() {
+            let current_pc = self.cpu.pc();
+            let pc24 = current_pc & 0x00FF_FFFF;
 
             // Intercept TRAP #1/#14
             let opcode = self.memory.read_word(pc24);
@@ -580,11 +578,11 @@ impl AtariMachine {
                 break;
             }
 
-            let step_cycles = self.cpu.interpreter(&mut self.memory);
+            let step_cycles = self.cpu.step(&mut self.memory);
             executed += step_cycles;
         }
 
-        if !self.memory.reset_triggered && !self.cpu.stop {
+        if !self.memory.reset_triggered && !self.cpu.is_stopped() {
             return Err(SndhError::InitTimeout {
                 frames: timeout_frames,
             });

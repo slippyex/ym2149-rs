@@ -43,6 +43,7 @@
 
 #![warn(missing_docs)]
 
+mod cpu_backend;
 mod error;
 mod ice;
 mod machine;

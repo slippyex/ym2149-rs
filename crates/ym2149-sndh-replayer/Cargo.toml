@@ -19,8 +19,8 @@ ym2149 = { path = "../ym2149-core", version = "0.8", default-features = false }
 # Common traits (PlaybackMetadata, ChiptunePlayer)
 ym2149-common = { path = "../ym2149-common", version = "0.8" }
 
-# Motorola 68000 CPU emulation
-m68000 = "0.2"
+# Motorola 68000 CPU emulation (r68k)
+r68k = "0.2.1"
 
 # Error handling
 thiserror.workspace = true
@@ -30,5 +30,6 @@ anyhow.workspace = true
 
 [features]
 default = []
+
 # Enable STE DAC emulation
 ste-dac = []
