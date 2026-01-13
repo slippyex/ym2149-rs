@@ -133,6 +133,45 @@ impl BrowserSongPlayer {
         }
     }
 
+    /// Generate stereo audio samples (interleaved L/R).
+    ///
+    /// Returns frame_count * 2 samples. SNDH uses native stereo output,
+    /// other formats duplicate mono to stereo.
+    pub fn generate_samples_stereo(&mut self, frame_count: usize) -> Vec<f32> {
+        match self {
+            BrowserSongPlayer::Sndh(player) => player.generate_samples_stereo(frame_count),
+            _ => {
+                // Convert mono to stereo for non-SNDH players
+                let mono = self.generate_samples(frame_count);
+                let mut stereo = Vec::with_capacity(frame_count * 2);
+                for sample in mono {
+                    stereo.push(sample); // Left
+                    stereo.push(sample); // Right
+                }
+                stereo
+            }
+        }
+    }
+
+    /// Generate stereo audio samples into a pre-allocated buffer (interleaved L/R).
+    ///
+    /// Buffer length must be even (frame_count * 2). SNDH uses native stereo output,
+    /// other formats duplicate mono to stereo.
+    pub fn generate_samples_into_stereo(&mut self, buffer: &mut [f32]) {
+        match self {
+            BrowserSongPlayer::Sndh(player) => player.generate_samples_into_stereo(buffer),
+            _ => {
+                // Convert mono to stereo for non-SNDH players
+                let frame_count = buffer.len() / 2;
+                let mono = self.generate_samples(frame_count);
+                for (i, sample) in mono.iter().enumerate() {
+                    buffer[i * 2] = *sample; // Left
+                    buffer[i * 2 + 1] = *sample; // Right
+                }
+            }
+        }
+    }
+
     /// Mute or unmute a channel.
     pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
         match self {

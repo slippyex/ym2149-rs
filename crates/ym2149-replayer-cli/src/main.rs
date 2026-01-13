@@ -112,6 +112,23 @@ pub trait RealtimeChip: ChiptunePlayerBase {
     fn unsupported_reason(&self) -> Option<&'static str> {
         None
     }
+
+    /// Generate stereo samples into an interleaved buffer (L, R, L, R, ...).
+    ///
+    /// Default implementation converts mono to stereo by duplicating samples.
+    /// Override for players with native stereo support.
+    fn generate_samples_into_stereo(&mut self, buffer: &mut [f32]) {
+        // Default: generate mono samples then duplicate to stereo
+        let stereo_frames = buffer.len() / 2;
+        let mut mono_buffer = vec![0.0f32; stereo_frames];
+        self.generate_samples_into(&mut mono_buffer);
+
+        // Interleave mono to stereo (L=R)
+        for (i, &sample) in mono_buffer.iter().enumerate() {
+            buffer[i * 2] = sample; // Left
+            buffer[i * 2 + 1] = sample; // Right
+        }
+    }
 }
 
 impl<B: Ym2149Backend + 'static> RealtimeChip for YmPlayerGeneric<B> {
@@ -304,6 +321,11 @@ impl RealtimeChip for SndhPlayerWrapper {
 
     fn set_color_filter(&mut self, _enabled: bool) {
         // Not applicable for SNDH (uses actual 68000 code)
+    }
+
+    fn generate_samples_into_stereo(&mut self, buffer: &mut [f32]) {
+        // SNDH has native stereo support via STE DAC + LMC1992
+        let _ = self.player.render_f32_stereo(buffer);
     }
 }
 

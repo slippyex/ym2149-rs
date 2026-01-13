@@ -51,9 +51,14 @@ pub struct SteDac {
     master_volume: i32,
     /// 50kHz to 25kHz averaging toggle
     flip_50_to_25: bool,
-    /// Accumulator for 50kHz mode
-    acc_50: i32,
-    current_dac_level: i16,
+    /// Accumulator for 50kHz mode (left channel)
+    acc_50_l: i32,
+    /// Accumulator for 50kHz mode (right channel)
+    acc_50_r: i32,
+    /// Current DAC level (left channel)
+    current_dac_level_l: i16,
+    /// Current DAC level (right channel)
+    current_dac_level_r: i16,
 }
 
 impl SteDac {
@@ -69,8 +74,10 @@ impl SteDac {
             regs: [0; 256],
             master_volume: 64,
             flip_50_to_25: false,
-            acc_50: 0,
-            current_dac_level: 0,
+            acc_50_l: 0,
+            acc_50_r: 0,
+            current_dac_level_l: 0,
+            current_dac_level_r: 0,
         };
         dac.reset(host_replay_rate);
         dac
@@ -87,8 +94,10 @@ impl SteDac {
         self.microwire_shift = 0;
         self.microwire_data = 0;
         self.master_volume = 64;
-        self.current_dac_level = 0;
-        self.acc_50 = 0;
+        self.current_dac_level_l = 0;
+        self.current_dac_level_r = 0;
+        self.acc_50_l = 0;
+        self.acc_50_r = 0;
         self.flip_50_to_25 = false;
     }
 
@@ -117,7 +126,8 @@ impl SteDac {
                 }
                 0x21 => {
                     if (data & 3) != (self.regs[0x21] & 3) {
-                        self.acc_50 = 0;
+                        self.acc_50_l = 0;
+                        self.acc_50_r = 0;
                         self.flip_50_to_25 = false;
                     }
                 }
@@ -182,7 +192,7 @@ impl SteDac {
         }
     }
 
-    /// Compute next DAC sample
+    /// Compute next DAC stereo sample
     ///
     /// Supports tricky Tao "MS3" driver. Seems to be a 3 or 4 voices synth, without need of mixing code!
     /// The 4 voices are just output in 4 consecutive bytes. Everything is playing at 50Khz, stereo
@@ -193,7 +203,9 @@ impl SteDac {
     /// output. So you get a mixed stream at 25Khz. None of original atari samples are missed, and
     /// Tao MS3 songs are playing ok!
     /// Please note it also works perfectly with Quartet STE code, that is mixing into a 2 bytes 50Khz buffer!! :)
-    pub fn compute_sample(&mut self, atari_ram: &[u8], mfp: &mut Mfp68901) -> i16 {
+    ///
+    /// Returns (left, right) stereo samples.
+    pub fn compute_sample_stereo(&mut self, atari_ram: &[u8], mfp: &mut Mfp68901) -> (i16, i16) {
         if (self.regs[1] & 1) != 0 {
             self.inner_clock += DAC_FREQ[(self.regs[0x21] & 3) as usize];
             let stereo = (self.regs[0x21] & 0x80) == 0;
@@ -206,34 +218,42 @@ impl SteDac {
                     if (self.regs[0x01] & (1 << 1)) == 0 {
                         // If no loop mode, switch off replay
                         self.regs[0x01] &= 0xfe;
-                        self.current_dac_level = 0;
+                        self.current_dac_level_l = 0;
+                        self.current_dac_level_r = 0;
                         break;
                     }
                 }
 
-                let mut level = Self::fetch_sample(atari_ram, self.sample_ptr) as i32;
-                if stereo {
-                    level += Self::fetch_sample(atari_ram, self.sample_ptr + 1) as i32;
-                }
+                let level_l = Self::fetch_sample(atari_ram, self.sample_ptr) as i32;
+                let level_r = if stereo {
+                    Self::fetch_sample(atari_ram, self.sample_ptr + 1) as i32
+                } else {
+                    level_l // Mono: duplicate to both channels
+                };
 
                 if b50k {
-                    self.acc_50 += level;
+                    self.acc_50_l += level_l;
+                    self.acc_50_r += level_r;
                     self.flip_50_to_25 = !self.flip_50_to_25;
                     if !self.flip_50_to_25 {
-                        self.current_dac_level = ((self.acc_50 * self.master_volume) >> 1) as i16;
-                        self.acc_50 = 0;
+                        self.current_dac_level_l = ((self.acc_50_l * self.master_volume) >> 1) as i16;
+                        self.current_dac_level_r = ((self.acc_50_r * self.master_volume) >> 1) as i16;
+                        self.acc_50_l = 0;
+                        self.acc_50_r = 0;
                     }
                 } else {
-                    self.current_dac_level = (level * self.master_volume) as i16;
+                    self.current_dac_level_l = (level_l * self.master_volume) as i16;
+                    self.current_dac_level_r = (level_r * self.master_volume) as i16;
                 }
 
                 self.sample_ptr += if stereo { 2 } else { 1 };
                 self.inner_clock -= self.host_replay_rate;
             }
         } else {
-            self.current_dac_level = 0;
+            self.current_dac_level_l = 0;
+            self.current_dac_level_r = 0;
         }
-        self.current_dac_level
+        (self.current_dac_level_l, self.current_dac_level_r)
     }
 
     /// Emulate internal rol to please any user 68k code reading & waiting the complete cycle

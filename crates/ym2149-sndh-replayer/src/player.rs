@@ -159,7 +159,7 @@ impl SndhPlayer {
         // so timer-driven effects are "primed".
         if self.warmup_enabled {
             for _ in 0..self.samples_per_tick {
-                let _ = self.machine.compute_sample();
+                let _ = self.machine.compute_sample_stereo();
             }
         }
 
@@ -214,18 +214,29 @@ impl SndhPlayer {
         self.machine.ym2149_mut()
     }
 
-    /// Render audio into a buffer of i16 samples.
+    /// Render audio into a buffer of interleaved stereo i16 samples.
     ///
-    /// This is a convenience method for direct audio output.
-    pub fn render_i16(&mut self, buffer: &mut [i16]) -> u32 {
-        self.render_into(buffer, 0i16, |sample| sample)
+    /// Buffer length must be even (pairs of left/right samples).
+    /// Returns loop count.
+    pub fn render_i16_stereo(&mut self, buffer: &mut [i16]) -> u32 {
+        self.render_into_stereo(buffer, 0i16, |left, right| (left, right))
     }
 
-    fn render_into<T: Copy>(
+    /// Render audio into a buffer of interleaved stereo f32 samples.
+    ///
+    /// Buffer length must be even (pairs of left/right samples).
+    /// Returns loop count.
+    pub fn render_f32_stereo(&mut self, buffer: &mut [f32]) -> u32 {
+        self.render_into_stereo(buffer, 0.0f32, |left, right| {
+            (left as f32 / 32768.0, right as f32 / 32768.0)
+        })
+    }
+
+    fn render_into_stereo<T: Copy>(
         &mut self,
         buffer: &mut [T],
         silence: T,
-        mut convert: impl FnMut(i16) -> T,
+        mut convert: impl FnMut(i16, i16) -> (T, T),
     ) -> u32 {
         if self.state != PlaybackState::Playing || self.current_subsong == 0 {
             buffer.fill(silence);
@@ -234,7 +245,8 @@ impl SndhPlayer {
 
         let upload_addr = self.machine.sndh_upload_addr();
 
-        for sample in buffer.iter_mut() {
+        // Process pairs of samples (left, right)
+        for chunk in buffer.chunks_exact_mut(2) {
             self.inner_sample_pos -= 1;
 
             // Call player tick routine when needed
@@ -253,13 +265,14 @@ impl SndhPlayer {
                 // Check for loop
                 if self.frame_count > 0 && self.frame >= self.frame_count {
                     self.loop_count += 1;
-                    // Don't reset frame - let it continue for seamless looping
                 }
             }
 
-            // Generate audio sample
-            let raw_sample = self.machine.compute_sample();
-            *sample = convert(raw_sample);
+            // Generate stereo audio sample
+            let (left, right) = self.machine.compute_sample_stereo();
+            let (out_left, out_right) = convert(left, right);
+            chunk[0] = out_left;
+            chunk[1] = out_right;
         }
 
         self.loop_count
@@ -291,7 +304,13 @@ impl ChiptunePlayerBase for SndhPlayer {
     }
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
-        let _ = self.render_into(buffer, 0.0f32, |sample| sample as f32 / 32768.0);
+        // Generate stereo and mix down to mono for trait compatibility
+        let frame_count = buffer.len();
+        let mut stereo_buffer = vec![0.0f32; frame_count * 2];
+        self.render_f32_stereo(&mut stereo_buffer);
+        for (i, sample) in buffer.iter_mut().enumerate() {
+            *sample = (stereo_buffer[i * 2] + stereo_buffer[i * 2 + 1]) * 0.5;
+        }
     }
 
     fn sample_rate(&self) -> u32 {

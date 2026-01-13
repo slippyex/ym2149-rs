@@ -230,6 +230,35 @@ impl Ym2149Player {
         }
     }
 
+    /// Generate stereo audio samples (interleaved L/R).
+    ///
+    /// Returns frame_count * 2 samples. SNDH uses native stereo output,
+    /// other formats duplicate mono to stereo.
+    #[wasm_bindgen(js_name = generateSamplesStereo)]
+    pub fn generate_samples_stereo(&mut self, frame_count: usize) -> Vec<f32> {
+        let mut samples = self.player.generate_samples_stereo(frame_count);
+        if self.volume != 1.0 {
+            for sample in &mut samples {
+                *sample *= self.volume;
+            }
+        }
+        samples
+    }
+
+    /// Generate stereo samples into a pre-allocated buffer (zero-allocation).
+    ///
+    /// Buffer length must be even (frame_count * 2). Interleaved L/R format.
+    /// SNDH uses native stereo output, other formats duplicate mono to stereo.
+    #[wasm_bindgen(js_name = generateSamplesIntoStereo)]
+    pub fn generate_samples_into_stereo(&mut self, buffer: &mut [f32]) {
+        self.player.generate_samples_into_stereo(buffer);
+        if self.volume != 1.0 {
+            for sample in buffer.iter_mut() {
+                *sample *= self.volume;
+            }
+        }
+    }
+
     /// Get the current register values (for visualization).
     pub fn get_registers(&self) -> Vec<u8> {
         self.player.dump_registers().to_vec()

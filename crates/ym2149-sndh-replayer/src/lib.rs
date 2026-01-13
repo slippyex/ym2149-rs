@@ -46,6 +46,7 @@
 mod cpu_backend;
 mod error;
 mod ice;
+mod lmc1992;
 mod machine;
 mod mfp68901;
 mod parser;

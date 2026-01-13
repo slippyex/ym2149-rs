@@ -66,14 +66,30 @@ impl SndhWasmPlayer {
         ChiptunePlayerBase::playback_position(&self.player)
     }
 
-    /// Generate audio samples.
+    /// Generate mono audio samples.
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
         ChiptunePlayerBase::generate_samples(&mut self.player, count)
     }
 
-    /// Generate audio samples into a pre-allocated buffer.
+    /// Generate mono audio samples into a pre-allocated buffer.
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         ChiptunePlayerBase::generate_samples_into(&mut self.player, buffer);
+    }
+
+    /// Generate stereo audio samples (interleaved L/R).
+    ///
+    /// Returns stereo samples with STE DAC and LMC1992 audio processing.
+    pub fn generate_samples_stereo(&mut self, frame_count: usize) -> Vec<f32> {
+        let mut buffer = vec![0.0f32; frame_count * 2];
+        self.player.render_f32_stereo(&mut buffer);
+        buffer
+    }
+
+    /// Generate stereo audio samples into a pre-allocated buffer (interleaved L/R).
+    ///
+    /// Buffer length must be even (frame_count * 2).
+    pub fn generate_samples_into_stereo(&mut self, buffer: &mut [f32]) {
+        self.player.render_f32_stereo(buffer);
     }
 
     /// Mute or unmute a channel.

@@ -7,14 +7,19 @@
 //! - Motorola 68000 CPU (configurable backend via features)
 //! - YM2149 sound chip (via ym2149 crate)
 //! - MFP 68901 timers (for SID voice and effects)
+//! - STE DAC (DMA audio)
+//! - LMC1992 audio mixer/filter (bass, treble, volume control)
 //!
 //! Memory map:
 //! - 0x000000 - 0x3FFFFF: RAM (4MB)
 //! - 0xFF8800 - 0xFF88FF: YM2149 PSG
+//! - 0xFF8900 - 0xFF8921: STE DAC (DMA audio)
+//! - 0xFF8922 - 0xFF8925: LMC1992 Microwire interface
 //! - 0xFFFA00 - 0xFFFA25: MFP 68901
 
 use crate::cpu_backend::{Cpu68k, CpuMemory, DefaultCpu};
 use crate::error::{Result, SndhError};
+use crate::lmc1992::Lmc1992;
 use crate::mfp68901::Mfp68901;
 use crate::ste_dac::SteDac;
 use ym2149::Ym2149;
@@ -60,6 +65,8 @@ pub(crate) struct AtariMemory {
     pub(crate) mfp: Mfp68901,
     /// STE DAC (DMA audio)
     pub(crate) ste_dac: SteDac,
+    /// LMC1992 STE audio mixer/filter
+    pub(crate) lmc1992: Lmc1992,
     /// Next GEMDOS malloc address
     next_malloc_addr: u32,
     /// Reset instruction executed flag
@@ -75,6 +82,7 @@ impl AtariMemory {
             ym2149: Ym2149::with_clocks(2_000_000, sample_rate),
             mfp: Mfp68901::new(sample_rate),
             ste_dac: SteDac::new(sample_rate),
+            lmc1992: Lmc1992::new(sample_rate),
             next_malloc_addr: GEMDOS_MALLOC_START,
             reset_triggered: false,
             host_rate: sample_rate,
@@ -86,6 +94,7 @@ impl AtariMemory {
         self.ym2149.reset();
         self.mfp.reset();
         self.ste_dac.reset(self.host_rate);
+        self.lmc1992.reset(self.host_rate);
         self.next_malloc_addr = GEMDOS_MALLOC_START;
         self.reset_triggered = false;
 
@@ -128,9 +137,14 @@ impl AtariMemory {
             return self.ym2149.read_port((addr & 0xff) as u8);
         }
 
-        // STE DAC read
-        if (0xFF8900..0xFF8926).contains(&addr) {
+        // STE DAC read (excluding Microwire registers)
+        if (0xFF8900..0xFF8922).contains(&addr) {
             return self.ste_dac.read8((addr - 0xFF8900) as u8);
+        }
+
+        // LMC1992 Microwire registers
+        if (0xFF8922..0xFF8926).contains(&addr) {
+            return self.lmc1992.read8((addr - 0xFF8900) as u8);
         }
 
         // MFP 68901
@@ -165,9 +179,15 @@ impl AtariMemory {
             return;
         }
 
-        // STE DAC write
-        if (0xFF8900..0xFF8926).contains(&addr) {
+        // STE DAC write (excluding Microwire registers)
+        if (0xFF8900..0xFF8922).contains(&addr) {
             self.ste_dac.write8((addr - 0xFF8900) as u8, value);
+            return;
+        }
+
+        // LMC1992 Microwire registers
+        if (0xFF8922..0xFF8926).contains(&addr) {
+            self.lmc1992.write8((addr - 0xFF8900) as u8, value);
             return;
         }
 
@@ -185,9 +205,14 @@ impl AtariMemory {
             return self.mfp.read16((addr - 0xFFFA00) as u8);
         }
 
-        // STE DAC word read
-        if (0xFF8900..0xFF8926).contains(&addr) && (addr & 1) == 0 {
+        // STE DAC word read (excluding Microwire registers)
+        if (0xFF8900..0xFF8922).contains(&addr) && (addr & 1) == 0 {
             return self.ste_dac.read16((addr - 0xFF8900) as u8);
+        }
+
+        // LMC1992 Microwire word read
+        if (0xFF8922..0xFF8926).contains(&addr) && (addr & 1) == 0 {
+            return self.lmc1992.read16((addr - 0xFF8900) as u8);
         }
 
         // YM2149
@@ -209,9 +234,15 @@ impl AtariMemory {
             return;
         }
 
-        // STE DAC word write
-        if (0xFF8900..0xFF8926).contains(&addr) {
+        // STE DAC word write (excluding Microwire registers)
+        if (0xFF8900..0xFF8922).contains(&addr) {
             self.ste_dac.write16((addr - 0xFF8900) as u8, value);
+            return;
+        }
+
+        // LMC1992 Microwire word write
+        if (0xFF8922..0xFF8926).contains(&addr) {
+            self.lmc1992.write16((addr - 0xFF8900) as u8, value);
             return;
         }
 
@@ -505,21 +536,36 @@ impl AtariMachine {
         }
     }
 
-    /// Compute the next audio sample.
-    pub fn compute_sample(&mut self) -> i16 {
-        let sample_i16 = self.memory.ym2149.compute_next_sample();
-        let mut level = sample_i16 as i32;
+    /// Compute the next stereo audio sample.
+    /// Returns (left, right) samples.
+    pub fn compute_sample_stereo(&mut self) -> (i16, i16) {
+        // Get YM2149 sample (mono, duplicated to both channels)
+        // Only if LMC1992 mix is enabled
+        let ym_sample = if self.memory.lmc1992.should_mix_ym() {
+            self.memory.ym2149.compute_next_sample() as i32
+        } else {
+            // Still need to tick YM2149 for internal state
+            let _ = self.memory.ym2149.compute_next_sample();
+            0
+        };
 
-        let ste_level = self
+        // Get STE DAC stereo sample
+        let (ste_left, ste_right) = self
             .memory
             .ste_dac
-            .compute_sample(&self.memory.ram, &mut self.memory.mfp) as i32;
-        level += ste_level;
+            .compute_sample_stereo(&self.memory.ram, &mut self.memory.mfp);
+
+        // Mix YM2149 (mono) with STE DAC (stereo)
+        let mixed_left = (ym_sample + ste_left as i32).clamp(-32768, 32767) as i16;
+        let mixed_right = (ym_sample + ste_right as i32).clamp(-32768, 32767) as i16;
+
+        // Process through LMC1992 (bass/treble EQ + volume control)
+        let (out_left, out_right) = self.memory.lmc1992.process_stereo(mixed_left, mixed_right);
 
         // Tick timers after mixing
         self.tick_timers();
 
-        level.clamp(-32768, 32767) as i16
+        (out_left, out_right)
     }
 
     /// Get reference to YM2149.
