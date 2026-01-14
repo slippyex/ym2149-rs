@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 use ym2149::constants::{VOLUME_SCALE, VOLUME_TABLE};
-use ym2149_common::{channel_period, period_to_frequency};
+use ym2149_common::{MASTER_GAIN, channel_period, period_to_frequency};
 
 const SAMPLE_RATE: f32 = 44_100.0;
 
@@ -404,7 +404,7 @@ impl SoftSynth {
             self.lp_mem0 = out;
             self.lp_mem1 = out;
         }
-        self.last_sample = out.clamp(-1.0, 1.0);
+        self.last_sample = (out * MASTER_GAIN).clamp(-1.0, 1.0);
     }
 
     /// Start SID-style amplitude gating on a voice

@@ -78,3 +78,10 @@ pub const ATARI_MFP_CLOCK_HZ: u32 = 2_457_600;
 
 /// Number of audio channels per YM2149 PSG chip.
 pub const CHANNELS_PER_PSG: usize = 3;
+
+/// Master gain applied to all audio output.
+///
+/// This amplifies the output from all backends (core emulation, softsynth, SNDH).
+/// The YM2149 output tends to be quiet compared to modern audio, so this provides
+/// a global boost to bring levels up to a comfortable listening volume.
+pub const MASTER_GAIN: f32 = 2.0;

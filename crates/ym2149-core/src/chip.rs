@@ -8,7 +8,7 @@ use crate::dc_filter::DcFilter;
 use crate::generators::{EnvelopeGenerator, NUM_CHANNELS, NoiseGenerator, ToneGenerator};
 use crate::mixer::Mixer;
 use crate::tables::REG_MASK;
-use ym2149_common::Ym2149Backend;
+use ym2149_common::{MASTER_GAIN, Ym2149Backend};
 
 /// Default Atari ST master clock (2 MHz)
 const DEFAULT_MASTER_CLOCK: u32 = 2_000_000;
@@ -411,7 +411,7 @@ impl Ym2149Backend for Ym2149 {
 
     fn clock(&mut self) {
         let sample_i16 = self.compute_next_sample();
-        self.last_sample = sample_i16 as f32 / 32767.0;
+        self.last_sample = (sample_i16 as f32 / 32767.0 * MASTER_GAIN).clamp(-1.0, 1.0);
     }
 
     fn get_sample(&self) -> f32 {

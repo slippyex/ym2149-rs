@@ -23,6 +23,7 @@ use crate::lmc1992::Lmc1992;
 use crate::mfp68901::Mfp68901;
 use crate::ste_dac::SteDac;
 use ym2149::Ym2149;
+use ym2149_common::MASTER_GAIN;
 
 /// RAM size (4 MB)
 const RAM_SIZE: usize = 4 * 1024 * 1024;
@@ -560,7 +561,11 @@ impl AtariMachine {
         let mixed_right = (ym_sample + ste_right as i32).clamp(-32768, 32767) as i16;
 
         // Process through LMC1992 (bass/treble EQ + volume control)
-        let (out_left, out_right) = self.memory.lmc1992.process_stereo(mixed_left, mixed_right);
+        let (lmc_left, lmc_right) = self.memory.lmc1992.process_stereo(mixed_left, mixed_right);
+
+        // Apply master gain
+        let out_left = ((lmc_left as f32 * MASTER_GAIN) as i32).clamp(-32768, 32767) as i16;
+        let out_right = ((lmc_right as f32 * MASTER_GAIN) as i32).clamp(-32768, 32767) as i16;
 
         // Tick timers after mixing
         self.tick_timers();
