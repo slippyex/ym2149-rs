@@ -384,9 +384,13 @@ impl Lmc1992 {
                 self.update_filters();
             }
             Lmc1992Function::Mix => {
-                // Data bits 1-0: mix control
-                // 01 = mix YM2149, 10 = don't mix
-                self.mix_ym = (data & 0x03) == 0x01;
+                // Data bits 1-0: mix control (LMC1992 input select)
+                // 00 = DMA + YM2149 (-12dB, broken on real HW = same as 01)
+                // 01 = DMA + YM2149 (default)
+                // 10 = DMA only
+                // 11 = reserved
+                // Mix YM when bit 1 is 0 (values 00 or 01)
+                self.mix_ym = (data & 0x02) == 0;
             }
         }
     }
@@ -488,19 +492,27 @@ mod tests {
     fn test_mix_control() {
         let mut lmc = Lmc1992::new(44100);
 
-        // Disable YM mixing
-        // Command: 10 (addr) + 000 (mix) + 000010 (don't mix)
+        // Disable YM mixing (value 10 = DMA only)
+        // Command: 10 (addr) + 000 (mix) + 000010
         // = 10_000_000010 = 0b10000000010 = 0x402
         lmc.mw_mask = 0x07FF;
         lmc.write16(0x22, 0x402);
-
         assert!(!lmc.mix_ym);
 
-        // Enable YM mixing
+        // Enable YM mixing (value 01 = DMA + YM default)
         // Command: 10_000_000001 = 0x401
         lmc.write16(0x22, 0x401);
-
         assert!(lmc.mix_ym);
+
+        // Value 00 should also mix YM (DMA + YM at -12dB, but broken = same as 01)
+        // Command: 10_000_000000 = 0x400
+        lmc.write16(0x22, 0x400);
+        assert!(lmc.mix_ym);
+
+        // Value 11 (reserved) should not mix YM
+        // Command: 10_000_000011 = 0x403
+        lmc.write16(0x22, 0x403);
+        assert!(!lmc.mix_ym);
     }
 
     #[test]
