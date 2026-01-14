@@ -66,6 +66,15 @@ All notable changes to the ym2149-rs project.
   - Click anywhere on the progress bar to seek to that position
   - `ProgressBarContainer` component for custom seek UI integration
 
+### Documentation
+- **HARDWARE_ACCURACY.md** - New document in ym2149-sndh-replayer detailing hardware accuracy:
+  - YM2149F PSG (clock, tone, noise LFSR, envelope, DAC, mixer)
+  - MC68901 MFP (timers, interrupts, registers)
+  - STE DMA Audio (sample rates, registers, format)
+  - LMC1992 Microwire (function codes, volume curves, EQ)
+  - MC68000 CPU timing and memory map
+  - Stereo signal path explanation
+
 ### Changed
 - **68000 CPU backend replaced** - Switched from `m68000` crate to `r68k` (based on Musashi):
   - New `cpu_backend` module with abstraction layer for CPU emulation
@@ -84,6 +93,15 @@ All notable changes to the ym2149-rs project.
 ### Fixed
 - **Audio volume too quiet** - Applied 2x gain boost to all audio output paths
 - **SNDH FLAG tag parsing** - Fixed parser incorrectly interpreting next tag as flags when FLAG contained null-terminated entries (e.g., `FLAG~abdy\0\0FRMS` was parsing `FRMS` as flag characters)
+- **Noise LFSR hardware accuracy** - Fixed LFSR tap positions to match real YM2149/AY-3-8910:
+  - Changed from incorrect Fibonacci form (bits 0 XOR 2) to correct Galois form (bits 13 and 16)
+  - Now produces identical pseudo-random sequence to real hardware
+  - Period 0 now treated as period 1 (matching hardware behavior)
+- **LMC1992 mix control** - Fixed input select to handle all valid values:
+  - Value 00 (DMA + YM at -12dB) now correctly mixes YM (broken -12dB matches real HW)
+  - Value 01 (DMA + YM default) unchanged
+  - Value 10 (DMA only) unchanged
+  - Value 11 (reserved) now treated as no YM mix
 - **SNDH < 2.2 seeking** - Older SNDH files without FRMS/TIME metadata now support seeking:
   - Fallback duration of 5 minutes (15000 frames at 50Hz) when no duration info available
   - `has_duration_info()` returns false for these files to indicate estimated duration
