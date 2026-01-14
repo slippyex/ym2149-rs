@@ -467,6 +467,57 @@ impl Ym2149Playback {
         self.frame_position = frame;
     }
 
+    /// Seek to a percentage position (0.0 to 1.0).
+    ///
+    /// Returns true if seeking succeeded. Works for all SNDH files (uses fallback duration for older files).
+    /// For non-SNDH formats, this currently returns false.
+    pub fn seek_percentage(&mut self, position: f32) -> bool {
+        if let Some(player) = &self.player {
+            let mut guard = player.write();
+            let result = guard.seek_percentage(position);
+            if result {
+                // Update frame_position to match the player's new position
+                self.frame_position = guard.current_frame() as u32;
+            }
+            result
+        } else {
+            false
+        }
+    }
+
+    /// Get duration in seconds.
+    ///
+    /// For SNDH < 2.2 without FRMS/TIME, returns 300 (5 minute fallback).
+    pub fn duration_seconds(&self) -> f32 {
+        if let Some(player) = &self.player {
+            player.read().duration_seconds()
+        } else if let Some(metrics) = self.metrics {
+            metrics.duration_seconds()
+        } else {
+            0.0
+        }
+    }
+
+    /// Check if duration is from actual metadata or estimated.
+    ///
+    /// Returns false for older SNDH files using the 5-minute fallback.
+    pub fn has_duration_info(&self) -> bool {
+        self.player
+            .as_ref()
+            .map(|p| p.read().has_duration_info())
+            .unwrap_or(true)
+    }
+
+    /// Get playback position as percentage (0.0 to 1.0).
+    pub fn playback_position(&self) -> f32 {
+        let frame_count = self.metrics.map(|m| m.frame_count).unwrap_or(0);
+        if frame_count > 0 {
+            (self.frame_position as f32 / frame_count as f32).min(1.0)
+        } else {
+            0.0
+        }
+    }
+
     /// Set the playback volume (global gain, unclamped upper bound).
     pub fn set_volume(&mut self, volume: f32) {
         self.volume = volume.max(0.0);

@@ -13,8 +13,8 @@ use bevy_ym2149::{
 };
 use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins_with_window};
 use bevy_ym2149_viz::{
-    Ym2149VizPlugin, create_channel_visualization, create_detailed_channel_display,
-    create_oscilloscope, create_status_display,
+    ProgressBarContainer, Ym2149VizPlugin, create_channel_visualization,
+    create_detailed_channel_display, create_oscilloscope, create_status_display,
 };
 
 fn main() {
@@ -29,7 +29,12 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (handle_file_drop, playback_controls, log_pattern_hits),
+            (
+                handle_file_drop,
+                playback_controls,
+                progress_bar_seek,
+                log_pattern_hits,
+            ),
         )
         .run();
 }
@@ -44,6 +49,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         Text::new(
             "Controls:\n\
              - Drag & Drop: Load YM/AKS/AY/SNDH file\n\
+             - Click Progress Bar: Seek to position\n\
              - SPACE: Play/Pause\n\
              - R: Restart\n\
              - L: Toggle Looping\n\
@@ -273,5 +279,43 @@ fn log_pattern_hits(mut hits: MessageReader<PatternTriggered>) {
             "Pattern '{}' hit on channel {} (amp {:.2}, freq {:?})",
             hit.pattern_id, hit.channel, hit.amplitude, hit.frequency
         );
+    }
+}
+
+/// Handle clicks on the progress bar to seek to the clicked position.
+fn progress_bar_seek(
+    mut playbacks: Query<&mut Ym2149Playback>,
+    progress_bars: Query<
+        (&Interaction, &GlobalTransform, &ComputedNode),
+        (With<ProgressBarContainer>, Changed<Interaction>),
+    >,
+    windows: Query<&Window>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+
+    for (interaction, transform, computed) in &progress_bars {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        // Get the bar's position and size in screen coordinates
+        let bar_pos = transform.translation().truncate();
+        let bar_size = computed.size();
+
+        // Calculate local X position within the bar (Bevy UI uses center origin)
+        let local_x = cursor_pos.x - (bar_pos.x - bar_size.x / 2.0);
+        let percentage = (local_x / bar_size.x).clamp(0.0, 1.0);
+
+        // Seek all playback entities to the clicked position
+        for mut playback in &mut playbacks {
+            if playback.seek_percentage(percentage) {
+                info!("Seeked to {:.1}%", percentage * 100.0);
+            }
+        }
     }
 }

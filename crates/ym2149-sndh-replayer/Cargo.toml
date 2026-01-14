@@ -14,10 +14,10 @@ categories = ["multimedia::audio", "emulators", "parsing"]
 
 [dependencies]
 # Core YM2149 emulation
-ym2149 = { path = "../ym2149-core", version = "0.8", default-features = false }
+ym2149 = { path = "../ym2149-core", version = "0.9", default-features = false }
 
 # Common traits (PlaybackMetadata, ChiptunePlayer)
-ym2149-common = { path = "../ym2149-common", version = "0.8" }
+ym2149-common = { path = "../ym2149-common", version = "0.9" }
 
 # Motorola 68000 CPU emulation (r68k)
 r68k = "0.2.1"

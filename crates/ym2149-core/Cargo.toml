@@ -16,7 +16,7 @@ categories = ["emulators", "multimedia::audio"]
 # Error handling
 thiserror.workspace = true
 # Shared traits (Ym2149Backend)
-ym2149-common = { path = "../ym2149-common", version = "0.8" }
+ym2149-common = { path = "../ym2149-common", version = "0.9" }
 
 [dev-dependencies]
 # Testing utilities

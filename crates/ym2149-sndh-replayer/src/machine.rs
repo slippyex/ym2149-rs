@@ -20,10 +20,19 @@
 use crate::cpu_backend::{Cpu68k, CpuMemory, DefaultCpu};
 use crate::error::{Result, SndhError};
 use crate::lmc1992::Lmc1992;
-use crate::mfp68901::Mfp68901;
+use crate::mfp68901::{Mfp68901, TimerId};
 use crate::ste_dac::SteDac;
 use ym2149::Ym2149;
 use ym2149_common::MASTER_GAIN;
+
+/// Map timer index to TimerId for interrupt acknowledgment.
+const TIMER_ID_MAP: [TimerId; 5] = [
+    TimerId::TimerA,
+    TimerId::TimerB,
+    TimerId::TimerC,
+    TimerId::TimerD,
+    TimerId::Gpi7,
+];
 
 /// RAM size (4 MB)
 const RAM_SIZE: usize = 4 * 1024 * 1024;
@@ -375,11 +384,11 @@ impl AtariMachine {
     /// Tick all MFP timers and dispatch their interrupts.
     fn tick_timers(&mut self) {
         let fired = self.memory.mfp.tick();
-        for (timer_id, active) in fired.into_iter().enumerate() {
+        for (timer_idx, active) in fired.into_iter().enumerate() {
             if !active {
                 continue;
             }
-            let vector_addr = IVECTOR[timer_id];
+            let vector_addr = IVECTOR[timer_idx];
             let pc = self.memory.read_long(vector_addr);
             let pc24 = pc & 0x00FF_FFFF;
 
@@ -388,10 +397,19 @@ impl AtariMachine {
                     continue;
                 }
                 self.in_interrupt = true;
+
+                // Acknowledge interrupt (sets in-service, clears pending)
+                let timer_id = TIMER_ID_MAP[timer_idx];
+                self.memory.mfp.acknowledge_timer(timer_id);
+
                 self.configure_return_by_rte();
                 self.memory.ym2149.inside_timer_irq(true);
                 let _ = self.jmp_binary(pc, 1);
                 self.memory.ym2149.inside_timer_irq(false);
+
+                // End of interrupt (clears in-service for automatic EOI mode)
+                self.memory.mfp.end_of_interrupt_timer(timer_id);
+
                 self.in_interrupt = false;
             }
         }

@@ -183,6 +183,12 @@ macro_rules! delegate_chiptune_player_base {
             fn playback_position(&self) -> f32 {
                 ChiptunePlayerBase::playback_position(&self.$field)
             }
+            fn seek(&mut self, position: f32) -> bool {
+                ChiptunePlayerBase::seek(&mut self.$field, position)
+            }
+            fn duration_seconds(&self) -> f32 {
+                ChiptunePlayerBase::duration_seconds(&self.$field)
+            }
             fn subsong_count(&self) -> usize {
                 ChiptunePlayerBase::subsong_count(&self.$field)
             }

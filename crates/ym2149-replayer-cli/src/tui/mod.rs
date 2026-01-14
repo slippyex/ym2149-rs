@@ -84,6 +84,8 @@ pub struct App {
     pub volume: f32,
     /// Note history for scrolling display
     pub note_history: NoteHistory,
+    /// Last seek time for throttling (prevents stuttering when holding arrow keys)
+    pub last_seek_time: Option<Instant>,
 }
 
 impl App {
@@ -111,7 +113,22 @@ impl App {
             has_started_playback: false,
             volume: 1.0,
             note_history: NoteHistory::new(),
+            last_seek_time: None,
         }
+    }
+
+    /// Check if enough time has passed since last seek (throttle)
+    pub fn can_seek(&self) -> bool {
+        const SEEK_COOLDOWN_MS: u64 = 250;
+        match self.last_seek_time {
+            Some(last) => last.elapsed() >= Duration::from_millis(SEEK_COOLDOWN_MS),
+            None => true,
+        }
+    }
+
+    /// Record that a seek just happened
+    pub fn mark_seek(&mut self) {
+        self.last_seek_time = Some(Instant::now());
     }
 
     /// Increase volume by 5%
@@ -154,14 +171,22 @@ impl App {
 
     /// Update app state from streaming context
     pub fn update(&mut self, context: &StreamingContext, elapsed: f32) {
-        self.elapsed = elapsed;
-
         // Get delayed snapshot for visualization (synced with audio output)
         let delayed_snapshot = context.get_delayed_snapshot();
 
         let guard = context.player.lock();
         self.is_playing = guard.state() == PlaybackState::Playing;
         self.psg_count = guard.psg_count();
+
+        // Use player's elapsed_seconds if duration is known (supports seeking),
+        // otherwise fallback to wallclock elapsed time
+        let player_duration = guard.duration_seconds();
+        if player_duration > 0.0 {
+            self.elapsed = guard.elapsed_seconds();
+            self.duration = player_duration;
+        } else {
+            self.elapsed = elapsed;
+        }
 
         // Update mute states
         let channel_count = guard.channel_count();
@@ -456,8 +481,44 @@ pub fn run_tui_loop_with_playlist(
                                     guard.set_channel_mute(9, !muted);
                                 }
                             }
-                            // Subsong navigation: + or Up = next, - or Down = previous
-                            KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('=') => {
+                            // Volume control: Up/Down arrows
+                            KeyCode::Up => {
+                                app.volume_up();
+                                context.set_volume(app.volume);
+                            }
+                            KeyCode::Down => {
+                                app.volume_down();
+                                context.set_volume(app.volume);
+                            }
+                            // Seeking: Left/Right arrows (±5 seconds, throttled)
+                            KeyCode::Left => {
+                                if app.can_seek() {
+                                    let mut guard = context.player.lock();
+                                    let current_pos = guard.playback_position();
+                                    let duration = guard.duration_seconds();
+                                    let seek_amount =
+                                        if duration > 0.0 { 5.0 / duration } else { 0.05 };
+                                    let new_pos = (current_pos - seek_amount).max(0.0);
+                                    if guard.seek(new_pos) {
+                                        app.mark_seek();
+                                    }
+                                }
+                            }
+                            KeyCode::Right => {
+                                if app.can_seek() {
+                                    let mut guard = context.player.lock();
+                                    let current_pos = guard.playback_position();
+                                    let duration = guard.duration_seconds();
+                                    let seek_amount =
+                                        if duration > 0.0 { 5.0 / duration } else { 0.05 };
+                                    let new_pos = (current_pos + seek_amount).min(1.0);
+                                    if guard.seek(new_pos) {
+                                        app.mark_seek();
+                                    }
+                                }
+                            }
+                            // Subsong navigation: +/= for next, -/_ for previous
+                            KeyCode::Char('+') | KeyCode::Char('=') => {
                                 let mut guard = context.player.lock();
                                 if guard.has_subsongs() {
                                     let current = guard.current_subsong();
@@ -466,7 +527,7 @@ pub fn run_tui_loop_with_playlist(
                                     guard.set_subsong(next);
                                 }
                             }
-                            KeyCode::Down | KeyCode::Char('-') | KeyCode::Char('_') => {
+                            KeyCode::Char('-') | KeyCode::Char('_') => {
                                 let mut guard = context.player.lock();
                                 if guard.has_subsongs() {
                                     let current = guard.current_subsong();
@@ -474,14 +535,6 @@ pub fn run_tui_loop_with_playlist(
                                     let prev = if current <= 1 { count } else { current - 1 };
                                     guard.set_subsong(prev);
                                 }
-                            }
-                            KeyCode::Right => {
-                                app.volume_up();
-                                context.set_volume(app.volume);
-                            }
-                            KeyCode::Left => {
-                                app.volume_down();
-                                context.set_volume(app.volume);
                             }
                             // Next/Previous song in playlist
                             KeyCode::Char(']') | KeyCode::Char('>') | KeyCode::Char('.') => {
@@ -943,7 +996,7 @@ fn draw_note_history_table(f: &mut Frame, area: Rect, app: &App) {
 /// Draw footer with controls help
 fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     // Build controls string based on available features
-    let mut controls = String::from("[1-9] Mute  [Space] Pause  [←→] Vol");
+    let mut controls = String::from("[1-9] Mute  [Space] Pause  [↑↓] Vol  [←→] Seek");
 
     if app.has_playlist() {
         controls.push_str("  [,/.] Prev/Next  [p] Playlist");

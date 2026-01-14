@@ -103,6 +103,28 @@ pub trait ChiptunePlayerBase: Send {
         0.0
     }
 
+    /// Seek to a position (0.0 to 1.0).
+    ///
+    /// Returns `true` if seeking is supported and successful.
+    /// Default returns `false` (seeking not supported).
+    fn seek(&mut self, _position: f32) -> bool {
+        false
+    }
+
+    /// Get the total duration in seconds.
+    ///
+    /// Returns 0.0 if duration is unknown.
+    fn duration_seconds(&self) -> f32 {
+        0.0
+    }
+
+    /// Get elapsed time in seconds based on playback position.
+    ///
+    /// Uses `playback_position()` and `duration_seconds()` for calculation.
+    fn elapsed_seconds(&self) -> f32 {
+        self.playback_position() * self.duration_seconds()
+    }
+
     /// Get the number of subsongs in this file.
     ///
     /// Default returns 1. Override for formats with multiple subsongs.

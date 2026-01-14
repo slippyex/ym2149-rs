@@ -245,6 +245,39 @@ impl YmSongPlayer {
     pub fn has_subsongs(&self) -> bool {
         self.subsong_count() > 1
     }
+
+    /// Seek to a percentage position (0.0 to 1.0).
+    ///
+    /// Returns true if seeking succeeded. Currently only supported for SNDH.
+    pub fn seek_percentage(&mut self, position: f32) -> bool {
+        match self {
+            Self::Sndh(p) => p.seek_percentage(position),
+            _ => false, // Other formats don't support percentage seeking yet
+        }
+    }
+
+    /// Get duration in seconds.
+    ///
+    /// For SNDH < 2.2 without FRMS/TIME, returns 300 (5 minute fallback).
+    pub fn duration_seconds(&self) -> f32 {
+        match self {
+            Self::Ym(p) => p.metrics.duration_seconds(),
+            Self::Arkos(p) => p.metadata.duration_seconds,
+            Self::Ay(p) => p.metadata.duration_seconds,
+            Self::Sndh(p) => p.duration_seconds(),
+            Self::Synth(p) => p.metrics().duration_seconds(),
+        }
+    }
+
+    /// Check if duration is from actual metadata or estimated.
+    ///
+    /// Returns false for older SNDH files using the 5-minute fallback.
+    pub fn has_duration_info(&self) -> bool {
+        match self {
+            Self::Sndh(p) => p.has_duration_info(),
+            _ => true, // Other formats always have duration info
+        }
+    }
 }
 
 // ============================================================================
@@ -743,6 +776,27 @@ impl SndhBevyPlayer {
     }
 }
 
+impl SndhBevyPlayer {
+    /// Seek to a percentage position (0.0 to 1.0).
+    pub fn seek_percentage(&mut self, position: f32) -> bool {
+        let result = ChiptunePlayerBase::seek(&mut self.player, position);
+        if result {
+            self.cache.reset();
+        }
+        result
+    }
+
+    /// Get duration in seconds.
+    pub fn duration_seconds(&self) -> f32 {
+        ChiptunePlayerBase::duration_seconds(&self.player)
+    }
+
+    /// Check if duration is from metadata or estimated.
+    pub fn has_duration_info(&self) -> bool {
+        self.player.has_duration_info()
+    }
+}
+
 impl BevyPlayerTrait for SndhBevyPlayer {
     fn play(&mut self) {
         ChiptunePlayerBase::play(&mut self.player);
@@ -761,7 +815,7 @@ impl BevyPlayerTrait for SndhBevyPlayer {
     }
 
     fn current_frame(&self) -> usize {
-        0
+        self.player.current_frame() as usize
     }
 
     fn samples_per_frame(&self) -> u32 {
@@ -790,7 +844,7 @@ impl BevyPlayerTrait for SndhBevyPlayer {
 
     fn metrics(&self) -> Option<PlaybackMetrics> {
         Some(PlaybackMetrics {
-            frame_count: 0,
+            frame_count: self.player.total_frames() as usize,
             samples_per_frame: self.samples_per_frame,
         })
     }
@@ -800,7 +854,7 @@ impl BevyPlayerTrait for SndhBevyPlayer {
     }
 
     fn frame_count(&self) -> usize {
-        0
+        self.player.total_frames() as usize
     }
 
     fn subsong_count(&self) -> usize {

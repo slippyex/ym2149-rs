@@ -117,7 +117,8 @@ impl Cpu68k for R68kBackend {
         // Set to Normal state so it's ready to execute instructions
         // (new_with starts in Group0Exception state)
         cpu.processing_state = ProcessingState::Normal;
-        // Set cycle granularity for Atari ST accuracy (4 cycles per step)
+        // Atari ST bus timing: 4-cycle boundary alignment due to GLUE/MMU wait states
+        // (r68k's Musashi tables provide base cycles, granularity models ST bus)
         cpu.set_cycle_granularity(4);
         Self { cpu }
     }

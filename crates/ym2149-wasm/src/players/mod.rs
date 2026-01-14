@@ -29,6 +29,7 @@ impl BrowserSongPlayer {
     /// Seek to a specific frame.
     ///
     /// Returns `true` if seek is supported and successful, `false` otherwise.
+    /// Supported for YM and SNDH formats. Arkos and AY do not support seeking.
     pub fn seek_frame(&mut self, frame: usize) -> bool {
         match self {
             BrowserSongPlayer::Ym(player) => {
@@ -37,7 +38,45 @@ impl BrowserSongPlayer {
             }
             BrowserSongPlayer::Arkos(_) => false,
             BrowserSongPlayer::Ay(_) => false,
-            BrowserSongPlayer::Sndh(_) => false,
+            BrowserSongPlayer::Sndh(player) => player.seek_frame(frame),
+        }
+    }
+
+    /// Seek to a percentage position (0.0 to 1.0).
+    ///
+    /// Returns `true` if seek is supported and successful.
+    /// Uses ChiptunePlayerBase::seek() which handles fallback duration for older SNDH.
+    pub fn seek_percentage(&mut self, position: f32) -> bool {
+        match self {
+            BrowserSongPlayer::Ym(player) => ChiptunePlayerBase::seek(player.as_mut(), position),
+            BrowserSongPlayer::Arkos(_) => false,
+            BrowserSongPlayer::Ay(_) => false,
+            BrowserSongPlayer::Sndh(player) => player.seek_percentage(position),
+        }
+    }
+
+    /// Get duration in seconds.
+    ///
+    /// For SNDH < 2.2 without FRMS/TIME, returns 300 (5 minute fallback).
+    pub fn duration_seconds(&self) -> f32 {
+        match self {
+            BrowserSongPlayer::Ym(player) => ChiptunePlayerBase::duration_seconds(player.as_ref()),
+            BrowserSongPlayer::Arkos(player) => player.duration_seconds(),
+            BrowserSongPlayer::Ay(player) => player.duration_seconds(),
+            BrowserSongPlayer::Sndh(player) => player.duration_seconds(),
+        }
+    }
+
+    /// Check if the duration is from actual metadata or estimated.
+    ///
+    /// Returns false for older SNDH files using the 5-minute fallback.
+    /// Always returns true for YM/Arkos/AY (they always have duration info).
+    pub fn has_duration_info(&self) -> bool {
+        match self {
+            BrowserSongPlayer::Ym(_) => true,
+            BrowserSongPlayer::Arkos(_) => true,
+            BrowserSongPlayer::Ay(_) => true,
+            BrowserSongPlayer::Sndh(player) => player.has_duration_info(),
         }
     }
 
