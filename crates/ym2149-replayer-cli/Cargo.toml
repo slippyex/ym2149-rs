@@ -46,3 +46,4 @@ crossterm = "0.28"
 [features]
 default = []
 softsynth = [] # workspace-only hook for experimental softsynth backends
+lmc1992-debug = ["ym2149_sndh_replayer/lmc1992-debug"]

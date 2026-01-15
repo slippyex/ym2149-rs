@@ -226,6 +226,10 @@ pub struct Ym2149Playback {
     pub(crate) cached_subsong_count: usize,
     /// Cached current subsong index (preserved during reload, 1-based)
     pub(crate) cached_current_subsong: usize,
+    /// Audio stream state for flushing buffer on seek
+    pub(crate) audio_stream_state: Option<Arc<crate::streaming::AudioStreamState>>,
+    /// The audio source's player (separate from visualization player) for seeking
+    pub(crate) audio_player: Option<SharedSongPlayer>,
 }
 
 /// The current state of YM2149 playback
@@ -266,59 +270,15 @@ impl Ym2149Playback {
         debug_assert!(!path.is_empty(), "source_path should not be empty");
         Self {
             source_path: Some(path),
-            source_bytes: None,
-            source_asset: None,
-            state: PlaybackState::Idle,
-            frame_position: 0,
-            volume: 1.0,
-            left_gain: 1.0,
-            right_gain: 1.0,
-            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
-            player: None,
-            needs_reload: false,
-            song_title: String::new(),
-            song_author: String::new(),
-            metrics: None,
-            pending_playlist_index: None,
-            pending_crossfade: None,
-            crossfade: None,
-            inline_player: false,
-            inline_audio_ready: false,
-            inline_metadata: None,
-            pending_subsong: None,
-            cached_subsong_count: 1,
-            cached_current_subsong: 1,
-            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
+            ..Default::default()
         }
     }
 
     /// Create a new playback component that will stream from a loaded Bevy asset.
     pub fn from_asset(handle: Handle<crate::audio_source::Ym2149AudioSource>) -> Self {
         Self {
-            source_path: None,
-            source_bytes: None,
             source_asset: Some(handle),
-            state: PlaybackState::Idle,
-            frame_position: 0,
-            volume: 1.0,
-            left_gain: 1.0,
-            right_gain: 1.0,
-            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
-            player: None,
-            needs_reload: false,
-            song_title: String::new(),
-            song_author: String::new(),
-            metrics: None,
-            pending_playlist_index: None,
-            pending_crossfade: None,
-            crossfade: None,
-            inline_player: false,
-            inline_audio_ready: false,
-            inline_metadata: None,
-            pending_subsong: None,
-            cached_subsong_count: 1,
-            cached_current_subsong: 1,
-            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
+            ..Default::default()
         }
     }
 
@@ -332,30 +292,8 @@ impl Ym2149Playback {
         let data = bytes.into();
         debug_assert!(!data.is_empty(), "bytes should not be empty");
         Self {
-            source_path: None,
             source_bytes: Some(Arc::new(data)),
-            source_asset: None,
-            state: PlaybackState::Idle,
-            frame_position: 0,
-            volume: 1.0,
-            left_gain: 1.0,
-            right_gain: 1.0,
-            stereo_gain: Arc::new(RwLock::new((1.0, 1.0))),
-            player: None,
-            needs_reload: false,
-            song_title: String::new(),
-            song_author: String::new(),
-            metrics: None,
-            pending_playlist_index: None,
-            pending_crossfade: None,
-            crossfade: None,
-            inline_player: false,
-            inline_audio_ready: false,
-            inline_metadata: None,
-            pending_subsong: None,
-            cached_subsong_count: 1,
-            cached_current_subsong: 1,
-            tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
+            ..Default::default()
         }
     }
 
@@ -393,6 +331,8 @@ impl Ym2149Playback {
             cached_subsong_count: 1,
             cached_current_subsong: 1,
             tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
+            audio_stream_state: None,
+            audio_player: None,
         }
     }
 
@@ -469,20 +409,34 @@ impl Ym2149Playback {
 
     /// Seek to a percentage position (0.0 to 1.0).
     ///
-    /// Returns true if seeking succeeded. Works for all SNDH files (uses fallback duration for older files).
-    /// For non-SNDH formats, this currently returns false.
+    /// Returns true if seeking succeeded. Works for YM and SNDH files.
     pub fn seek_percentage(&mut self, position: f32) -> bool {
+        let mut success = false;
+
+        // Seek the audio player (the one that generates actual audio output)
+        if let Some(audio_player) = &self.audio_player {
+            let mut guard = audio_player.write();
+            if guard.seek_percentage(position) {
+                self.frame_position = guard.current_frame() as u32;
+                success = true;
+            }
+        }
+
+        // Also seek the visualization player to keep it in sync
         if let Some(player) = &self.player {
             let mut guard = player.write();
-            let result = guard.seek_percentage(position);
-            if result {
-                // Update frame_position to match the player's new position
-                self.frame_position = guard.current_frame() as u32;
-            }
-            result
-        } else {
-            false
+            let _ = guard.seek_percentage(position);
         }
+
+        // Flush the audio buffer and notify decoder to clear local buffer
+        if success {
+            if let Some(state) = &self.audio_stream_state {
+                state.buffer.flush();
+                state.notify_seek();
+            }
+        }
+
+        success
     }
 
     /// Get duration in seconds.
@@ -786,6 +740,8 @@ impl Default for Ym2149Playback {
             cached_subsong_count: 1,
             cached_current_subsong: 1,
             tone_settings: Arc::new(RwLock::new(ToneSettings::default())),
+            audio_stream_state: None,
+            audio_player: None,
         }
     }
 }

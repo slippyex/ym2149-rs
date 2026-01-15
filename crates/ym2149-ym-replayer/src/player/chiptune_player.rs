@@ -121,6 +121,23 @@ impl<B: Ym2149Backend> ChiptunePlayerBase for YmPlayerGeneric<B> {
     fn is_channel_muted(&self, channel: usize) -> bool {
         YmPlayerGeneric::is_channel_muted(self, channel)
     }
+
+    fn seek(&mut self, position: f32) -> bool {
+        let frame_count = self.frame_count();
+        if frame_count == 0 {
+            return false;
+        }
+        let target_frame = (position.clamp(0.0, 1.0) * frame_count as f32) as usize;
+        self.seek_frame(target_frame);
+        true
+    }
+
+    fn duration_seconds(&self) -> f32 {
+        let frame_count = self.frame_count();
+        let samples_per_frame = self.samples_per_frame_value() as f32;
+        let sample_rate = self.sample_rate() as f32;
+        (frame_count as f32 * samples_per_frame) / sample_rate
+    }
 }
 
 impl<B: Ym2149Backend> ChiptunePlayer for YmPlayerGeneric<B> {

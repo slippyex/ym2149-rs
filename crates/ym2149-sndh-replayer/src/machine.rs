@@ -37,6 +37,17 @@ const TIMER_ID_MAP: [TimerId; 5] = [
 /// RAM size (4 MB)
 const RAM_SIZE: usize = 4 * 1024 * 1024;
 
+// Memory-mapped hardware address ranges
+const YM2149_START: u32 = 0xFF8800;
+const YM2149_END: u32 = 0xFF8900;
+const STE_DAC_START: u32 = 0xFF8900;
+const STE_DAC_END: u32 = 0xFF8922;
+const LMC1992_START: u32 = 0xFF8922;
+const LMC1992_END: u32 = 0xFF8926;
+const MFP_START: u32 = 0xFFFA00;
+const MFP_END: u32 = 0xFFFA26;
+const MFP_WRITE_END: u32 = 0xFFFB00;
+
 /// Address for RTE instruction (to return from interrupts)
 const RTE_INSTRUCTION_ADDR: u32 = 0x500;
 
@@ -143,23 +154,23 @@ impl AtariMemory {
         }
 
         // YM2149 PSG read
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             return self.ym2149.read_port((addr & 0xff) as u8);
         }
 
         // STE DAC read (excluding Microwire registers)
-        if (0xFF8900..0xFF8922).contains(&addr) {
-            return self.ste_dac.read8((addr - 0xFF8900) as u8);
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) {
+            return self.ste_dac.read8((addr - STE_DAC_START) as u8);
         }
 
         // LMC1992 Microwire registers
-        if (0xFF8922..0xFF8926).contains(&addr) {
-            return self.lmc1992.read8((addr - 0xFF8900) as u8);
+        if (LMC1992_START..LMC1992_END).contains(&addr) {
+            return self.lmc1992.read8((addr - STE_DAC_START) as u8);
         }
 
         // MFP 68901
-        if (0xFFFA00..0xFFFA26).contains(&addr) {
-            return self.mfp.read8((addr - 0xFFFA00) as u8);
+        if (MFP_START..MFP_END).contains(&addr) {
+            return self.mfp.read8((addr - MFP_START) as u8);
         }
 
         // Video resolution (simulate low res)
@@ -184,26 +195,26 @@ impl AtariMemory {
         }
 
         // YM2149 PSG write
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             self.ym2149.write_port((addr & 0xfe) as u8, value);
             return;
         }
 
         // STE DAC write (excluding Microwire registers)
-        if (0xFF8900..0xFF8922).contains(&addr) {
-            self.ste_dac.write8((addr - 0xFF8900) as u8, value);
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) {
+            self.ste_dac.write8((addr - STE_DAC_START) as u8, value);
             return;
         }
 
         // LMC1992 Microwire registers
-        if (0xFF8922..0xFF8926).contains(&addr) {
-            self.lmc1992.write8((addr - 0xFF8900) as u8, value);
+        if (LMC1992_START..LMC1992_END).contains(&addr) {
+            self.lmc1992.write8((addr - STE_DAC_START) as u8, value);
             return;
         }
 
         // MFP 68901
-        if (0xFFFA00..0xFFFB00).contains(&addr) {
-            self.mfp.write8((addr - 0xFFFA00) as u8, value);
+        if (MFP_START..MFP_WRITE_END).contains(&addr) {
+            self.mfp.write8((addr - MFP_START) as u8, value);
         }
     }
 
@@ -211,22 +222,22 @@ impl AtariMemory {
         let addr = addr & 0x00FF_FFFF;
 
         // MFP word read
-        if (0xFFFA00..0xFFFA26).contains(&addr) {
-            return self.mfp.read16((addr - 0xFFFA00) as u8);
+        if (MFP_START..MFP_END).contains(&addr) {
+            return self.mfp.read16((addr - MFP_START) as u8);
         }
 
         // STE DAC word read (excluding Microwire registers)
-        if (0xFF8900..0xFF8922).contains(&addr) && (addr & 1) == 0 {
-            return self.ste_dac.read16((addr - 0xFF8900) as u8);
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) && (addr & 1) == 0 {
+            return self.ste_dac.read16((addr - STE_DAC_START) as u8);
         }
 
         // LMC1992 Microwire word read
-        if (0xFF8922..0xFF8926).contains(&addr) && (addr & 1) == 0 {
-            return self.lmc1992.read16((addr - 0xFF8900) as u8);
+        if (LMC1992_START..LMC1992_END).contains(&addr) && (addr & 1) == 0 {
+            return self.lmc1992.read16((addr - STE_DAC_START) as u8);
         }
 
         // YM2149
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             return (self.ym2149.read_port((addr & 0xfe) as u8) as u16) << 8;
         }
 
@@ -238,27 +249,27 @@ impl AtariMemory {
         let addr = addr & 0x00FF_FFFF;
 
         // YM2149 PSG word write
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             self.ym2149
                 .write_port((addr & 0xfe) as u8, (value >> 8) as u8);
             return;
         }
 
         // STE DAC word write (excluding Microwire registers)
-        if (0xFF8900..0xFF8922).contains(&addr) {
-            self.ste_dac.write16((addr - 0xFF8900) as u8, value);
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) {
+            self.ste_dac.write16((addr - STE_DAC_START) as u8, value);
             return;
         }
 
         // LMC1992 Microwire word write
-        if (0xFF8922..0xFF8926).contains(&addr) {
-            self.lmc1992.write16((addr - 0xFF8900) as u8, value);
+        if (LMC1992_START..LMC1992_END).contains(&addr) {
+            self.lmc1992.write16((addr - STE_DAC_START) as u8, value);
             return;
         }
 
         // MFP 68901 word write
-        if (0xFFFA00..0xFFFB00).contains(&addr) {
-            self.mfp.write16((addr - 0xFFFA00) as u8, value);
+        if (MFP_START..MFP_WRITE_END).contains(&addr) {
+            self.mfp.write16((addr - MFP_START) as u8, value);
             return;
         }
 

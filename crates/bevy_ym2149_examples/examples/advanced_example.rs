@@ -6,6 +6,7 @@
 //! - Keyboard-based playback control
 
 use bevy::prelude::*;
+use bevy::ui::UiGlobalTransform;
 use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{
     PatternTrigger, PatternTriggerSet, PatternTriggered, PlaybackState, Ym2149Playback,
@@ -282,15 +283,17 @@ fn log_pattern_hits(mut hits: MessageReader<PatternTriggered>) {
     }
 }
 
-/// Handle clicks on the progress bar to seek to the clicked position.
+/// Handle clicks and drags on the progress bar to seek.
 fn progress_bar_seek(
     mut playbacks: Query<&mut Ym2149Playback>,
-    progress_bars: Query<
-        (&Interaction, &GlobalTransform, &ComputedNode),
-        (With<ProgressBarContainer>, Changed<Interaction>),
-    >,
+    progress_bars: Query<(&ComputedNode, &UiGlobalTransform), With<ProgressBarContainer>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
 ) {
+    if !mouse.pressed(MouseButton::Left) {
+        return;
+    }
+
     let Ok(window) = windows.single() else {
         return;
     };
@@ -298,24 +301,25 @@ fn progress_bar_seek(
         return;
     };
 
-    for (interaction, transform, computed) in &progress_bars {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
+    let scale_factor = window.scale_factor();
+    let cursor_physical = cursor_pos * scale_factor;
 
-        // Get the bar's position and size in screen coordinates
-        let bar_pos = transform.translation().truncate();
-        let bar_size = computed.size();
+    for (computed, ui_transform) in &progress_bars {
+        let node_size = computed.size();
+        let half_width = node_size.x / 2.0;
+        let half_height = node_size.y / 2.0;
+        let node_left = ui_transform.translation.x - half_width;
+        let node_top = ui_transform.translation.y - half_height;
+        let node_bottom = ui_transform.translation.y + half_height;
 
-        // Calculate local X position within the bar (Bevy UI uses center origin)
-        let local_x = cursor_pos.x - (bar_pos.x - bar_size.x / 2.0);
-        let percentage = (local_x / bar_size.x).clamp(0.0, 1.0);
+        if cursor_physical.y >= node_top && cursor_physical.y <= node_bottom {
+            let clamped_x = cursor_physical.x.clamp(node_left, node_left + node_size.x);
+            let percentage = ((clamped_x - node_left) / node_size.x).clamp(0.0, 1.0);
 
-        // Seek all playback entities to the clicked position
-        for mut playback in &mut playbacks {
-            if playback.seek_percentage(percentage) {
-                info!("Seeked to {:.1}%", percentage * 100.0);
+            for mut playback in &mut playbacks {
+                playback.seek_percentage(percentage);
             }
+            return;
         }
     }
 }

@@ -5,7 +5,7 @@
     "slippyex"
   ],
   "description": "WebAssembly bindings for YM2149 PSG emulator - play YM files in the browser",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "license": "MIT",
   "repository": {
     "type": "git",

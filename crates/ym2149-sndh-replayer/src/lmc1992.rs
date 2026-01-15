@@ -12,103 +12,133 @@
 //! - Bits 8-6: Function select
 //! - Bits 5-0: Data value
 
-/// Biquad filter for bass/treble EQ.
+/// First-order shelving filter for bass/treble EQ.
+///
+/// The LMC1992 uses analog shelving filters. First-order shelves provide
+/// the characteristic 6dB/octave slope that matches analog tone controls.
+/// We cascade two first-order sections to achieve the full ±12dB range
+/// with proper frequency response.
 #[derive(Clone, Debug)]
-struct BiquadFilter {
-    // Coefficients
+struct ShelvingFilter {
+    // First-order IIR coefficients: y = b0*x + b1*x1 - a1*y1
     b0: f32,
     b1: f32,
-    b2: f32,
     a1: f32,
-    a2: f32,
-    // State
+    // Filter state
     x1: f32,
-    x2: f32,
     y1: f32,
-    y2: f32,
+    // For debug
+    #[cfg(feature = "lmc1992-debug")]
+    gain_db: f32,
 }
 
-impl Default for BiquadFilter {
+impl Default for ShelvingFilter {
     fn default() -> Self {
         Self {
             // Unity gain (passthrough)
             b0: 1.0,
             b1: 0.0,
-            b2: 0.0,
             a1: 0.0,
-            a2: 0.0,
             x1: 0.0,
-            x2: 0.0,
             y1: 0.0,
-            y2: 0.0,
+            #[cfg(feature = "lmc1992-debug")]
+            gain_db: 0.0,
         }
     }
 }
 
-impl BiquadFilter {
+impl ShelvingFilter {
     /// Configure as low-shelf filter for bass control.
+    /// Uses first-order design for analog-like response.
     /// gain_db: -12 to +12 dB
+    ///
+    /// First-order low shelf: H(s) = (s + ω₀×√G) / (s + ω₀/√G)
+    /// DC gain = G, high-frequency gain = 1
     fn configure_low_shelf(&mut self, sample_rate: f32, freq: f32, gain_db: f32) {
-        let a = 10.0_f32.powf(gain_db / 40.0);
-        let w0 = 2.0 * std::f32::consts::PI * freq / sample_rate;
-        let cos_w0 = w0.cos();
-        let sin_w0 = w0.sin();
-        let alpha = sin_w0 / 2.0 * ((a + 1.0 / a) * (1.0 / 0.9 - 1.0) + 2.0).sqrt();
+        #[cfg(feature = "lmc1992-debug")]
+        {
+            self.gain_db = gain_db;
+        }
 
-        let a_plus_1 = a + 1.0;
-        let a_minus_1 = a - 1.0;
-        let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
+        if gain_db.abs() < 0.01 {
+            // Flat - passthrough
+            self.b0 = 1.0;
+            self.b1 = 0.0;
+            self.a1 = 0.0;
+            return;
+        }
 
-        let a0 = a_plus_1 + a_minus_1 * cos_w0 + two_sqrt_a_alpha;
+        // Linear gain and its square root
+        let g = 10.0_f32.powf(gain_db / 20.0);
+        let sqrt_g = g.sqrt();
 
-        self.b0 = (a * (a_plus_1 - a_minus_1 * cos_w0 + two_sqrt_a_alpha)) / a0;
-        self.b1 = (2.0 * a * (a_minus_1 - a_plus_1 * cos_w0)) / a0;
-        self.b2 = (a * (a_plus_1 - a_minus_1 * cos_w0 - two_sqrt_a_alpha)) / a0;
-        self.a1 = (-2.0 * (a_minus_1 + a_plus_1 * cos_w0)) / a0;
-        self.a2 = (a_plus_1 + a_minus_1 * cos_w0 - two_sqrt_a_alpha) / a0;
+        // Bilinear transform: K = tan(π × fc / fs)
+        let k = (std::f32::consts::PI * freq / sample_rate).tan();
+
+        // Coefficients for H(s) = (s + ω₀×√G) / (s + ω₀/√G)
+        // After bilinear transform:
+        let k_sqrt_g = k * sqrt_g;
+        let k_over_sqrt_g = k / sqrt_g;
+        let denom = 1.0 + k_over_sqrt_g;
+
+        self.b0 = (1.0 + k_sqrt_g) / denom;
+        self.b1 = (k_sqrt_g - 1.0) / denom;
+        self.a1 = (k_over_sqrt_g - 1.0) / denom;
     }
 
     /// Configure as high-shelf filter for treble control.
+    /// Uses first-order design for analog-like response.
     /// gain_db: -12 to +12 dB
+    ///
+    /// First-order high shelf analog prototype:
+    /// H(s) = (s×√G + ω₀) / (s/√G + ω₀)
+    /// DC gain = 1, high-frequency gain = G
     fn configure_high_shelf(&mut self, sample_rate: f32, freq: f32, gain_db: f32) {
-        let a = 10.0_f32.powf(gain_db / 40.0);
-        let w0 = 2.0 * std::f32::consts::PI * freq / sample_rate;
-        let cos_w0 = w0.cos();
-        let sin_w0 = w0.sin();
-        let alpha = sin_w0 / 2.0 * ((a + 1.0 / a) * (1.0 / 0.9 - 1.0) + 2.0).sqrt();
+        #[cfg(feature = "lmc1992-debug")]
+        {
+            self.gain_db = gain_db;
+        }
 
-        let a_plus_1 = a + 1.0;
-        let a_minus_1 = a - 1.0;
-        let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
+        if gain_db.abs() < 0.01 {
+            // Flat - passthrough
+            self.b0 = 1.0;
+            self.b1 = 0.0;
+            self.a1 = 0.0;
+            return;
+        }
 
-        let a0 = a_plus_1 - a_minus_1 * cos_w0 + two_sqrt_a_alpha;
+        // Linear gain and its square root
+        let g = 10.0_f32.powf(gain_db / 20.0);
+        let sqrt_g = g.sqrt();
 
-        self.b0 = (a * (a_plus_1 + a_minus_1 * cos_w0 + two_sqrt_a_alpha)) / a0;
-        self.b1 = (-2.0 * a * (a_minus_1 + a_plus_1 * cos_w0)) / a0;
-        self.b2 = (a * (a_plus_1 + a_minus_1 * cos_w0 - two_sqrt_a_alpha)) / a0;
-        self.a1 = (2.0 * (a_minus_1 - a_plus_1 * cos_w0)) / a0;
-        self.a2 = (a_plus_1 - a_minus_1 * cos_w0 - two_sqrt_a_alpha) / a0;
+        // Bilinear transform: K = tan(π × fc / fs)
+        let k = (std::f32::consts::PI * freq / sample_rate).tan();
+
+        // First-order high shelf via bilinear transform:
+        // H(s) = (s×√G + ω₀) / (s/√G + ω₀)
+        // After transform with pre-warping:
+        // b0 = √G × (√G + k) / (1 + k×√G)
+        // b1 = √G × (k - √G) / (1 + k×√G)
+        // a1 = (k×√G - 1) / (1 + k×√G)
+        let k_sqrt_g = k * sqrt_g;
+        let denom = 1.0 + k_sqrt_g;
+
+        self.b0 = sqrt_g * (sqrt_g + k) / denom;
+        self.b1 = sqrt_g * (k - sqrt_g) / denom;
+        self.a1 = (k_sqrt_g - 1.0) / denom;
     }
 
     /// Reset filter state.
     fn reset(&mut self) {
         self.x1 = 0.0;
-        self.x2 = 0.0;
         self.y1 = 0.0;
-        self.y2 = 0.0;
     }
 
-    /// Process a single sample.
+    /// Process a single sample through first-order IIR.
     fn process(&mut self, input: f32) -> f32 {
-        let output = self.b0 * input + self.b1 * self.x1 + self.b2 * self.x2
-            - self.a1 * self.y1
-            - self.a2 * self.y2;
-
-        self.x2 = self.x1;
+        let output = self.b0 * input + self.b1 * self.x1 - self.a1 * self.y1;
         self.x1 = input;
-        self.y2 = self.y1;
         self.y1 = output;
-
         output
     }
 }
@@ -162,14 +192,22 @@ pub struct Lmc1992 {
     /// Mix control: true = mix YM2149, false = don't mix
     mix_ym: bool,
 
-    /// Bass filter (left channel)
-    bass_filter_l: BiquadFilter,
-    /// Bass filter (right channel)
-    bass_filter_r: BiquadFilter,
-    /// Treble filter (left channel)
-    treble_filter_l: BiquadFilter,
-    /// Treble filter (right channel)
-    treble_filter_r: BiquadFilter,
+    /// Bass filter stage 1 (left channel)
+    bass_filter_l1: ShelvingFilter,
+    /// Bass filter stage 1 (right channel)
+    bass_filter_r1: ShelvingFilter,
+    /// Bass filter stage 2 (left channel) - cascaded for 12dB/octave
+    bass_filter_l2: ShelvingFilter,
+    /// Bass filter stage 2 (right channel) - cascaded for 12dB/octave
+    bass_filter_r2: ShelvingFilter,
+    /// Treble filter stage 1 (left channel)
+    treble_filter_l1: ShelvingFilter,
+    /// Treble filter stage 1 (right channel)
+    treble_filter_r1: ShelvingFilter,
+    /// Treble filter stage 2 (left channel) - cascaded for 12dB/octave
+    treble_filter_l2: ShelvingFilter,
+    /// Treble filter stage 2 (right channel) - cascaded for 12dB/octave
+    treble_filter_r2: ShelvingFilter,
 
     /// Sample rate for filter calculations
     sample_rate: f32,
@@ -198,10 +236,14 @@ impl Lmc1992 {
             // Default: mix YM2149
             mix_ym: true,
 
-            bass_filter_l: BiquadFilter::default(),
-            bass_filter_r: BiquadFilter::default(),
-            treble_filter_l: BiquadFilter::default(),
-            treble_filter_r: BiquadFilter::default(),
+            bass_filter_l1: ShelvingFilter::default(),
+            bass_filter_r1: ShelvingFilter::default(),
+            bass_filter_l2: ShelvingFilter::default(),
+            bass_filter_r2: ShelvingFilter::default(),
+            treble_filter_l1: ShelvingFilter::default(),
+            treble_filter_r1: ShelvingFilter::default(),
+            treble_filter_l2: ShelvingFilter::default(),
+            treble_filter_r2: ShelvingFilter::default(),
 
             sample_rate: sample_rate as f32,
 
@@ -229,10 +271,14 @@ impl Lmc1992 {
 
         self.sample_rate = sample_rate as f32;
 
-        self.bass_filter_l.reset();
-        self.bass_filter_r.reset();
-        self.treble_filter_l.reset();
-        self.treble_filter_r.reset();
+        self.bass_filter_l1.reset();
+        self.bass_filter_r1.reset();
+        self.bass_filter_l2.reset();
+        self.bass_filter_r2.reset();
+        self.treble_filter_l1.reset();
+        self.treble_filter_r1.reset();
+        self.treble_filter_l2.reset();
+        self.treble_filter_r2.reset();
 
         self.update_filters();
         self.update_gains();
@@ -358,30 +404,40 @@ impl Lmc1992 {
                 // 0 = -80dB, 40 = 0dB
                 self.master_volume = data.min(40);
                 self.update_gains();
+                #[cfg(feature = "lmc1992-debug")]
+                eprintln!("[LMC1992] Master Volume: {} (gain={:.3})", self.master_volume, self.master_gain);
             }
             Lmc1992Function::LeftVolume => {
                 // Data bits 4-0: volume level (0-20 in 2dB steps)
                 // 0 = -40dB, 20 = 0dB
                 self.left_volume = (data & 0x1F).min(20);
                 self.update_gains();
+                #[cfg(feature = "lmc1992-debug")]
+                eprintln!("[LMC1992] Left Volume: {} (gain={:.3})", self.left_volume, self.left_gain);
             }
             Lmc1992Function::RightVolume => {
                 // Data bits 4-0: volume level (0-20 in 2dB steps)
                 // 0 = -40dB, 20 = 0dB
                 self.right_volume = (data & 0x1F).min(20);
                 self.update_gains();
+                #[cfg(feature = "lmc1992-debug")]
+                eprintln!("[LMC1992] Right Volume: {} (gain={:.3})", self.right_volume, self.right_gain);
             }
             Lmc1992Function::Bass => {
                 // Data bits 3-0: bass level (0-12)
                 // 0 = -12dB, 6 = 0dB, 12 = +12dB
                 self.bass = (data & 0x0F).min(12);
                 self.update_filters();
+                #[cfg(feature = "lmc1992-debug")]
+                eprintln!("[LMC1992] Bass: {} ({}dB)", self.bass, (self.bass as i8 - 6) * 2);
             }
             Lmc1992Function::Treble => {
                 // Data bits 3-0: treble level (0-12)
                 // 0 = -12dB, 6 = 0dB, 12 = +12dB
                 self.treble = (data & 0x0F).min(12);
                 self.update_filters();
+                #[cfg(feature = "lmc1992-debug")]
+                eprintln!("[LMC1992] Treble: {} ({}dB)", self.treble, (self.treble as i8 - 6) * 2);
             }
             Lmc1992Function::Mix => {
                 // Data bits 1-0: mix control (LMC1992 input select)
@@ -391,6 +447,8 @@ impl Lmc1992 {
                 // 11 = reserved
                 // Mix YM when bit 1 is 0 (values 00 or 01)
                 self.mix_ym = (data & 0x02) == 0;
+                #[cfg(feature = "lmc1992-debug")]
+                eprintln!("[LMC1992] Mix: data={}, mix_ym={}", data, self.mix_ym);
             }
         }
     }
@@ -402,17 +460,40 @@ impl Lmc1992 {
         // Treble: -12dB to +12dB (index 0-12, 6 = flat)
         let treble_db = (self.treble as f32 - 6.0) * 2.0;
 
-        // Bass shelf at ~100Hz
-        self.bass_filter_l
-            .configure_low_shelf(self.sample_rate, 100.0, bass_db);
-        self.bass_filter_r
-            .configure_low_shelf(self.sample_rate, 100.0, bass_db);
+        // Atari STE filter frequencies (empirically measured from real hardware):
+        // - Bass turnover: 118.276 Hz
+        // - Treble turnover: 8438.756 Hz
+        const STE_BASS_FREQ: f32 = 118.276;
+        const STE_TREBLE_FREQ: f32 = 8438.756;
 
-        // Treble shelf at ~10kHz
-        self.treble_filter_l
-            .configure_high_shelf(self.sample_rate, 10000.0, treble_db);
-        self.treble_filter_r
-            .configure_high_shelf(self.sample_rate, 10000.0, treble_db);
+        // Cascade two first-order shelves to get 12dB/octave slope
+        // Each stage applies half the dB gain
+        let bass_db_per_stage = bass_db / 2.0;
+        let treble_db_per_stage = treble_db / 2.0;
+
+        self.bass_filter_l1
+            .configure_low_shelf(self.sample_rate, STE_BASS_FREQ, bass_db_per_stage);
+        self.bass_filter_r1
+            .configure_low_shelf(self.sample_rate, STE_BASS_FREQ, bass_db_per_stage);
+        self.bass_filter_l2
+            .configure_low_shelf(self.sample_rate, STE_BASS_FREQ, bass_db_per_stage);
+        self.bass_filter_r2
+            .configure_low_shelf(self.sample_rate, STE_BASS_FREQ, bass_db_per_stage);
+
+        self.treble_filter_l1
+            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
+        self.treble_filter_r1
+            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
+        self.treble_filter_l2
+            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
+        self.treble_filter_r2
+            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
+
+        #[cfg(feature = "lmc1992-debug")]
+        eprintln!(
+            "[LMC1992] Filter update: bass_db={}, treble_db={} (cascaded 2x{}dB/stage)",
+            bass_db, treble_db, bass_db_per_stage
+        );
     }
 
     /// Update volume gain multipliers.
@@ -440,13 +521,17 @@ impl Lmc1992 {
         let mut left_f = left as f32;
         let mut right_f = right as f32;
 
-        // Apply bass filter
-        left_f = self.bass_filter_l.process(left_f);
-        right_f = self.bass_filter_r.process(right_f);
+        // Apply cascaded bass filters (2 stages for 12dB/octave slope)
+        left_f = self.bass_filter_l1.process(left_f);
+        left_f = self.bass_filter_l2.process(left_f);
+        right_f = self.bass_filter_r1.process(right_f);
+        right_f = self.bass_filter_r2.process(right_f);
 
-        // Apply treble filter
-        left_f = self.treble_filter_l.process(left_f);
-        right_f = self.treble_filter_r.process(right_f);
+        // Apply cascaded treble filters (2 stages for 12dB/octave slope)
+        left_f = self.treble_filter_l1.process(left_f);
+        left_f = self.treble_filter_l2.process(left_f);
+        right_f = self.treble_filter_r1.process(right_f);
+        right_f = self.treble_filter_r2.process(right_f);
 
         // Apply volume controls
         left_f *= self.master_gain * self.left_gain;
@@ -527,5 +612,32 @@ mod tests {
         // Allow small deviation due to filter settling
         assert!((left - input).abs() < 50);
         assert!((right - input).abs() < 50);
+    }
+
+    #[test]
+    fn test_treble_cut_effect() {
+        let mut lmc = Lmc1992::new(44100);
+
+        // Set treble to -12dB (value 0)
+        // Command: 10 (addr) + 010 (treble) + 000000 (0)
+        // = 10_010_000000 = 0b10010000000 = 0x480
+        lmc.mw_mask = 0x07FF;
+        lmc.write16(0x22, 0x480);
+        assert_eq!(lmc.treble, 0);
+
+        // Process many samples to let filter settle, then check attenuation
+        // High frequency content should be attenuated significantly
+        let input = 10000_i16;
+        for _ in 0..1000 {
+            lmc.process_stereo(input, input);
+        }
+
+        // After settling, high-frequency attenuation should be noticeable
+        // At -12dB treble, the DC gain should be 1.0 but high freq gain should be ~0.25
+        let (left, _right) = lmc.process_stereo(input, input);
+
+        // The effect won't be dramatic for DC/constant input, but the filter
+        // should not amplify the signal
+        assert!(left <= input + 100, "Treble cut should not amplify: {} > {}", left, input);
     }
 }

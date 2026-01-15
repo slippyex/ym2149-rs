@@ -248,9 +248,10 @@ impl YmSongPlayer {
 
     /// Seek to a percentage position (0.0 to 1.0).
     ///
-    /// Returns true if seeking succeeded. Currently only supported for SNDH.
+    /// Returns true if seeking succeeded. Supported for YM and SNDH formats.
     pub fn seek_percentage(&mut self, position: f32) -> bool {
         match self {
+            Self::Ym(p) => p.seek_percentage(position),
             Self::Sndh(p) => p.seek_percentage(position),
             _ => false, // Other formats don't support percentage seeking yet
         }
@@ -298,6 +299,21 @@ impl YmBevyPlayer {
             metrics: PlaybackMetrics::from(summary),
             metadata,
         }
+    }
+
+    /// Seek to a percentage position (0.0 to 1.0).
+    pub fn seek_percentage(&mut self, position: f32) -> bool {
+        let frame_count = self.player.frame_count();
+        if frame_count == 0 {
+            bevy::log::warn!("YM seek failed: frame_count=0");
+            return false;
+        }
+        let target_frame = (position.clamp(0.0, 1.0) * frame_count as f32) as usize;
+        let before = self.player.get_current_frame();
+        self.player.seek_frame(target_frame);
+        let after = self.player.get_current_frame();
+        bevy::log::info!("YM seek: target={}, before={}, after={}", target_frame, before, after);
+        true
     }
 }
 
@@ -779,7 +795,10 @@ impl SndhBevyPlayer {
 impl SndhBevyPlayer {
     /// Seek to a percentage position (0.0 to 1.0).
     pub fn seek_percentage(&mut self, position: f32) -> bool {
+        let before = self.player.current_frame();
         let result = ChiptunePlayerBase::seek(&mut self.player, position);
+        let after = self.player.current_frame();
+        bevy::log::info!("SNDH seek: position={:.2}, result={}, before={}, after={}", position, result, before, after);
         if result {
             self.cache.reset();
         }

@@ -162,6 +162,8 @@ pub struct AudioStreamState {
     pub stereo_gain: RwLock<(f32, f32)>,
     /// Tone processing settings
     pub tone_settings: RwLock<ToneSettings>,
+    /// Seek counter - incremented on each seek to signal decoder to clear local buffer
+    pub seek_counter: AtomicUsize,
 }
 
 impl AudioStreamState {
@@ -172,7 +174,13 @@ impl AudioStreamState {
             ready: AtomicBool::new(false),
             stereo_gain: RwLock::new((1.0, 1.0)),
             tone_settings: RwLock::new(ToneSettings::default()),
+            seek_counter: AtomicUsize::new(0),
         }
+    }
+
+    /// Signal that a seek occurred - decoder should clear its local buffer
+    pub fn notify_seek(&self) {
+        self.seek_counter.fetch_add(1, Ordering::Release);
     }
 
     pub fn set_stereo_gain(&self, left: f32, right: f32) {
@@ -370,11 +378,14 @@ pub struct StreamingDecoder {
     /// Local buffer for batch reads
     local_buffer: Vec<f32>,
     local_pos: usize,
+    /// Last observed seek counter to detect when a seek occurred
+    last_seek_counter: usize,
 }
 
 impl StreamingDecoder {
     /// Create a new streaming decoder.
     pub fn new(state: Arc<AudioStreamState>, sample_rate: u32, total_samples: usize) -> Self {
+        let last_seek_counter = state.seek_counter.load(Ordering::Acquire);
         Self {
             state,
             sample_rate,
@@ -382,6 +393,17 @@ impl StreamingDecoder {
             current_sample: 0,
             local_buffer: Vec::new(),
             local_pos: 0,
+            last_seek_counter,
+        }
+    }
+
+    /// Check if a seek occurred and clear local buffer if so
+    fn check_seek(&mut self) {
+        let current = self.state.seek_counter.load(Ordering::Acquire);
+        if current != self.last_seek_counter {
+            self.last_seek_counter = current;
+            self.local_buffer.clear();
+            self.local_pos = 0;
         }
     }
 
@@ -411,6 +433,9 @@ impl Iterator for StreamingDecoder {
         if self.total_samples > 0 && self.current_sample >= self.total_samples * 2 {
             return None;
         }
+
+        // Check if a seek occurred - clear local buffer if so
+        self.check_seek();
 
         // Refill local buffer if exhausted
         if self.local_pos >= self.local_buffer.len() {

@@ -438,6 +438,8 @@ pub(in crate::plugin) fn initialize_playback(
                 .unwrap_or(usize::MAX);
             let audio_source =
                 Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
+            // Store stream state for seek buffer flushing
+            playback.audio_stream_state = Some(audio_source.stream_state());
             let audio_handle = audio_assets.add(audio_source);
             let settings = if playback.state == PlaybackState::Playing {
                 PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(playback.volume))
@@ -471,6 +473,8 @@ pub(in crate::plugin) fn initialize_playback(
 
             let audio_source =
                 Ym2149AudioSource::from_shared_player(player_arc, metadata, total_samples);
+            // Store stream state for seek buffer flushing
+            playback.audio_stream_state = Some(audio_source.stream_state());
             let audio_handle = audio_assets.add(audio_source);
 
             // Remove old AudioPlayer and AudioSink components if they exist
@@ -556,7 +560,7 @@ pub(in crate::plugin) fn initialize_playback(
                 old_sink.stop();
             }
 
-            // Create a Ym2149AudioSource with its own player (separate from diagnostics)
+            // Create a Ym2149AudioSource with its own player
             // but with the same subsong selection applied
             let audio_source = match Ym2149AudioSource::new_with_subsong(
                 loaded.data.clone(),
@@ -570,6 +574,11 @@ pub(in crate::plugin) fn initialize_playback(
                     continue;
                 }
             };
+
+            // Store the audio source's player for seeking (separate from visualization player)
+            playback.audio_player = Some(audio_source.shared_player());
+            // Store stream state for seek buffer flushing
+            playback.audio_stream_state = Some(audio_source.stream_state());
 
             // Add the asset and get a handle
             let audio_handle = audio_assets.add(audio_source);

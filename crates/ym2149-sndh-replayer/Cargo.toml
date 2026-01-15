@@ -33,3 +33,6 @@ default = []
 
 # Enable STE DAC emulation
 ste-dac = []
+
+# Debug logging for LMC1992 commands
+lmc1992-debug = []

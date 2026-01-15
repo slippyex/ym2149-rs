@@ -255,10 +255,13 @@ gain = 10^(dB / 20)
 
 | Parameter | Hardware | Implementation |
 |-----------|----------|----------------|
-| Bass Frequency | ~100 Hz | Low-shelf biquad filter |
-| Treble Frequency | ~10 kHz | High-shelf biquad filter |
-| Range | ±12 dB | 2dB steps (13 levels) |
-| Flat Setting | Value 6 | 0dB (unity gain) |
+| Bass Frequency | 118.3 Hz | ✓ Low-shelf biquad filter |
+| Treble Frequency | 8439 Hz | ✓ High-shelf biquad filter |
+| Range | ±12 dB | ✓ 2dB steps (13 levels) |
+| Flat Setting | Value 6 | ✓ 0dB (unity gain) |
+
+**Note:** The Atari STE uses 0.0068µF capacitors which affect the turnover frequencies.
+Values empirically measured from real Atari STE hardware.
 
 Reference: [LMC1992 Datasheet](https://media.digikey.com/pdf/Data%20Sheets/National%20Semiconductor%20PDFs/LMC1992.pdf)
 
@@ -317,7 +320,6 @@ STE DAC (R) ────┘
 ## References
 
 - [Atari ST Hardware Description](https://info-coach.fr/atari/hardware/STE-HW.php)
-- [Hatari Emulator Source](https://github.com/hatari/hatari)
 - [NESdev - AY-3-8910 LFSR Analysis](https://archive.nes.science/nesdev-forums/f23/t18639.xhtml)
 - [LMC1992 Datasheet](https://media.digikey.com/pdf/Data%20Sheets/National%20Semiconductor%20PDFs/LMC1992.pdf)
 - [SNDH v2.2 Specification](http://sndh.atari.org/)

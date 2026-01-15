@@ -347,13 +347,19 @@ wasm-pack build --target nodejs
 wasm-pack build --features effects,tracker,digidrums
 ```
 
+## Credits
+
+- **Leonard/Oxygene (Arnaud Carré)** - [AtariAudio](https://github.com/arnaud-carre/sndh-player/tree/main/AtariAudio) reference implementation
+- **Atari ST demoscene community** - Original music and SNDH archive
+
 ## License
 
 MIT - See main repository for details.
 
 ## Links
 
+- [Website](https://ym2149-rs.org)
+- [Live Demo](https://ym2149-rs.org/demo/)
 - [Main Repository](https://github.com/slippyex/ym2149-rs)
 - [Documentation](https://docs.rs/ym2149)
-- [NPM Package](https://www.npmjs.com/package/ym2149-wasm) (coming soon)
-- [Examples](../../examples/web-player/)
+- [NPM Package](https://www.npmjs.com/package/ym2149-wasm)
