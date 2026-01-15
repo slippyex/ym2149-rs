@@ -9,8 +9,9 @@ All notable changes to the ym2149-rs project.
   - Microwire serial interface at $FF8922-$FF8925 (11-bit commands)
   - Master volume control (0-40, -80dB to 0dB in 2dB steps)
   - Independent left/right channel volume (0-20, -40dB to 0dB)
-  - Bass EQ with biquad low-shelf filter at ~100Hz (-12dB to +12dB)
-  - Treble EQ with biquad high-shelf filter at ~10kHz (-12dB to +12dB)
+  - Bass EQ with cascaded first-order low-shelf filters at 118.3Hz (-12dB to +12dB)
+  - Treble EQ with cascaded first-order high-shelf filters at 8439Hz (-12dB to +12dB)
+  - 12dB/octave slope via two-stage cascading (hardware-accurate)
   - Mix control to enable/disable YM2149 in output path
   - Proper transmission state machine for software polling
 - **Stereo audio output for SNDH** - SNDH replayer now outputs true stereo:
@@ -64,7 +65,11 @@ All notable changes to the ym2149-rs project.
   - `Ym2149Playback::playback_position()` - Get current position (0.0-1.0)
 - **Interactive progress bar** in Bevy advanced_example:
   - Click anywhere on the progress bar to seek to that position
+  - Drag to scrub through the song
   - `ProgressBarContainer` component for custom seek UI integration
+- **YM seeking in ChiptunePlayerBase** - `seek()` trait method now implemented for `YmPlayerGeneric`:
+  - Enables YM seeking in WASM via `ChiptunePlayerBase::seek()`
+  - Uses `seek_frame()` for direct frame access (O(1) complexity)
 
 ### Documentation
 - **HARDWARE_ACCURACY.md** - New document in ym2149-sndh-replayer detailing hardware accuracy:
@@ -108,6 +113,14 @@ All notable changes to the ym2149-rs project.
   - Frame count set early in `init_subsong()` before potential early returns
 - **Bevy SndhBevyPlayer frame tracking** - Fixed `current_frame()` and `frame_count()` returning 0:
   - Now correctly delegates to underlying player methods
+- **Bevy seek latency** - Fixed delay between seek and audible position change:
+  - Ring buffer now flushed on seek via `AudioStreamState::notify_seek()`
+  - `StreamingDecoder` clears local sample buffer when seek is detected
+  - Seek counter mechanism ensures decoder discards stale samples immediately
+- **Bevy seek architecture** - Fixed seek not affecting audio output:
+  - Audio source now uses separate player instance from visualization
+  - `audio_player` field in `Ym2149Playback` holds the audio source's player
+  - Both players seeked together to keep visualization in sync with audio
 
 ## 2025/12/08 - v0.8.0
 

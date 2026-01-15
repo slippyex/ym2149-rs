@@ -255,13 +255,15 @@ gain = 10^(dB / 20)
 
 | Parameter | Hardware | Implementation |
 |-----------|----------|----------------|
-| Bass Frequency | 118.3 Hz | ✓ Low-shelf biquad filter |
-| Treble Frequency | 8439 Hz | ✓ High-shelf biquad filter |
+| Bass Frequency | 118.3 Hz | ✓ Cascaded first-order low-shelf filters |
+| Treble Frequency | 8439 Hz | ✓ Cascaded first-order high-shelf filters |
+| Filter Slope | 12 dB/octave | ✓ Two-stage cascading |
 | Range | ±12 dB | ✓ 2dB steps (13 levels) |
 | Flat Setting | Value 6 | ✓ 0dB (unity gain) |
 
 **Note:** The Atari STE uses 0.0068µF capacitors which affect the turnover frequencies.
-Values empirically measured from real Atari STE hardware.
+Values empirically measured from real Atari STE hardware. Two cascaded first-order
+shelving filters provide the characteristic 12dB/octave slope of the analog LMC1992.
 
 Reference: [LMC1992 Datasheet](https://media.digikey.com/pdf/Data%20Sheets/National%20Semiconductor%20PDFs/LMC1992.pdf)
 

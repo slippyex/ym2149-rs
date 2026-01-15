@@ -312,7 +312,12 @@ impl YmBevyPlayer {
         let before = self.player.get_current_frame();
         self.player.seek_frame(target_frame);
         let after = self.player.get_current_frame();
-        bevy::log::info!("YM seek: target={}, before={}, after={}", target_frame, before, after);
+        bevy::log::info!(
+            "YM seek: target={}, before={}, after={}",
+            target_frame,
+            before,
+            after
+        );
         true
     }
 }
@@ -798,7 +803,13 @@ impl SndhBevyPlayer {
         let before = self.player.current_frame();
         let result = ChiptunePlayerBase::seek(&mut self.player, position);
         let after = self.player.current_frame();
-        bevy::log::info!("SNDH seek: position={:.2}, result={}, before={}, after={}", position, result, before, after);
+        bevy::log::info!(
+            "SNDH seek: position={:.2}, result={}, before={}, after={}",
+            position,
+            result,
+            before,
+            after
+        );
         if result {
             self.cache.reset();
         }

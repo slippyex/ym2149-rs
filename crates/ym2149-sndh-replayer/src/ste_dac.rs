@@ -236,8 +236,10 @@ impl SteDac {
                     self.acc_50_r += level_r;
                     self.flip_50_to_25 = !self.flip_50_to_25;
                     if !self.flip_50_to_25 {
-                        self.current_dac_level_l = ((self.acc_50_l * self.master_volume) >> 1) as i16;
-                        self.current_dac_level_r = ((self.acc_50_r * self.master_volume) >> 1) as i16;
+                        self.current_dac_level_l =
+                            ((self.acc_50_l * self.master_volume) >> 1) as i16;
+                        self.current_dac_level_r =
+                            ((self.acc_50_r * self.master_volume) >> 1) as i16;
                         self.acc_50_l = 0;
                         self.acc_50_r = 0;
                     }

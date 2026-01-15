@@ -546,8 +546,18 @@ mod tests {
         eprintln!("has_duration_info: {}", player.has_duration_info());
 
         // Should have fallback duration even without FRMS/TIME
-        assert_eq!(player.total_frames(), 15000, "Should have 5 min fallback (50Hz * 300s)");
-        assert!((player.duration_seconds() - 300.0).abs() < 0.1, "Duration should be ~300 seconds");
-        assert!(!player.has_duration_info(), "Should report no duration info (using fallback)");
+        assert_eq!(
+            player.total_frames(),
+            15000,
+            "Should have 5 min fallback (50Hz * 300s)"
+        );
+        assert!(
+            (player.duration_seconds() - 300.0).abs() < 0.1,
+            "Duration should be ~300 seconds"
+        );
+        assert!(
+            !player.has_duration_info(),
+            "Should report no duration info (using fallback)"
+        );
     }
 }

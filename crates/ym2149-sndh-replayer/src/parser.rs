@@ -463,10 +463,23 @@ impl SndhFile {
 
     /// Check if a character is a valid FLAG character.
     fn is_flag_char(c: u8) -> bool {
-        matches!(c,
-            b'a' | b'b' | b'c' | b'd' | b'e' | b'f' | b'g' | b'h' |
-            b'j' | b'k' | b'l' | b'p' | b's' | b'x' | b'y' |
-            b'0'..=b'9' | b'A' | b'B' | b'C' | b'F' | b'S'
+        matches!(
+            c,
+            b'a' | b'b'
+                | b'c'
+                | b'd'
+                | b'e'
+                | b'f'
+                | b'g'
+                | b'h'
+                | b'j'
+                | b'k'
+                | b'l'
+                | b'p'
+                | b's'
+                | b'x'
+                | b'y'
+                | b'0'..=b'9' | b'A' | b'B' | b'C' | b'F' | b'S'
         )
     }
 
@@ -516,9 +529,21 @@ impl SndhFile {
         }
         matches!(
             &tag[0..4],
-            b"SNDH" | b"HDNS" | b"TITL" | b"COMM" | b"YEAR" | b"RIPP" |
-            b"CONV" | b"TIME" | b"FRMS" | b"FLAG" | b"#!SN"
-        ) || matches!(&tag[0..2], b"##" | b"!#" | b"TA" | b"TB" | b"TC" | b"TD" | b"!V")
+            b"SNDH"
+                | b"HDNS"
+                | b"TITL"
+                | b"COMM"
+                | b"YEAR"
+                | b"RIPP"
+                | b"CONV"
+                | b"TIME"
+                | b"FRMS"
+                | b"FLAG"
+                | b"#!SN"
+        ) || matches!(
+            &tag[0..2],
+            b"##" | b"!#" | b"TA" | b"TB" | b"TC" | b"TD" | b"!V"
+        )
     }
 
     /// Get information about a specific subsong.
@@ -753,23 +778,38 @@ mod tests {
         eprintln!("Year: {:?}", sndh.metadata.year);
         eprintln!("Player rate: {} Hz", sndh.metadata.player_rate);
         eprintln!("Subsong count: {}", sndh.metadata.subsong_count);
-        eprintln!("Subsong durations (TIME): {:?}", sndh.metadata.subsong_durations);
+        eprintln!(
+            "Subsong durations (TIME): {:?}",
+            sndh.metadata.subsong_durations
+        );
         eprintln!("Subsong frames (FRMS): {:?}", sndh.metadata.subsong_frames);
-        eprintln!("Flags: timer_a={}, timer_b={}, timer_d={}, ym2149={}",
-            sndh.metadata.flags.timer_a, sndh.metadata.flags.timer_b,
-            sndh.metadata.flags.timer_d, sndh.metadata.flags.ym2149);
+        eprintln!(
+            "Flags: timer_a={}, timer_b={}, timer_d={}, ym2149={}",
+            sndh.metadata.flags.timer_a,
+            sndh.metadata.flags.timer_b,
+            sndh.metadata.flags.timer_d,
+            sndh.metadata.flags.ym2149
+        );
 
         // Test duration calculation
         let frames = sndh.metadata.subsong_frames.first().copied().unwrap_or(0);
         let duration_secs = frames as f32 / sndh.metadata.player_rate as f32;
         let mins = (duration_secs / 60.0) as u32;
         let secs = (duration_secs % 60.0) as u32;
-        eprintln!("Duration: {} frames / {} Hz = {:.1} seconds = {}:{:02}",
-            frames, sndh.metadata.player_rate, duration_secs, mins, secs);
+        eprintln!(
+            "Duration: {} frames / {} Hz = {:.1} seconds = {}:{:02}",
+            frames, sndh.metadata.player_rate, duration_secs, mins, secs
+        );
 
         // Verify FRMS is parsed
-        assert!(!sndh.metadata.subsong_frames.is_empty(), "FRMS should be parsed");
-        assert_eq!(sndh.metadata.subsong_frames[0], 11565, "Expected 11565 frames");
+        assert!(
+            !sndh.metadata.subsong_frames.is_empty(),
+            "FRMS should be parsed"
+        );
+        assert_eq!(
+            sndh.metadata.subsong_frames[0], 11565,
+            "Expected 11565 frames"
+        );
 
         // The file should have metadata
         assert!(sndh.metadata.title.is_some() || sndh.metadata.author.is_some());
@@ -805,10 +845,18 @@ mod tests {
         eprintln!("Player progress() at start: {:.2}", progress);
 
         // Duration should be ~231 seconds (3:51)
-        assert!(duration > 230.0 && duration < 233.0, "Duration should be ~231 seconds, got {}", duration);
+        assert!(
+            duration > 230.0 && duration < 233.0,
+            "Duration should be ~231 seconds, got {}",
+            duration
+        );
         assert_eq!(total_frames, 11565, "Total frames should be 11565");
         // Progress should be very close to 0 at start (init may advance a tiny bit)
-        assert!(progress < 0.001, "Progress at start should be near 0.0, got {}", progress);
+        assert!(
+            progress < 0.001,
+            "Progress at start should be near 0.0, got {}",
+            progress
+        );
     }
 
     #[test]
@@ -817,8 +865,10 @@ mod tests {
         use ym2149_common::ChiptunePlayerBase;
 
         let test_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent().unwrap()
-            .parent().unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
             .join("examples/sndh/Buzz_Me.sndh");
 
         if !test_file.exists() {
@@ -845,7 +895,10 @@ mod tests {
         eprintln!("  current_frame: {}", player.current_frame());
 
         assert!(result, "Seek should succeed");
-        assert!(player.playback_position() > 0.4 && player.playback_position() < 0.6,
-            "Position should be around 50%, got {}", player.playback_position());
+        assert!(
+            player.playback_position() > 0.4 && player.playback_position() < 0.6,
+            "Position should be around 50%, got {}",
+            player.playback_position()
+        );
     }
 }

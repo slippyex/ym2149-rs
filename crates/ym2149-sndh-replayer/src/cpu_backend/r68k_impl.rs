@@ -142,7 +142,10 @@ impl Cpu68k for R68kBackend {
     }
 
     fn is_stopped(&self) -> bool {
-        matches!(self.cpu.processing_state, ProcessingState::Stopped | ProcessingState::Halted)
+        matches!(
+            self.cpu.processing_state,
+            ProcessingState::Stopped | ProcessingState::Halted
+        )
     }
 
     fn set_stopped(&mut self, stop: bool) {

@@ -405,7 +405,10 @@ impl Lmc1992 {
                 self.master_volume = data.min(40);
                 self.update_gains();
                 #[cfg(feature = "lmc1992-debug")]
-                eprintln!("[LMC1992] Master Volume: {} (gain={:.3})", self.master_volume, self.master_gain);
+                eprintln!(
+                    "[LMC1992] Master Volume: {} (gain={:.3})",
+                    self.master_volume, self.master_gain
+                );
             }
             Lmc1992Function::LeftVolume => {
                 // Data bits 4-0: volume level (0-20 in 2dB steps)
@@ -413,7 +416,10 @@ impl Lmc1992 {
                 self.left_volume = (data & 0x1F).min(20);
                 self.update_gains();
                 #[cfg(feature = "lmc1992-debug")]
-                eprintln!("[LMC1992] Left Volume: {} (gain={:.3})", self.left_volume, self.left_gain);
+                eprintln!(
+                    "[LMC1992] Left Volume: {} (gain={:.3})",
+                    self.left_volume, self.left_gain
+                );
             }
             Lmc1992Function::RightVolume => {
                 // Data bits 4-0: volume level (0-20 in 2dB steps)
@@ -421,7 +427,10 @@ impl Lmc1992 {
                 self.right_volume = (data & 0x1F).min(20);
                 self.update_gains();
                 #[cfg(feature = "lmc1992-debug")]
-                eprintln!("[LMC1992] Right Volume: {} (gain={:.3})", self.right_volume, self.right_gain);
+                eprintln!(
+                    "[LMC1992] Right Volume: {} (gain={:.3})",
+                    self.right_volume, self.right_gain
+                );
             }
             Lmc1992Function::Bass => {
                 // Data bits 3-0: bass level (0-12)
@@ -429,7 +438,11 @@ impl Lmc1992 {
                 self.bass = (data & 0x0F).min(12);
                 self.update_filters();
                 #[cfg(feature = "lmc1992-debug")]
-                eprintln!("[LMC1992] Bass: {} ({}dB)", self.bass, (self.bass as i8 - 6) * 2);
+                eprintln!(
+                    "[LMC1992] Bass: {} ({}dB)",
+                    self.bass,
+                    (self.bass as i8 - 6) * 2
+                );
             }
             Lmc1992Function::Treble => {
                 // Data bits 3-0: treble level (0-12)
@@ -437,7 +450,11 @@ impl Lmc1992 {
                 self.treble = (data & 0x0F).min(12);
                 self.update_filters();
                 #[cfg(feature = "lmc1992-debug")]
-                eprintln!("[LMC1992] Treble: {} ({}dB)", self.treble, (self.treble as i8 - 6) * 2);
+                eprintln!(
+                    "[LMC1992] Treble: {} ({}dB)",
+                    self.treble,
+                    (self.treble as i8 - 6) * 2
+                );
             }
             Lmc1992Function::Mix => {
                 // Data bits 1-0: mix control (LMC1992 input select)
@@ -480,14 +497,26 @@ impl Lmc1992 {
         self.bass_filter_r2
             .configure_low_shelf(self.sample_rate, STE_BASS_FREQ, bass_db_per_stage);
 
-        self.treble_filter_l1
-            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
-        self.treble_filter_r1
-            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
-        self.treble_filter_l2
-            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
-        self.treble_filter_r2
-            .configure_high_shelf(self.sample_rate, STE_TREBLE_FREQ, treble_db_per_stage);
+        self.treble_filter_l1.configure_high_shelf(
+            self.sample_rate,
+            STE_TREBLE_FREQ,
+            treble_db_per_stage,
+        );
+        self.treble_filter_r1.configure_high_shelf(
+            self.sample_rate,
+            STE_TREBLE_FREQ,
+            treble_db_per_stage,
+        );
+        self.treble_filter_l2.configure_high_shelf(
+            self.sample_rate,
+            STE_TREBLE_FREQ,
+            treble_db_per_stage,
+        );
+        self.treble_filter_r2.configure_high_shelf(
+            self.sample_rate,
+            STE_TREBLE_FREQ,
+            treble_db_per_stage,
+        );
 
         #[cfg(feature = "lmc1992-debug")]
         eprintln!(
@@ -638,6 +667,11 @@ mod tests {
 
         // The effect won't be dramatic for DC/constant input, but the filter
         // should not amplify the signal
-        assert!(left <= input + 100, "Treble cut should not amplify: {} > {}", left, input);
+        assert!(
+            left <= input + 100,
+            "Treble cut should not amplify: {} > {}",
+            left,
+            input
+        );
     }
 }

@@ -535,8 +535,7 @@ impl AtariMachine {
                 let callback = self.memory.read_long(sp.wrapping_add(2));
                 let mut a7 = self.cpu.a(7);
                 a7 = a7.wrapping_sub(4);
-                self.memory
-                    .write_long(a7, self.cpu.pc().wrapping_add(2));
+                self.memory.write_long(a7, self.cpu.pc().wrapping_add(2));
                 self.cpu.set_a(7, a7);
                 self.cpu.set_pc(callback & 0x00FF_FFFF);
             }
