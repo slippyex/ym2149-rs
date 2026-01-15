@@ -25,7 +25,7 @@ Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ym2149-ym-replayer = "0.7"
+ym2149-ym-replayer = "0.9"
 ```
 
 ## Usage

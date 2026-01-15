@@ -36,9 +36,9 @@ runs the embedded Z80 player inside a pure Rust environment powered by
 
 ```toml
 [dependencies]
-ym2149-ay-replayer = "0.7"
+ym2149-ay-replayer = "0.9"
 # Optional but common when you plan to pipe the samples into the rest of the stack
-ym2149 = "0.7"
+ym2149 = "0.9"
 ```
 
 ```rust

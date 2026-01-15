@@ -24,7 +24,7 @@ This crate provides playback support for SNDH files, a popular format for Atari 
 
 ```toml
 [dependencies]
-ym2149-sndh-replayer = "0.7"
+ym2149-sndh-replayer = "0.9"
 ```
 
 ## Usage
