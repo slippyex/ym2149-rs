@@ -188,15 +188,21 @@ pub fn run_visualization_loop(context: &StreamingContext) {
 
         // Get current state
         let stats = context.streamer.get_stats();
-        let elapsed = playback_start.elapsed().as_secs_f32();
-        let (snapshot, subsong_info) = {
+        let (elapsed, snapshot, subsong_info) = {
             let guard = context.player.lock();
+            // Use player's elapsed_seconds if duration is known (supports seeking),
+            // otherwise fallback to wallclock elapsed time
+            let elapsed = if guard.duration_seconds() > 0.0 {
+                guard.elapsed_seconds()
+            } else {
+                playback_start.elapsed().as_secs_f32()
+            };
             let ss_info = if guard.has_subsongs() {
                 Some((guard.current_subsong(), guard.subsong_count()))
             } else {
                 None
             };
-            (guard.visual_snapshot(), ss_info)
+            (elapsed, guard.visual_snapshot(), ss_info)
         };
 
         // Display visualization
@@ -361,29 +367,39 @@ fn handle_key_press(
             }
             _ => {}
         },
-        // Arrow keys also work for subsong navigation
-        KeyEvent::ArrowUp => {
-            let mut guard = player.lock();
-            if guard.has_subsongs() {
-                let current = guard.current_subsong();
-                let count = guard.subsong_count();
-                // Next subsong (wrap around)
-                let next = if current >= count { 1 } else { current + 1 };
-                guard.set_subsong(next);
-            }
+        // Volume control: Up/Down arrows
+        // Note: Classic mode doesn't have per-player volume control like TUI,
+        // so we just log the intent for now
+        KeyEvent::ArrowUp | KeyEvent::ArrowDown => {
+            // Volume control not available in classic visualization mode
+            // (would need StreamingContext access for set_volume)
         }
-        KeyEvent::ArrowDown => {
+        // Seeking: Left/Right arrows
+        KeyEvent::ArrowLeft => {
+            // Seek backward 5 seconds (or 5% if duration unknown)
             let mut guard = player.lock();
-            if guard.has_subsongs() {
-                let current = guard.current_subsong();
-                let count = guard.subsong_count();
-                // Previous subsong (wrap around)
-                let prev = if current <= 1 { count } else { current - 1 };
-                guard.set_subsong(prev);
-            }
+            let current_pos = guard.playback_position();
+            let duration = guard.duration_seconds();
+            let seek_amount = if duration > 0.0 {
+                5.0 / duration // 5 seconds as fraction
+            } else {
+                0.05 // 5%
+            };
+            let new_pos = (current_pos - seek_amount).max(0.0);
+            guard.seek(new_pos);
         }
-        KeyEvent::ArrowLeft | KeyEvent::ArrowRight => {
-            // Reserved for seek functionality
+        KeyEvent::ArrowRight => {
+            // Seek forward 5 seconds (or 5% if duration unknown)
+            let mut guard = player.lock();
+            let current_pos = guard.playback_position();
+            let duration = guard.duration_seconds();
+            let seek_amount = if duration > 0.0 {
+                5.0 / duration // 5 seconds as fraction
+            } else {
+                0.05 // 5%
+            };
+            let new_pos = (current_pos + seek_amount).min(1.0);
+            guard.seek(new_pos);
         }
     }
 }

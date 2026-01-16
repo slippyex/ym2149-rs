@@ -149,13 +149,13 @@ In short: Arkos lets artists work with modern ergonomics, and this workspace let
 ```toml
 [dependencies]
 # Core emulator only (minimal dependencies)
-ym2149 = "0.7"
+ym2149 = "0.9"
 
 # With streaming audio output
-ym2149 = { version = "0.7", features = ["streaming"] }
+ym2149 = { version = "0.9", features = ["streaming"] }
 
 # YM file parsing and playback
-ym2149-ym-replayer = "0.7"
+ym2149-ym-replayer = "0.9"
 ```
 
 ```rust

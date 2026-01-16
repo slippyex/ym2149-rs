@@ -112,6 +112,25 @@ function getDataViewMemory0() {
     }
     return cachedDataViewMemory0;
 }
+/**
+ * Set panic hook for better error messages in the browser console.
+ */
+export function init_panic_hook() {
+    wasm.init_panic_hook();
+}
+
+function passArray8ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
+}
 
 let cachedFloat32ArrayMemory0 = null;
 
@@ -132,25 +151,6 @@ function passArrayF32ToWasm0(arg, malloc) {
     getFloat32ArrayMemory0().set(arg, ptr / 4);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
-}
-
-function passArray8ToWasm0(arg, malloc) {
-    const ptr = malloc(arg.length * 1, 1) >>> 0;
-    getUint8ArrayMemory0().set(arg, ptr / 1);
-    WASM_VECTOR_LEN = arg.length;
-    return ptr;
-}
-
-function takeFromExternrefTable0(idx) {
-    const value = wasm.__wbindgen_externrefs.get(idx);
-    wasm.__externref_table_dealloc(idx);
-    return value;
-}
-/**
- * Set panic hook for better error messages in the browser console.
- */
-export function init_panic_hook() {
-    wasm.init_panic_hook();
 }
 
 const Ym2149PlayerFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -174,164 +174,6 @@ export class Ym2149Player {
     free() {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_ym2149player_free(ptr, 0);
-    }
-    /**
-     * Get current playback state.
-     * @returns {boolean}
-     */
-    is_playing() {
-        const ret = wasm.ym2149player_is_playing(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
-     * Set volume (0.0 to 1.0). Applied to generated samples.
-     * @param {number} volume
-     */
-    set_volume(volume) {
-        wasm.ym2149player_set_volume(this.__wbg_ptr, volume);
-    }
-    /**
-     * Get total frame count.
-     * @returns {number}
-     */
-    frame_count() {
-        const ret = wasm.ym2149player_frame_count(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Set the current subsong (1-based index). Returns true on success.
-     * @param {number} index
-     * @returns {boolean}
-     */
-    setSubsong(index) {
-        const ret = wasm.ym2149player_setSubsong(this.__wbg_ptr, index);
-        return ret !== 0;
-    }
-    /**
-     * Get the current register values (for visualization).
-     * @returns {Uint8Array}
-     */
-    get_registers() {
-        const ret = wasm.ym2149player_get_registers(this.__wbg_ptr);
-        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-        return v1;
-    }
-    /**
-     * Seek to a specific frame (silently ignored for Arkos/AY backends).
-     * @param {number} frame
-     */
-    seek_to_frame(frame) {
-        wasm.ym2149player_seek_to_frame(this.__wbg_ptr, frame);
-    }
-    /**
-     * Get the number of subsongs (1 for most formats, >1 for multi-song SNDH files).
-     * @returns {number}
-     */
-    subsongCount() {
-        const ret = wasm.ym2149player_subsongCount(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Get current frame position.
-     * @returns {number}
-     */
-    frame_position() {
-        const ret = wasm.ym2149player_frame_position(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Get the current subsong index (1-based).
-     * @returns {number}
-     */
-    currentSubsong() {
-        const ret = wasm.ym2149player_currentSubsong(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Generate audio samples.
-     *
-     * Returns a Float32Array containing mono samples.
-     * The number of samples generated depends on the sample rate and frame rate.
-     *
-     * For 44.1kHz at 50Hz frame rate: 882 samples per frame.
-     * @param {number} count
-     * @returns {Float32Array}
-     */
-    generateSamples(count) {
-        const ret = wasm.ym2149player_generateSamples(this.__wbg_ptr, count);
-        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v1;
-    }
-    /**
-     * Check if a channel is muted.
-     * @param {number} channel
-     * @returns {boolean}
-     */
-    is_channel_muted(channel) {
-        const ret = wasm.ym2149player_is_channel_muted(this.__wbg_ptr, channel);
-        return ret !== 0;
-    }
-    /**
-     * Mute or unmute a channel (0-2).
-     * @param {number} channel
-     * @param {boolean} mute
-     */
-    set_channel_mute(channel, mute) {
-        wasm.ym2149player_set_channel_mute(this.__wbg_ptr, channel, mute);
-    }
-    /**
-     * Enable or disable the ST color filter.
-     * @param {boolean} enabled
-     */
-    set_color_filter(enabled) {
-        wasm.ym2149player_set_color_filter(this.__wbg_ptr, enabled);
-    }
-    /**
-     * Get channel states for visualization (frequency, amplitude, note, effects).
-     *
-     * Returns a JsValue containing an object with channel data:
-     * ```json
-     * {
-     *   "channels": [
-     *     { "frequency": 440.0, "note": "A4", "amplitude": 0.8, "toneEnabled": true, "noiseEnabled": false, "envelopeEnabled": false },
-     *     ...
-     *   ],
-     *   "envelope": { "period": 256, "shape": 14, "shapeName": "/\\/\\" }
-     * }
-     * ```
-     * @returns {any}
-     */
-    getChannelStates() {
-        const ret = wasm.ym2149player_getChannelStates(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos/AY backends).
-     * @param {number} percentage
-     */
-    seek_to_percentage(percentage) {
-        wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, percentage);
-    }
-    /**
-     * Get playback position as percentage (0.0 to 1.0).
-     * @returns {number}
-     */
-    position_percentage() {
-        const ret = wasm.ym2149player_position_percentage(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Generate samples into a pre-allocated buffer (zero-allocation).
-     *
-     * This is more efficient than `generate_samples` as it reuses the same buffer.
-     * @param {Float32Array} buffer
-     */
-    generateSamplesInto(buffer) {
-        var ptr0 = passArrayF32ToWasm0(buffer, wasm.__wbindgen_malloc);
-        var len0 = WASM_VECTOR_LEN;
-        wasm.ym2149player_generateSamplesInto(this.__wbg_ptr, ptr0, len0, buffer);
     }
     /**
      * Create a new player from file data.
@@ -359,10 +201,24 @@ export class Ym2149Player {
         return this;
     }
     /**
+     * Get metadata about the loaded file.
+     * @returns {YmMetadata}
+     */
+    get metadata() {
+        const ret = wasm.ym2149player_metadata(this.__wbg_ptr);
+        return YmMetadata.__wrap(ret);
+    }
+    /**
      * Start playback.
      */
     play() {
         wasm.ym2149player_play(this.__wbg_ptr);
+    }
+    /**
+     * Pause playback.
+     */
+    pause() {
+        wasm.ym2149player_pause(this.__wbg_ptr);
     }
     /**
      * Stop playback and reset to beginning.
@@ -371,10 +227,18 @@ export class Ym2149Player {
         wasm.ym2149player_stop(this.__wbg_ptr);
     }
     /**
-     * Pause playback.
+     * Restart playback from the beginning.
      */
-    pause() {
-        wasm.ym2149player_pause(this.__wbg_ptr);
+    restart() {
+        wasm.ym2149player_restart(this.__wbg_ptr);
+    }
+    /**
+     * Get current playback state.
+     * @returns {boolean}
+     */
+    is_playing() {
+        const ret = wasm.ym2149player_is_playing(this.__wbg_ptr);
+        return ret !== 0;
     }
     /**
      * Get current playback state as string.
@@ -393,6 +257,13 @@ export class Ym2149Player {
         }
     }
     /**
+     * Set volume (0.0 to 1.0). Applied to generated samples.
+     * @param {number} volume
+     */
+    set_volume(volume) {
+        wasm.ym2149player_set_volume(this.__wbg_ptr, volume);
+    }
+    /**
      * Get current volume (0.0 to 1.0).
      * @returns {number}
      */
@@ -401,18 +272,197 @@ export class Ym2149Player {
         return ret;
     }
     /**
-     * Restart playback from the beginning.
+     * Get current frame position.
+     * @returns {number}
      */
-    restart() {
-        wasm.ym2149player_restart(this.__wbg_ptr);
+    frame_position() {
+        const ret = wasm.ym2149player_frame_position(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
-     * Get metadata about the loaded file.
-     * @returns {YmMetadata}
+     * Get total frame count.
+     * @returns {number}
      */
-    get metadata() {
-        const ret = wasm.ym2149player_metadata(this.__wbg_ptr);
-        return YmMetadata.__wrap(ret);
+    frame_count() {
+        const ret = wasm.ym2149player_frame_count(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get playback position as percentage (0.0 to 1.0).
+     * @returns {number}
+     */
+    position_percentage() {
+        const ret = wasm.ym2149player_position_percentage(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Seek to a specific frame (silently ignored for Arkos/AY backends).
+     * @param {number} frame
+     */
+    seek_to_frame(frame) {
+        wasm.ym2149player_seek_to_frame(this.__wbg_ptr, frame);
+    }
+    /**
+     * Seek to a percentage of the song (0.0 to 1.0).
+     *
+     * Returns true if seek succeeded. Works for all SNDH files (uses fallback duration for older files).
+     * @param {number} percentage
+     * @returns {boolean}
+     */
+    seek_to_percentage(percentage) {
+        const ret = wasm.ym2149player_seek_to_percentage(this.__wbg_ptr, percentage);
+        return ret !== 0;
+    }
+    /**
+     * Get duration in seconds.
+     *
+     * For SNDH < 2.2 without FRMS/TIME, returns 300 (5 minute fallback).
+     * @returns {number}
+     */
+    duration_seconds() {
+        const ret = wasm.ym2149player_duration_seconds(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Check if the duration is from actual metadata or estimated.
+     *
+     * Returns false for older SNDH files using the 5-minute fallback.
+     * @returns {boolean}
+     */
+    hasDurationInfo() {
+        const ret = wasm.ym2149player_hasDurationInfo(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Mute or unmute a channel (0-2).
+     * @param {number} channel
+     * @param {boolean} mute
+     */
+    set_channel_mute(channel, mute) {
+        wasm.ym2149player_set_channel_mute(this.__wbg_ptr, channel, mute);
+    }
+    /**
+     * Check if a channel is muted.
+     * @param {number} channel
+     * @returns {boolean}
+     */
+    is_channel_muted(channel) {
+        const ret = wasm.ym2149player_is_channel_muted(this.__wbg_ptr, channel);
+        return ret !== 0;
+    }
+    /**
+     * Generate audio samples.
+     *
+     * Returns a Float32Array containing mono samples.
+     * The number of samples generated depends on the sample rate and frame rate.
+     *
+     * For 44.1kHz at 50Hz frame rate: 882 samples per frame.
+     * @param {number} count
+     * @returns {Float32Array}
+     */
+    generateSamples(count) {
+        const ret = wasm.ym2149player_generateSamples(this.__wbg_ptr, count);
+        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
+     * Generate samples into a pre-allocated buffer (zero-allocation).
+     *
+     * This is more efficient than `generate_samples` as it reuses the same buffer.
+     * @param {Float32Array} buffer
+     */
+    generateSamplesInto(buffer) {
+        var ptr0 = passArrayF32ToWasm0(buffer, wasm.__wbindgen_malloc);
+        var len0 = WASM_VECTOR_LEN;
+        wasm.ym2149player_generateSamplesInto(this.__wbg_ptr, ptr0, len0, buffer);
+    }
+    /**
+     * Generate stereo audio samples (interleaved L/R).
+     *
+     * Returns frame_count * 2 samples. SNDH uses native stereo output,
+     * other formats duplicate mono to stereo.
+     * @param {number} frame_count
+     * @returns {Float32Array}
+     */
+    generateSamplesStereo(frame_count) {
+        const ret = wasm.ym2149player_generateSamplesStereo(this.__wbg_ptr, frame_count);
+        var v1 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
+     * Generate stereo samples into a pre-allocated buffer (zero-allocation).
+     *
+     * Buffer length must be even (frame_count * 2). Interleaved L/R format.
+     * SNDH uses native stereo output, other formats duplicate mono to stereo.
+     * @param {Float32Array} buffer
+     */
+    generateSamplesIntoStereo(buffer) {
+        var ptr0 = passArrayF32ToWasm0(buffer, wasm.__wbindgen_malloc);
+        var len0 = WASM_VECTOR_LEN;
+        wasm.ym2149player_generateSamplesIntoStereo(this.__wbg_ptr, ptr0, len0, buffer);
+    }
+    /**
+     * Get the current register values (for visualization).
+     * @returns {Uint8Array}
+     */
+    get_registers() {
+        const ret = wasm.ym2149player_get_registers(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * Get channel states for visualization (frequency, amplitude, note, effects).
+     *
+     * Returns a JsValue containing an object with channel data:
+     * ```json
+     * {
+     *   "channels": [
+     *     { "frequency": 440.0, "note": "A4", "amplitude": 0.8, "toneEnabled": true, "noiseEnabled": false, "envelopeEnabled": false },
+     *     ...
+     *   ],
+     *   "envelope": { "period": 256, "shape": 14, "shapeName": "/\\/\\" }
+     * }
+     * ```
+     * @returns {any}
+     */
+    getChannelStates() {
+        const ret = wasm.ym2149player_getChannelStates(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Enable or disable the ST color filter.
+     * @param {boolean} enabled
+     */
+    set_color_filter(enabled) {
+        wasm.ym2149player_set_color_filter(this.__wbg_ptr, enabled);
+    }
+    /**
+     * Get the number of subsongs (1 for most formats, >1 for multi-song SNDH files).
+     * @returns {number}
+     */
+    subsongCount() {
+        const ret = wasm.ym2149player_subsongCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get the current subsong index (1-based).
+     * @returns {number}
+     */
+    currentSubsong() {
+        const ret = wasm.ym2149player_currentSubsong(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Set the current subsong (1-based index). Returns true on success.
+     * @param {number} index
+     * @returns {boolean}
+     */
+    setSubsong(index) {
+        const ret = wasm.ym2149player_setSubsong(this.__wbg_ptr, index);
+        return ret !== 0;
     }
 }
 if (Symbol.dispose) Ym2149Player.prototype[Symbol.dispose] = Ym2149Player.prototype.free;
@@ -443,30 +493,6 @@ export class YmMetadata {
     free() {
         const ptr = this.__destroy_into_raw();
         wasm.__wbg_ymmetadata_free(ptr, 0);
-    }
-    /**
-     * Get frame rate in Hz.
-     * @returns {number}
-     */
-    get frame_rate() {
-        const ret = wasm.ymmetadata_frame_rate(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Get frame count.
-     * @returns {number}
-     */
-    get frame_count() {
-        const ret = wasm.ymmetadata_frame_count(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Get duration in seconds.
-     * @returns {number}
-     */
-    get duration_seconds() {
-        const ret = wasm.ymmetadata_duration_seconds(this.__wbg_ptr);
-        return ret;
     }
     /**
      * Get the song title.
@@ -501,6 +527,22 @@ export class YmMetadata {
         }
     }
     /**
+     * Get the song comments.
+     * @returns {string}
+     */
+    get comments() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.ymmetadata_comments(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * Get the YM format version.
      * @returns {string}
      */
@@ -517,20 +559,28 @@ export class YmMetadata {
         }
     }
     /**
-     * Get the song comments.
-     * @returns {string}
+     * Get frame count.
+     * @returns {number}
      */
-    get comments() {
-        let deferred1_0;
-        let deferred1_1;
-        try {
-            const ret = wasm.ymmetadata_comments(this.__wbg_ptr);
-            deferred1_0 = ret[0];
-            deferred1_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-        }
+    get frame_count() {
+        const ret = wasm.ymmetadata_frame_count(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get frame rate in Hz.
+     * @returns {number}
+     */
+    get frame_rate() {
+        const ret = wasm.ymmetadata_frame_rate(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get duration in seconds.
+     * @returns {number}
+     */
+    get duration_seconds() {
+        const ret = wasm.ymmetadata_duration_seconds(this.__wbg_ptr);
+        return ret;
     }
 }
 if (Symbol.dispose) YmMetadata.prototype[Symbol.dispose] = YmMetadata.prototype.free;

@@ -2,25 +2,17 @@
 //!
 //! Provides a simple streaming interface for real-time sample playback.
 
-use super::StreamConfig;
 use super::ring_buffer::RingBufferError;
-use super::{BUFFER_BACKOFF_MICROS, RingBuffer};
+use super::{BUFFER_BACKOFF_MICROS, RingBuffer, StreamConfig};
 use parking_lot::Mutex;
 use std::sync::Arc;
-
-// Re-export PlaybackState from ym2149-common
-pub use ym2149_common::PlaybackState;
 
 /// Real-time audio player with streaming
 pub struct RealtimePlayer {
     /// Ring buffer for sample storage
     buffer: Arc<RingBuffer>,
-    /// Stream configuration
-    config: StreamConfig,
     /// Playback statistics
     stats: Arc<Mutex<PlaybackStats>>,
-    /// Current playback state
-    state: Arc<Mutex<PlaybackState>>,
 }
 
 /// Playback statistics for monitoring overruns and buffer health
@@ -45,14 +37,7 @@ impl RealtimePlayer {
             fill_percentage: 0.0,
         }));
 
-        let state = Arc::new(Mutex::new(PlaybackState::Stopped));
-
-        Ok(RealtimePlayer {
-            buffer,
-            config,
-            stats,
-            state,
-        })
+        Ok(RealtimePlayer { buffer, stats })
     }
 
     /// Write samples to the playback buffer
@@ -92,34 +77,9 @@ impl RealtimePlayer {
         total_written
     }
 
-    /// Write samples without blocking (returns 0 if buffer full)
-    pub fn write_nonblocking(&self, samples: &[f32]) -> usize {
-        let written = self.buffer.write(samples);
-        let fill_pct = self.buffer.fill_percentage();
-
-        let mut stats = self.stats.lock();
-        if written < samples.len() {
-            stats.overrun_count += 1;
-        }
-        stats.samples_played += written;
-        stats.fill_percentage = fill_pct;
-
-        written
-    }
-
-    /// Get the number of samples that can be written without blocking
-    pub fn available_write(&self) -> usize {
-        self.buffer.available_write()
-    }
-
     /// Get current playback statistics
     pub fn get_stats(&self) -> PlaybackStats {
         *self.stats.lock()
-    }
-
-    /// Flush the buffer (clear all pending samples)
-    pub fn flush(&self) {
-        self.buffer.flush();
     }
 
     /// Get buffer fill percentage (0.0 to 1.0)
@@ -127,41 +87,6 @@ impl RealtimePlayer {
         self.buffer.fill_percentage()
     }
 
-    /// Get buffer latency in milliseconds
-    pub fn latency_ms(&self) -> f32 {
-        self.config.latency_ms()
-    }
-
-    /// Get the stream configuration
-    pub fn config(&self) -> &StreamConfig {
-        &self.config
-    }
-
-    /// Start playback
-    pub fn play(&mut self) {
-        let mut state = self.state.lock();
-        *state = PlaybackState::Playing;
-    }
-
-    /// Pause playback
-    pub fn pause(&mut self) {
-        let mut state = self.state.lock();
-        if *state == PlaybackState::Playing {
-            *state = PlaybackState::Paused;
-        }
-    }
-
-    /// Stop playback
-    pub fn stop(&mut self) {
-        let mut state = self.state.lock();
-        *state = PlaybackState::Stopped;
-        self.buffer.flush();
-    }
-
-    /// Get current playback state
-    pub fn state(&self) -> PlaybackState {
-        *self.state.lock()
-    }
     /// Get reference to the ring buffer for audio device integration
     /// This allows the audio device to read samples as they're produced
     pub fn get_buffer(&self) -> Arc<RingBuffer> {

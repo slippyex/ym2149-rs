@@ -72,37 +72,56 @@ impl SnapshotDelayBuffer {
     }
 }
 
+/// ST color filter for stereo audio.
+///
+/// Simple lowpass filter that smooths the audio output to simulate
+/// the analog filtering of the Atari ST's audio hardware.
 #[derive(Clone, Copy)]
 struct ColorFilter {
     enabled: bool,
-    z1: f32,
-    z2: f32,
+    /// Left channel filter state
+    z1_l: f32,
+    z2_l: f32,
+    /// Right channel filter state
+    z1_r: f32,
+    z2_r: f32,
 }
 
 impl ColorFilter {
     fn new(enabled: bool) -> Self {
         Self {
             enabled,
-            z1: 0.0,
-            z2: 0.0,
+            z1_l: 0.0,
+            z2_l: 0.0,
+            z1_r: 0.0,
+            z2_r: 0.0,
         }
     }
 
-    fn process(&mut self, samples: &mut [f32]) {
+    /// Process interleaved stereo samples in place.
+    fn process_stereo(&mut self, samples: &mut [f32]) {
         if !self.enabled {
             return;
         }
-        for sample in samples.iter_mut() {
-            let filtered = (self.z2 * 0.25) + (self.z1 * 0.5) + (*sample * 0.25);
-            self.z2 = self.z1;
-            self.z1 = *sample;
-            *sample = filtered;
+        for chunk in samples.chunks_exact_mut(2) {
+            // Left channel
+            let filtered_l = (self.z2_l * 0.25) + (self.z1_l * 0.5) + (chunk[0] * 0.25);
+            self.z2_l = self.z1_l;
+            self.z1_l = chunk[0];
+            chunk[0] = filtered_l;
+
+            // Right channel
+            let filtered_r = (self.z2_r * 0.25) + (self.z1_r * 0.5) + (chunk[1] * 0.25);
+            self.z2_r = self.z1_r;
+            self.z1_r = chunk[1];
+            chunk[1] = filtered_r;
         }
     }
 }
 
-/// Batch size for sample generation (samples per visual snapshot).
-const SAMPLE_BATCH_SIZE: usize = 4096;
+/// Batch size for sample generation in frames (stereo frame pairs per visual snapshot).
+/// With stereo, this is 2048 frames = 4096 samples (interleaved L/R).
+const SAMPLE_BATCH_SIZE: usize = 2048;
 
 /// Audio streaming context with device and producer thread.
 pub struct StreamingContext {
@@ -234,12 +253,6 @@ impl StreamingContext {
         self.volume.store(percentage, Ordering::Relaxed);
     }
 
-    /// Get the current master volume (0.0 to 1.0)
-    #[allow(dead_code)]
-    pub fn get_volume(&self) -> f32 {
-        self.volume.load(Ordering::Relaxed) as f32 / 100.0
-    }
-
     /// Replace the current player with a new one.
     ///
     /// This allows switching songs without restarting the audio stream.
@@ -280,7 +293,7 @@ impl StreamingContext {
 
 /// Producer loop that generates samples and feeds them to the streamer.
 ///
-/// Runs in a dedicated thread, continuously generating audio samples
+/// Runs in a dedicated thread, continuously generating stereo audio samples
 /// from the player and writing them to the ring buffer. Also captures
 /// visual snapshots and pushes them to the delay buffer for sync.
 fn run_producer_loop(
@@ -292,6 +305,7 @@ fn run_producer_loop(
     volume: Arc<AtomicU32>,
     snapshot_delay: Arc<Mutex<SnapshotDelayBuffer>>,
 ) {
+    // Stereo buffer: 2048 frames * 2 channels = 4096 samples (interleaved L/R)
     let mut sample_buffer = [0.0f32; 4096];
 
     // Start playback (unless in paused mode for playlist)
@@ -303,7 +317,7 @@ fn run_producer_loop(
     while running.load(Ordering::Relaxed) {
         let batch_size = sample_buffer.len();
 
-        // Generate samples and capture snapshot (zero-allocation: reuse sample_buffer)
+        // Generate stereo samples and capture snapshot
         let snapshot = {
             let mut player = player.lock();
 
@@ -314,8 +328,8 @@ fn run_producer_loop(
                 break;
             }
 
-            // Generate samples (produces silence when stopped/paused)
-            player.generate_samples_into(&mut sample_buffer);
+            // Generate stereo samples (produces silence when stopped/paused)
+            player.generate_samples_into_stereo(&mut sample_buffer);
 
             // Capture visual snapshot AFTER generating samples
             // This is the state that corresponds to the audio we just generated
@@ -325,7 +339,8 @@ fn run_producer_loop(
         // Push snapshot to delay buffer (syncs visualization with audio output)
         snapshot_delay.lock().push(snapshot);
 
-        color_filter.process(&mut sample_buffer[..batch_size]);
+        // Apply color filter to stereo samples
+        color_filter.process_stereo(&mut sample_buffer[..batch_size]);
 
         // Apply master volume
         let vol = volume.load(Ordering::Relaxed) as f32 / 100.0;

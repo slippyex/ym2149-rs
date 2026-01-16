@@ -136,18 +136,25 @@ impl NoiseGenerator {
     }
 
     /// Tick the generator (runs at half rate)
+    ///
+    /// Uses a 17-bit Galois LFSR with taps at bits 13 and 16,
+    /// matching real YM2149/AY-3-8910 hardware.
     #[inline]
     pub fn tick(&mut self) -> u32 {
         self.half_tick = !self.half_tick;
 
         if self.half_tick {
             self.counter += 1;
-            if self.counter >= self.period {
-                // XOR bits 0 and 2 for feedback
-                let feedback = (self.lfsr ^ (self.lfsr >> 2)) & 1;
-                self.output_mask = if feedback != 0 { !0 } else { 0 };
-                // Shift and insert feedback at bit 16
-                self.lfsr = (self.lfsr >> 1) | ((self.output_mask & 1) << 16);
+            // Period 0 is treated as period 1 on real hardware
+            let effective_period = self.period.max(1);
+            if self.counter >= effective_period {
+                // Galois LFSR: shift right, XOR taps at bits 13 and 16 when LSB is 1
+                let lsb = self.lfsr & 1;
+                self.lfsr >>= 1;
+                if lsb != 0 {
+                    self.lfsr ^= 0x12000; // Taps at bits 13 (0x2000) and 16 (0x10000)
+                }
+                self.output_mask = if lsb != 0 { !0 } else { 0 };
                 self.counter = 0;
             }
         }

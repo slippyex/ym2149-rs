@@ -5,62 +5,148 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YM2149 Web Player</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border: #2a2a3a;
+            --text-primary: #f0f0f5;
+            --text-secondary: #8888a0;
+            --accent-cyan: #00d4ff;
+            --accent-purple: #a855f7;
+            --accent-pink: #f472b6;
+            --accent-green: #22c55e;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #fff;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
-            padding: 20px;
+            padding: 24px;
             padding-bottom: 40px;
+        }
+
+        /* Plasma background */
+        .plasma-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.15;
+        }
+
+        .plasma-canvas {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
         }
 
         .container {
             max-width: 500px;
             margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent-cyan);
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 20px;
+            padding: 8px 16px;
+            background: rgba(22, 22, 31, 0.85);
+            backdrop-filter: blur(8px);
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .back-link:hover {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.15);
         }
 
         header {
             text-align: center;
-            padding: 20px 0;
+            padding: 20px 0 30px;
+        }
+
+        .logo {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            box-shadow:
+                0 0 30px rgba(0, 212, 255, 0.3),
+                0 0 60px rgba(168, 85, 247, 0.2);
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
         }
 
         h1 {
-            color: #00ff88;
-            font-size: 24px;
-            margin-bottom: 6px;
-            font-weight: 600;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 50%, var(--accent-purple) 100%);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: shimmer 8s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 0% center; }
+            100% { background-position: 200% center; }
         }
 
         .subtitle {
-            color: #666;
-            font-size: 13px;
-        }
-
-        .back-link {
-            display: inline-block;
-            color: #00ff88;
-            text-decoration: none;
+            color: var(--text-secondary);
             font-size: 14px;
-            margin-bottom: 20px;
-        }
-
-        .back-link:hover {
-            text-decoration: underline;
         }
 
         /* Song info card */
         .song-card {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(22, 22, 31, 0.85);
+            backdrop-filter: blur(8px);
             border-radius: 16px;
             padding: 20px;
             margin-bottom: 20px;
             display: none;
+            border: 1px solid var(--border);
+            transition: all 0.25s ease;
+        }
+
+        .song-card:hover {
+            border-color: var(--accent-purple);
+            box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
         }
 
         .song-card.visible {
@@ -71,10 +157,11 @@
             font-size: 20px;
             font-weight: 600;
             margin-bottom: 4px;
+            color: var(--text-primary);
         }
 
         .song-author {
-            color: #888;
+            color: var(--accent-cyan);
             font-size: 14px;
             margin-bottom: 12px;
         }
@@ -83,12 +170,17 @@
             display: flex;
             gap: 16px;
             font-size: 12px;
-            color: #666;
+            color: var(--text-secondary);
         }
 
         /* Progress bar */
         .progress-container {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+            background: rgba(22, 22, 31, 0.85);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid var(--border);
         }
 
         .progress-bar {
@@ -100,7 +192,7 @@
         }
 
         .progress-fill {
-            background: #00ff88;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
             height: 100%;
             width: 0%;
             transition: width 0.1s linear;
@@ -111,8 +203,9 @@
             display: flex;
             justify-content: space-between;
             font-size: 12px;
-            color: #666;
-            margin-top: 8px;
+            color: var(--text-secondary);
+            margin-top: 10px;
+            font-family: 'JetBrains Mono', monospace;
         }
 
         /* Main controls */
@@ -127,7 +220,7 @@
             width: 72px;
             height: 72px;
             border-radius: 50%;
-            background: #00ff88;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
             border: none;
             cursor: pointer;
             display: flex;
@@ -135,12 +228,12 @@
             justify-content: center;
             font-size: 28px;
             transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+            box-shadow: 0 4px 24px rgba(0, 212, 255, 0.3);
         }
 
         .play-btn:hover {
             transform: scale(1.05);
-            box-shadow: 0 6px 25px rgba(0, 255, 136, 0.4);
+            box-shadow: 0 8px 32px rgba(0, 212, 255, 0.4);
         }
 
         .play-btn:active {
@@ -148,29 +241,32 @@
         }
 
         .play-btn:disabled {
-            background: #333;
+            background: var(--bg-card);
             box-shadow: none;
             cursor: not-allowed;
+            opacity: 0.5;
         }
 
         .control-btn {
             width: 48px;
             height: 48px;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
+            background: rgba(22, 22, 31, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 18px;
-            color: #fff;
-            transition: background 0.2s;
+            color: var(--text-primary);
+            transition: all 0.2s;
             align-self: center;
         }
 
         .control-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 4px 16px rgba(0, 212, 255, 0.2);
         }
 
         .control-btn:disabled {
@@ -187,23 +283,28 @@
         }
 
         .channel-btn {
-            padding: 10px 20px;
-            border-radius: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            color: #fff;
-            font-size: 13px;
+            padding: 12px 24px;
+            border-radius: 24px;
+            background: rgba(22, 22, 31, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            font-family: 'JetBrains Mono', monospace;
         }
 
         .channel-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 4px 16px rgba(0, 212, 255, 0.15);
         }
 
         .channel-btn.muted {
-            background: rgba(255, 0, 0, 0.2);
-            color: #ff6666;
+            background: rgba(244, 114, 182, 0.15);
+            border-color: var(--accent-pink);
+            color: var(--accent-pink);
         }
 
         /* Volume */
@@ -212,12 +313,16 @@
             align-items: center;
             gap: 12px;
             margin-bottom: 24px;
-            padding: 0 20px;
+            padding: 16px 20px;
+            background: rgba(22, 22, 31, 0.85);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            border: 1px solid var(--border);
         }
 
         .volume-icon {
             font-size: 18px;
-            color: #666;
+            color: var(--text-secondary);
         }
 
         .volume-slider {
@@ -233,26 +338,35 @@
             -webkit-appearance: none;
             width: 16px;
             height: 16px;
-            background: #00ff88;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
             border-radius: 50%;
             cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
         }
 
         .volume-slider::-moz-range-thumb {
             width: 16px;
             height: 16px;
-            background: #00ff88;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
             border-radius: 50%;
             cursor: pointer;
             border: none;
+            box-shadow: 0 2px 8px rgba(0, 212, 255, 0.3);
         }
 
         /* File input */
         .file-section {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(22, 22, 31, 0.85);
+            backdrop-filter: blur(8px);
             border-radius: 12px;
-            padding: 16px;
+            padding: 20px;
             text-align: center;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+
+        .file-section:hover {
+            border-color: var(--accent-purple);
         }
 
         .file-input {
@@ -261,44 +375,62 @@
 
         .file-label {
             display: inline-block;
-            padding: 12px 24px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            padding: 14px 28px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 10px;
             cursor: pointer;
             font-size: 14px;
-            transition: background 0.2s;
+            font-weight: 600;
+            color: #fff;
+            transition: all 0.2s;
+            box-shadow: 0 4px 16px rgba(0, 212, 255, 0.25);
         }
 
         .file-label:hover {
-            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(0, 212, 255, 0.35);
         }
 
         .file-hint {
-            font-size: 11px;
-            color: #555;
-            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 12px;
         }
 
         /* Status */
         .status {
             text-align: center;
-            font-size: 12px;
-            color: #444;
-            margin-top: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 24px;
+            padding: 12px;
+            background: rgba(22, 22, 31, 0.6);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
         }
 
         .status.ready {
-            color: #00ff88;
+            color: var(--accent-green);
         }
 
         .status.error {
-            color: #ff6666;
+            color: var(--accent-pink);
         }
 
         /* Responsive */
         @media (max-width: 400px) {
             body {
-                padding: 15px;
+                padding: 16px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .logo {
+                width: 56px;
+                height: 56px;
+                font-size: 18px;
             }
 
             .play-btn {
@@ -313,19 +445,28 @@
             }
 
             .channel-btn {
-                padding: 8px 14px;
-                font-size: 12px;
+                padding: 10px 18px;
+                font-size: 13px;
             }
         }
     </style>
 </head>
 <body>
+    <!-- Plasma background -->
+    <div class="plasma-bg">
+        <canvas id="plasma" class="plasma-canvas"></canvas>
+    </div>
+
     <div class="container">
-        <a href="index.html" class="back-link">← Back to songs</a>
+        <a href="index.html" class="back-link">
+            <span>←</span>
+            <span>Back to songs</span>
+        </a>
 
         <header>
+            <div class="logo">YM</div>
             <h1>YM2149 Player</h1>
-            <div class="subtitle">Atari ST Chiptune Player</div>
+            <div class="subtitle">Atari ST/STE Chiptune Player</div>
         </header>
 
         <div class="song-card" id="songCard">
@@ -372,6 +513,79 @@
 
         <div class="status" id="status">Loading...</div>
     </div>
+
+    <script>
+        // Classic demoscene plasma effect as background
+        const canvas = document.getElementById('plasma');
+        const ctx = canvas.getContext('2d');
+
+        // Low resolution for retro look (scaled up by CSS)
+        const width = 160;
+        const height = 100;
+        canvas.width = width;
+        canvas.height = height;
+
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+
+        // Precompute sine table for performance
+        const sinTable = new Float32Array(256);
+        for (let i = 0; i < 256; i++) {
+            sinTable[i] = Math.sin(i * Math.PI * 2 / 256);
+        }
+
+        // Color palette - cyan/purple/pink demoscene colors
+        const palette = new Uint8Array(256 * 3);
+        for (let i = 0; i < 256; i++) {
+            const t = i / 255;
+            // Cycle through cyan -> purple -> pink -> cyan
+            const r = Math.floor(40 + 100 * Math.sin(t * Math.PI * 2));
+            const g = Math.floor(20 + 60 * Math.sin(t * Math.PI * 2 + Math.PI * 0.6));
+            const b = Math.floor(80 + 100 * Math.sin(t * Math.PI * 2 + Math.PI * 1.2));
+            palette[i * 3] = Math.max(0, Math.min(255, r));
+            palette[i * 3 + 1] = Math.max(0, Math.min(255, g));
+            palette[i * 3 + 2] = Math.max(0, Math.min(255, b));
+        }
+
+        let time = 0;
+
+        function renderPlasma() {
+            const t1 = time * 0.015;
+            const t2 = time * 0.023;
+            const t3 = time * 0.019;
+            const t4 = time * 0.011;
+
+            let idx = 0;
+            for (let y = 0; y < height; y++) {
+                const yf = y / height;
+                for (let x = 0; x < width; x++) {
+                    const xf = x / width;
+
+                    // Classic plasma formula with multiple sine waves
+                    let v = 0;
+                    v += sinTable[Math.floor((xf * 40 + t1 * 50) % 256) & 255];
+                    v += sinTable[Math.floor((yf * 30 + t2 * 40) % 256) & 255];
+                    v += sinTable[Math.floor(((xf + yf) * 35 + t3 * 30) % 256) & 255];
+                    v += sinTable[Math.floor((Math.sqrt((xf - 0.5) * (xf - 0.5) + (yf - 0.5) * (yf - 0.5)) * 50 + t4 * 60) % 256) & 255];
+
+                    // Normalize to 0-255 palette index
+                    const colorIdx = Math.floor((v + 4) * 32) & 255;
+                    const pi = colorIdx * 3;
+
+                    data[idx++] = palette[pi];
+                    data[idx++] = palette[pi + 1];
+                    data[idx++] = palette[pi + 2];
+                    data[idx++] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            time++;
+            requestAnimationFrame(renderPlasma);
+        }
+
+        renderPlasma();
+    </script>
 
     <script type="module">
         import init, { Ym2149Player } from './pkg/ym2149_wasm.js';

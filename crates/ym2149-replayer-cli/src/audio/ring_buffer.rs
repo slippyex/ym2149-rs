@@ -82,7 +82,8 @@ impl RingBuffer {
         })
     }
 
-    /// Get the capacity of the buffer
+    /// Get the capacity of the buffer (used in tests)
+    #[cfg(test)]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
@@ -97,11 +98,6 @@ impl RingBuffer {
         } else {
             self.capacity - (read - write)
         }
-    }
-
-    /// Get the number of samples that can be written without overwriting
-    pub fn available_write(&self) -> usize {
-        self.capacity - self.available_read() - 1 // Keep one sample gap
     }
 
     /// Write samples to the buffer (producer)
@@ -190,20 +186,23 @@ impl RingBuffer {
         to_read
     }
 
-    /// Drain and discard all samples from the buffer
+    /// Drain and discard all samples from the buffer (used in tests)
+    #[cfg(test)]
     pub fn flush(&self) {
         let write_pos = self.write_pos.load(Ordering::Acquire);
         self.read_pos.store(write_pos, Ordering::Release);
     }
 
-    /// Check if the buffer has any samples to read
+    /// Check if the buffer has any samples to read (used in tests)
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.available_read() == 0
     }
 
-    /// Check if the buffer is full (no space to write)
+    /// Check if the buffer is full (used in tests)
+    #[cfg(test)]
     pub fn is_full(&self) -> bool {
-        self.available_write() == 0
+        self.capacity - self.available_read() - 1 == 0
     }
 
     /// Get fill percentage (0.0 to 1.0)

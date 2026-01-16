@@ -16,22 +16,22 @@ path = "src/main.rs"
 
 [dependencies]
 # Core YM2149 chip emulation (pure chip only, no streaming)
-ym2149 = { path = "../ym2149-core", version = "0.8" }
+ym2149 = { path = "../ym2149-core", version = "0.9" }
 
 # YM file parsing and playback
-ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.8" }
+ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.9" }
 
 # Arkos Tracker replayer
-ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-arkos-replayer", version = "0.8" }
+ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-arkos-replayer", version = "0.9" }
 
 # AY format replayer
-ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.8" }
+ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.9" }
 
-# SNDH format replayer (Atari ST) - accurate 68000+YM2149 emulation
-ym2149_sndh_replayer = { package = "ym2149-sndh-replayer", path = "../ym2149-sndh-replayer", version = "0.8" }
+# SNDH format replayer (Atari ST) - accurate 68000+YM2149 emulation via r68k
+ym2149_sndh_replayer = { package = "ym2149-sndh-replayer", path = "../ym2149-sndh-replayer", version = "0.9" }
 
 # Common types and traits
-ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.8" }
+ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.9" }
 
 # Audio output
 rodio.workspace = true
@@ -46,3 +46,4 @@ crossterm = "0.28"
 [features]
 default = []
 softsynth = [] # workspace-only hook for experimental softsynth backends
+lmc1992-debug = ["ym2149_sndh_replayer/lmc1992-debug"]

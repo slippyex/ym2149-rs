@@ -14,9 +14,9 @@ categories = ["multimedia::audio", "parsing"]
 
 [dependencies]
 # Core YM2149 emulation
-ym2149 = { path = "../ym2149-core", version = "0.8", default-features = false }
+ym2149 = { path = "../ym2149-core", version = "0.9", default-features = false }
 # Common traits for unified player interface
-ym2149-common = { path = "../ym2149-common", version = "0.8" }
+ym2149-common = { path = "../ym2149-common", version = "0.9" }
 
 [dev-dependencies]
 # For the player example

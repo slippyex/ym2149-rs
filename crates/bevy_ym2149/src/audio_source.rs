@@ -206,6 +206,16 @@ impl Ym2149AudioSource {
         Arc::clone(&self.player)
     }
 
+    /// Get the audio stream state for buffer flushing on seek
+    pub(crate) fn stream_state(&self) -> Arc<crate::streaming::AudioStreamState> {
+        self.stream.shared_state()
+    }
+
+    /// Get a clone of the shared player Arc for external synchronization
+    pub(crate) fn shared_player(&self) -> SharedSongPlayer {
+        Arc::clone(&self.player)
+    }
+
     /// Set stereo gain values (left, right)
     pub fn set_stereo_gain(&self, left: f32, right: f32) {
         self.stream.state.set_stereo_gain(left, right);

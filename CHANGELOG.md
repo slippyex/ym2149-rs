@@ -2,6 +2,126 @@
 
 All notable changes to the ym2149-rs project.
 
+## 2026/01/14 - v0.9.0
+
+### Added
+- **LMC1992 STE Audio Mixer Emulation** - Full implementation of the Atari STE's digitally controlled audio processor:
+  - Microwire serial interface at $FF8922-$FF8925 (11-bit commands)
+  - Master volume control (0-40, -80dB to 0dB in 2dB steps)
+  - Independent left/right channel volume (0-20, -40dB to 0dB)
+  - Bass EQ with cascaded first-order low-shelf filters at 118.3Hz (-12dB to +12dB)
+  - Treble EQ with cascaded first-order high-shelf filters at 8439Hz (-12dB to +12dB)
+  - 12dB/octave slope via two-stage cascading (hardware-accurate)
+  - Mix control to enable/disable YM2149 in output path
+  - Proper transmission state machine for software polling
+- **Stereo audio output for SNDH** - SNDH replayer now outputs true stereo:
+  - YM2149 mixed with STE DAC stereo samples
+  - LMC1992 processing applied to final stereo mix
+- **Complete MFP68901 interrupt register emulation** - Full MC68901 interrupt handling:
+  - IPRA/IPRB (Interrupt Pending Registers) - Track pending timer interrupts
+  - ISRA/ISRB (Interrupt In-Service Registers) - Track active interrupt handlers
+  - AER (Active Edge Register) - Configure rising/falling edge triggers for TAI/TBI/GPI7
+  - DDR (Data Direction Register) - GPIO pin direction control
+  - VR (Vector Register) with S-bit for software/automatic EOI mode
+  - Proper interrupt acknowledge and end-of-interrupt sequencing
+  - Timer A/B/GPI7 input pin edge detection respecting AER settings (STF/STFM compatible)
+- **`MASTER_GAIN` constant** - Global 2x amplification factor in `ym2149-common` for louder output across all backends (core, softsynth, SNDH)
+- **New SNDH example songs** - Added tracks from 505, Jess, Modmate, and Tao
+- **SNDH v2.2 format support** - Full support for the January 2026 SNDH specification:
+  - `FRMS` tag parsing - Frame-based duration (32-bit per subtune, 0 = endless loop)
+  - `FLAG` tag parsing - Feature flags for hardware requirements (Timer A-D, STE, DSP, LMC1992, blitter, etc.)
+  - `#!SN` tag parsing - Subtune names with word-offset table
+  - `SndhFlags` struct - Typed access to all SNDH v2.2 feature flags
+  - `DmaSampleRate` enum - STE (6-50kHz) and Falcon (12-49kHz) sample rates
+  - Backward compatible: TIME tag still supported, FRMS takes priority when present
+  - `SubsongInfo::subtune_name` - Access subtune names from #!SN tag
+  - Duration calculation prefers FRMS (exact frames) over TIME (seconds × rate)
+- **SNDH seeking support** - Frame-based position tracking and seeking:
+  - `current_frame()` - Get current playback frame position
+  - `total_frames()` - Get total frame count from FRMS/TIME metadata
+  - `progress()` - Get playback progress as 0.0-1.0 fraction
+  - `seek_to_frame(frame)` - Seek to specific frame by fast-forwarding
+  - `seek_to_time(seconds)` - Seek to time position (converted to frames)
+  - `playback_position()` now returns actual progress based on frame metadata
+- **Unified seeking in ChiptunePlayerBase trait** - New trait methods for position tracking and seeking:
+  - `seek(position: f32)` - Seek to position (0.0-1.0 fraction)
+  - `duration_seconds()` - Get total duration in seconds
+  - `elapsed_seconds()` - Get elapsed time based on playback position
+- **CLI seeking and volume control** - Arrow key controls for TUI mode:
+  - **←/→**: Seek ±5 seconds (works with FRMS/TIME metadata)
+  - **↑/↓**: Volume up/down (±5%)
+  - **+/-**: Subsong navigation (for multi-song SNDH files)
+  - Time display now shows actual playback position (not wallclock time)
+  - Seek throttling (250ms cooldown) prevents stuttering when holding arrow keys
+- **WASM player seeking** - Full seeking support for all formats in browser:
+  - `seek_to_frame()` and `seek_to_percentage()` now work for SNDH
+  - `duration_seconds()` - Get total song duration
+  - `hasDurationInfo()` - Check if duration is from metadata (vs 5-minute fallback)
+  - Progress bar reflects actual playback position from FRMS/TIME metadata
+- **Bevy seeking** - Full seeking support in bevy_ym2149:
+  - `Ym2149Playback::seek_percentage(position)` - Seek to position (0.0-1.0)
+  - `Ym2149Playback::duration_seconds()` - Get total song duration
+  - `Ym2149Playback::has_duration_info()` - Check if duration is from metadata
+  - `Ym2149Playback::playback_position()` - Get current position (0.0-1.0)
+- **Interactive progress bar** in Bevy advanced_example:
+  - Click anywhere on the progress bar to seek to that position
+  - Drag to scrub through the song
+  - `ProgressBarContainer` component for custom seek UI integration
+- **YM seeking in ChiptunePlayerBase** - `seek()` trait method now implemented for `YmPlayerGeneric`:
+  - Enables YM seeking in WASM via `ChiptunePlayerBase::seek()`
+  - Uses `seek_frame()` for direct frame access (O(1) complexity)
+
+### Documentation
+- **HARDWARE_ACCURACY.md** - New document in ym2149-sndh-replayer detailing hardware accuracy:
+  - YM2149F PSG (clock, tone, noise LFSR, envelope, DAC, mixer)
+  - MC68901 MFP (timers, interrupts, registers)
+  - STE DMA Audio (sample rates, registers, format)
+  - LMC1992 Microwire (function codes, volume curves, EQ)
+  - MC68000 CPU timing and memory map
+  - Stereo signal path explanation
+
+### Changed
+- **68000 CPU backend replaced** - Switched from `m68000` crate to `r68k` (based on Musashi):
+  - New `cpu_backend` module with abstraction layer for CPU emulation
+  - `CpuMemory` trait for memory access abstraction
+  - `Cpu68k` trait for CPU execution interface
+  - Better instruction set compatibility for SNDH drivers
+  - Atari ST bus timing with 4-cycle boundary alignment (GLUE/MMU wait states)
+- **SNDH machine architecture refactored** - Cleaner separation of CPU, memory, and I/O emulation:
+  - `DefaultCpu` type alias for easy backend switching
+  - Improved memory-mapped I/O handling for LMC1992 registers
+- **SNDH seeking ~3500x faster** - Optimized `seek_to_frame()` for near-instant seeking:
+  - Reduced hardware simulation from 882 samples to 1 per tick during seek
+  - Reduced CPU cycle budget from 400k to 100k during seek phase
+  - Seeking now responds instantly even for long songs
+
+### Fixed
+- **Audio volume too quiet** - Applied 2x gain boost to all audio output paths
+- **SNDH FLAG tag parsing** - Fixed parser incorrectly interpreting next tag as flags when FLAG contained null-terminated entries (e.g., `FLAG~abdy\0\0FRMS` was parsing `FRMS` as flag characters)
+- **Noise LFSR hardware accuracy** - Fixed LFSR tap positions to match real YM2149/AY-3-8910:
+  - Changed from incorrect Fibonacci form (bits 0 XOR 2) to correct Galois form (bits 13 and 16)
+  - Now produces identical pseudo-random sequence to real hardware
+  - Period 0 now treated as period 1 (matching hardware behavior)
+- **LMC1992 mix control** - Fixed input select to handle all valid values:
+  - Value 00 (DMA + YM at -12dB) now correctly mixes YM (broken -12dB matches real HW)
+  - Value 01 (DMA + YM default) unchanged
+  - Value 10 (DMA only) unchanged
+  - Value 11 (reserved) now treated as no YM mix
+- **SNDH < 2.2 seeking** - Older SNDH files without FRMS/TIME metadata now support seeking:
+  - Fallback duration of 5 minutes (15000 frames at 50Hz) when no duration info available
+  - `has_duration_info()` returns false for these files to indicate estimated duration
+  - Frame count set early in `init_subsong()` before potential early returns
+- **Bevy SndhBevyPlayer frame tracking** - Fixed `current_frame()` and `frame_count()` returning 0:
+  - Now correctly delegates to underlying player methods
+- **Bevy seek latency** - Fixed delay between seek and audible position change:
+  - Ring buffer now flushed on seek via `AudioStreamState::notify_seek()`
+  - `StreamingDecoder` clears local sample buffer when seek is detected
+  - Seek counter mechanism ensures decoder discards stale samples immediately
+- **Bevy seek architecture** - Fixed seek not affecting audio output:
+  - Audio source now uses separate player instance from visualization
+  - `audio_player` field in `Ym2149Playback` holds the audio source's player
+  - Both players seeked together to keep visualization in sync with audio
+
 ## 2025/12/08 - v0.8.0
 
 ### Added

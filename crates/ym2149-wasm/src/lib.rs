@@ -182,12 +182,26 @@ impl Ym2149Player {
         let _ = self.player.seek_frame(frame as usize);
     }
 
-    /// Seek to a percentage of the song (0.0 to 1.0, silently ignored for Arkos/AY backends).
-    pub fn seek_to_percentage(&mut self, percentage: f32) {
-        let total_frames = self.player.frame_count().max(1);
-        let clamped = percentage.clamp(0.0, 1.0);
-        let target = ((total_frames as f32 - 1.0) * clamped).round() as usize;
-        let _ = self.player.seek_frame(target);
+    /// Seek to a percentage of the song (0.0 to 1.0).
+    ///
+    /// Returns true if seek succeeded. Works for all SNDH files (uses fallback duration for older files).
+    pub fn seek_to_percentage(&mut self, percentage: f32) -> bool {
+        self.player.seek_percentage(percentage)
+    }
+
+    /// Get duration in seconds.
+    ///
+    /// For SNDH < 2.2 without FRMS/TIME, returns 300 (5 minute fallback).
+    pub fn duration_seconds(&self) -> f32 {
+        self.player.duration_seconds()
+    }
+
+    /// Check if the duration is from actual metadata or estimated.
+    ///
+    /// Returns false for older SNDH files using the 5-minute fallback.
+    #[wasm_bindgen(js_name = hasDurationInfo)]
+    pub fn has_duration_info(&self) -> bool {
+        self.player.has_duration_info()
     }
 
     /// Mute or unmute a channel (0-2).
@@ -223,6 +237,35 @@ impl Ym2149Player {
     #[wasm_bindgen(js_name = generateSamplesInto)]
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         self.player.generate_samples_into(buffer);
+        if self.volume != 1.0 {
+            for sample in buffer.iter_mut() {
+                *sample *= self.volume;
+            }
+        }
+    }
+
+    /// Generate stereo audio samples (interleaved L/R).
+    ///
+    /// Returns frame_count * 2 samples. SNDH uses native stereo output,
+    /// other formats duplicate mono to stereo.
+    #[wasm_bindgen(js_name = generateSamplesStereo)]
+    pub fn generate_samples_stereo(&mut self, frame_count: usize) -> Vec<f32> {
+        let mut samples = self.player.generate_samples_stereo(frame_count);
+        if self.volume != 1.0 {
+            for sample in &mut samples {
+                *sample *= self.volume;
+            }
+        }
+        samples
+    }
+
+    /// Generate stereo samples into a pre-allocated buffer (zero-allocation).
+    ///
+    /// Buffer length must be even (frame_count * 2). Interleaved L/R format.
+    /// SNDH uses native stereo output, other formats duplicate mono to stereo.
+    #[wasm_bindgen(js_name = generateSamplesIntoStereo)]
+    pub fn generate_samples_into_stereo(&mut self, buffer: &mut [f32]) {
+        self.player.generate_samples_into_stereo(buffer);
         if self.volume != 1.0 {
             for sample in buffer.iter_mut() {
                 *sample *= self.volume;

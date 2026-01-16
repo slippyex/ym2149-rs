@@ -169,19 +169,16 @@ impl AudioDevice {
         self._sink.pause();
     }
 
-    /// Resume playback
+    /// Resume playback (used in tests)
+    #[cfg(test)]
     pub fn play(&self) {
         self._sink.play();
     }
 
-    /// Check if audio device is running
+    /// Check if audio device is running (used in tests)
+    #[cfg(test)]
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
-    }
-
-    /// Wait for playback to finish (blocks until sink is empty)
-    pub fn wait_for_finish(&self) {
-        self._sink.sleep_until_end();
     }
 
     /// Signal that no more samples will be produced

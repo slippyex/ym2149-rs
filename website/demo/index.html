@@ -1,1120 +1,1674 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="scroll-smooth">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YM2149 Web Player - Live Demo</title>
-    <meta name="description" content="Play YM2149 chiptunes directly in your browser with real-time visualization">
-    <!-- OpenGraph Meta Tags -->
-    <meta property="og:title" content="YM2149 Web Player - Live Demo" />
-    <meta property="og:description" content="Play YM2149 chiptunes directly in your browser with real-time visualization" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ym2149-rs.org/demo/" />
-    <meta property="og:image" content="https://ym2149-rs.org/screenshots/demoscene.jpg" />
-    <!-- Twitter Card Meta Tags -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="YM2149 Web Player - Live Demo" />
-    <meta name="twitter:description" content="Play YM2149 chiptunes directly in your browser with real-time visualization" />
-    <meta name="twitter:image" content="https://ym2149-rs.org/screenshots/demoscene.jpg" />
-    <!-- Canonical URL -->
-    <link rel="canonical" href="https://ym2149-rs.org/demo/" />
-    <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'chip': {
-                            'dark': '#0a0a0f',
-                            'darker': '#05050a',
-                            'purple': '#8b5cf6',
-                            'cyan': '#06b6d4',
-                            'pink': '#ec4899',
-                            'green': '#10b981',
-                        }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>YM2149 Web Player - Live Demo</title>
+        <meta
+            name="description"
+            content="Play YM2149 chiptunes directly in your browser with real-time visualization"
+        />
+        <!-- OpenGraph Meta Tags -->
+        <meta property="og:title" content="YM2149 Web Player - Live Demo" />
+        <meta
+            property="og:description"
+            content="Play YM2149 chiptunes directly in your browser with real-time visualization"
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://ym2149-rs.org/demo/" />
+        <meta
+            property="og:image"
+            content="https://ym2149-rs.org/screenshots/demoscene.jpg"
+        />
+        <!-- Twitter Card Meta Tags -->
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="YM2149 Web Player - Live Demo" />
+        <meta
+            name="twitter:description"
+            content="Play YM2149 chiptunes directly in your browser with real-time visualization"
+        />
+        <meta
+            name="twitter:image"
+            content="https://ym2149-rs.org/screenshots/demoscene.jpg"
+        />
+        <!-- Canonical URL -->
+        <link rel="canonical" href="https://ym2149-rs.org/demo/" />
+        <!-- Favicon -->
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>"
+        />
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            chip: {
+                                dark: "#0a0a0f",
+                                darker: "#05050a",
+                                purple: "#8b5cf6",
+                                cyan: "#06b6d4",
+                                pink: "#ec4899",
+                                green: "#10b981",
+                            },
+                        },
+                        fontFamily: {
+                            mono: ["JetBrains Mono", "Fira Code", "monospace"],
+                            display: [
+                                "Space Grotesk",
+                                "system-ui",
+                                "sans-serif",
+                            ],
+                        },
                     },
-                    fontFamily: {
-                        'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
-                        'display': ['Space Grotesk', 'system-ui', 'sans-serif'],
-                    },
+                },
+            };
+        </script>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                background: #05050a;
+            }
+            .gradient-text {
+                background: linear-gradient(
+                    135deg,
+                    #8b5cf6 0%,
+                    #06b6d4 50%,
+                    #ec4899 100%
+                );
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            .glow-purple {
+                box-shadow: 0 0 40px rgba(139, 92, 246, 0.3);
+            }
+            .grid-bg {
+                background-image:
+                    linear-gradient(
+                        rgba(139, 92, 246, 0.03) 1px,
+                        transparent 1px
+                    ),
+                    linear-gradient(
+                        90deg,
+                        rgba(139, 92, 246, 0.03) 1px,
+                        transparent 1px
+                    );
+                background-size: 50px 50px;
+            }
+            /* Custom scrollbar */
+            ::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+            ::-webkit-scrollbar-track {
+                background: #0a0a0f;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: #333;
+                border-radius: 3px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: #555;
+            }
+            /* Canvas styles */
+            .viz-canvas {
+                image-rendering: pixelated;
+                image-rendering: crisp-edges;
+            }
+            /* Progress bar */
+            input[type="range"] {
+                -webkit-appearance: none;
+                appearance: none;
+                background: transparent;
+                cursor: pointer;
+            }
+            input[type="range"]::-webkit-slider-track {
+                background: rgba(255, 255, 255, 0.1);
+                height: 6px;
+                border-radius: 3px;
+            }
+            input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 16px;
+                height: 16px;
+                background: #8b5cf6;
+                border-radius: 50%;
+                margin-top: -5px;
+            }
+            input[type="range"]::-moz-range-track {
+                background: rgba(255, 255, 255, 0.1);
+                height: 6px;
+                border-radius: 3px;
+            }
+            input[type="range"]::-moz-range-thumb {
+                width: 16px;
+                height: 16px;
+                background: #8b5cf6;
+                border-radius: 50%;
+                border: none;
+            }
+            /* Song list hover */
+            .song-item:hover {
+                background: rgba(139, 92, 246, 0.1);
+                border-color: rgba(139, 92, 246, 0.3);
+            }
+            .song-item.active {
+                background: rgba(139, 92, 246, 0.15);
+                border-color: rgba(139, 92, 246, 0.5);
+            }
+        </style>
+    </head>
+    <body class="font-display text-gray-100 min-h-screen">
+        <!-- Navigation -->
+        <nav
+            class="fixed top-0 left-0 right-0 z-40 bg-chip-darker/80 backdrop-blur-lg border-b border-purple-900/20"
+        >
+            <div class="max-w-7xl mx-auto px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <a href="../" class="flex items-center space-x-3">
+                        <div
+                            class="w-10 h-10 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center"
+                        >
+                            <span class="font-mono font-bold text-sm">YM</span>
+                        </div>
+                        <span class="font-mono font-semibold text-lg"
+                            >YM2149-rs</span
+                        >
+                    </a>
+
+                    <!-- Desktop Menu -->
+                    <div class="hidden md:flex items-center space-x-6">
+                        <a
+                            href="../"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >Home</a
+                        >
+                        <a
+                            href="../tutorials.html"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >Tutorials</a
+                        >
+                        <a
+                            href="../downloads.html"
+                            class="text-gray-400 hover:text-white transition-colors"
+                            >Downloads</a
+                        >
+                        <a href="./" class="text-white font-medium">Demo</a>
+                        <div class="flex items-center space-x-3">
+                            <a
+                                href="https://github.com/slippyex/ym2149-rs"
+                                target="_blank"
+                                rel="noopener"
+                                class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all"
+                                title="GitHub"
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+                                    />
+                                </svg>
+                            </a>
+                            <a
+                                href="https://docs.rs/ym2149"
+                                target="_blank"
+                                rel="noopener"
+                                class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all"
+                                title="docs.rs"
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+                                    />
+                                </svg>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Mobile Menu Button -->
+                    <button
+                        id="mobileMenuBtn"
+                        class="md:hidden p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all"
+                    >
+                        <svg
+                            id="menuIconOpen"
+                            class="w-6 h-6"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M4 6h16M4 12h16M4 18h16"
+                            />
+                        </svg>
+                        <svg
+                            id="menuIconClose"
+                            class="w-6 h-6 hidden"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                            />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Mobile Menu -->
+                <div
+                    id="mobileMenu"
+                    class="hidden md:hidden mt-4 pb-4 border-t border-gray-800 pt-4"
+                >
+                    <div class="flex flex-col space-y-3">
+                        <a
+                            href="../"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >Home</a
+                        >
+                        <a
+                            href="../tutorials.html"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >Tutorials</a
+                        >
+                        <a
+                            href="../downloads.html"
+                            class="text-gray-400 hover:text-white transition-colors py-2"
+                            >Downloads</a
+                        >
+                        <a href="./" class="text-white font-medium py-2"
+                            >Demo</a
+                        >
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto px-4 py-6 pt-24">
+            <!-- Loading overlay -->
+            <div
+                id="loadingOverlay"
+                class="fixed inset-0 bg-chip-darker/90 flex items-center justify-center z-50"
+            >
+                <div class="text-center">
+                    <div
+                        class="w-16 h-16 border-4 border-chip-purple/30 border-t-chip-purple rounded-full animate-spin mx-auto mb-4"
+                    ></div>
+                    <p class="text-gray-400" id="loadingText">
+                        Loading WebAssembly...
+                    </p>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-6">
+                <!-- Left Column: Song List -->
+                <div class="lg:col-span-1">
+                    <div
+                        class="bg-chip-dark rounded-2xl border border-gray-800 overflow-hidden"
+                    >
+                        <div
+                            class="px-4 py-3 border-b border-gray-800 flex items-center justify-between"
+                        >
+                            <h2 class="font-semibold text-sm">Demo Songs</h2>
+                            <label
+                                class="cursor-pointer text-xs text-chip-purple hover:text-chip-cyan transition-colors"
+                            >
+                                <input
+                                    type="file"
+                                    id="fileInput"
+                                    accept=".ym,.aks,.sndh,.ay"
+                                    class="hidden"
+                                />
+                                + Load File
+                            </label>
+                        </div>
+                        <div
+                            id="songList"
+                            class="max-h-[400px] lg:max-h-[600px] overflow-y-auto p-2 space-y-1"
+                        >
+                            <!-- Songs will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Player & Visualization -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- Now Playing Card -->
+                    <div
+                        class="bg-chip-dark rounded-2xl border border-gray-800 p-6"
+                    >
+                        <div
+                            class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6"
+                        >
+                            <div class="flex-1 min-w-0">
+                                <h1
+                                    id="songTitle"
+                                    class="text-2xl font-bold truncate"
+                                >
+                                    Select a song
+                                </h1>
+                                <p
+                                    id="songAuthor"
+                                    class="text-gray-400 truncate"
+                                >
+                                    -
+                                </p>
+                                <div
+                                    class="flex items-center gap-4 mt-2 text-xs text-gray-500"
+                                >
+                                    <span
+                                        id="songFormat"
+                                        class="px-2 py-0.5 rounded bg-chip-purple/20 text-chip-purple"
+                                        >-</span
+                                    >
+                                    <span id="songFrames">-</span>
+                                </div>
+                            </div>
+                            <div
+                                id="envelopeShape"
+                                class="font-mono text-2xl text-chip-cyan hidden sm:block"
+                                title="Envelope Shape"
+                            >
+                                -
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div class="mb-6">
+                            <input
+                                type="range"
+                                id="progressBar"
+                                min="0"
+                                max="100"
+                                value="0"
+                                class="w-full"
+                                disabled
+                            />
+                            <div
+                                class="flex justify-between text-xs text-gray-500 mt-1"
+                            >
+                                <span id="currentTime">0:00</span>
+                                <span id="totalTime">0:00</span>
+                            </div>
+                        </div>
+
+                        <!-- Controls -->
+                        <div
+                            class="flex items-center justify-center gap-4 mb-6"
+                        >
+                            <button
+                                id="restartBtn"
+                                class="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                                disabled
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                                </svg>
+                            </button>
+                            <button
+                                id="playBtn"
+                                class="w-16 h-16 rounded-full bg-gradient-to-br from-chip-purple to-chip-cyan hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all glow-purple"
+                                disabled
+                            >
+                                <svg
+                                    id="playIcon"
+                                    class="w-7 h-7 ml-1"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                                <svg
+                                    id="pauseIcon"
+                                    class="w-7 h-7 hidden"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                </svg>
+                            </button>
+                            <button
+                                id="stopBtn"
+                                class="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                                disabled
+                            >
+                                <svg
+                                    class="w-5 h-5"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M6 6h12v12H6z" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Channel Toggles & Volume -->
+                        <div
+                            class="flex flex-col sm:flex-row items-center justify-between gap-4"
+                        >
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-gray-500 mr-2"
+                                    >Channels:</span
+                                >
+                                <button
+                                    class="channel-btn px-4 py-2 rounded-lg text-sm font-mono transition-all"
+                                    data-channel="0"
+                                    style="
+                                        background: rgba(139, 92, 246, 0.2);
+                                        color: #8b5cf6;
+                                    "
+                                >
+                                    A
+                                </button>
+                                <button
+                                    class="channel-btn px-4 py-2 rounded-lg text-sm font-mono transition-all"
+                                    data-channel="1"
+                                    style="
+                                        background: rgba(6, 182, 212, 0.2);
+                                        color: #06b6d4;
+                                    "
+                                >
+                                    B
+                                </button>
+                                <button
+                                    class="channel-btn px-4 py-2 rounded-lg text-sm font-mono transition-all"
+                                    data-channel="2"
+                                    style="
+                                        background: rgba(236, 72, 153, 0.2);
+                                        color: #ec4899;
+                                    "
+                                >
+                                    C
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <svg
+                                    class="w-4 h-4 text-gray-500"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+                                    />
+                                </svg>
+                                <input
+                                    type="range"
+                                    id="volumeSlider"
+                                    min="0"
+                                    max="100"
+                                    value="100"
+                                    class="w-24"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visualization -->
+                    <div
+                        class="bg-chip-dark rounded-2xl border border-gray-800 overflow-hidden"
+                    >
+                        <div
+                            class="px-4 py-3 border-b border-gray-800 flex items-center justify-between"
+                        >
+                            <h2 class="font-semibold text-sm">Visualization</h2>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    id="vizModeOsc"
+                                    class="px-3 py-1 rounded text-xs bg-chip-purple/20 text-chip-purple"
+                                >
+                                    Oscilloscope
+                                </button>
+                                <button
+                                    id="vizModeSpec"
+                                    class="px-3 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700"
+                                >
+                                    Spectrum
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Oscilloscope View -->
+                        <div id="oscView" class="p-4">
+                            <!-- Channel Oscilloscopes -->
+                            <div
+                                class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4"
+                            >
+                                <div class="relative">
+                                    <div
+                                        class="absolute top-2 left-2 text-xs font-mono text-chip-purple/70 z-10"
+                                    >
+                                        CH A
+                                    </div>
+                                    <div
+                                        class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10"
+                                        id="noteA"
+                                    >
+                                        ---
+                                    </div>
+                                    <canvas
+                                        id="oscA"
+                                        class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"
+                                        aria-label="Channel A oscilloscope waveform"
+                                    ></canvas>
+                                </div>
+                                <div class="relative">
+                                    <div
+                                        class="absolute top-2 left-2 text-xs font-mono text-chip-cyan/70 z-10"
+                                    >
+                                        CH B
+                                    </div>
+                                    <div
+                                        class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10"
+                                        id="noteB"
+                                    >
+                                        ---
+                                    </div>
+                                    <canvas
+                                        id="oscB"
+                                        class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"
+                                        aria-label="Channel B oscilloscope waveform"
+                                    ></canvas>
+                                </div>
+                                <div class="relative">
+                                    <div
+                                        class="absolute top-2 left-2 text-xs font-mono text-chip-pink/70 z-10"
+                                    >
+                                        CH C
+                                    </div>
+                                    <div
+                                        class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10"
+                                        id="noteC"
+                                    >
+                                        ---
+                                    </div>
+                                    <canvas
+                                        id="oscC"
+                                        class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"
+                                        aria-label="Channel C oscilloscope waveform"
+                                    ></canvas>
+                                </div>
+                            </div>
+                            <!-- Mono Output -->
+                            <div class="relative">
+                                <div
+                                    class="absolute top-2 left-2 text-xs font-mono text-gray-400 z-10"
+                                >
+                                    MONO OUTPUT
+                                </div>
+                                <canvas
+                                    id="oscMono"
+                                    class="viz-canvas w-full h-32 bg-chip-darker rounded-lg"
+                                    aria-label="Combined mono oscilloscope waveform"
+                                ></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Spectrum View (hidden by default) -->
+                        <div id="specView" class="p-4 hidden">
+                            <div
+                                class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4"
+                            >
+                                <div class="relative">
+                                    <div
+                                        class="absolute top-2 left-2 text-xs font-mono text-chip-purple/70 z-10"
+                                    >
+                                        CH A
+                                    </div>
+                                    <canvas
+                                        id="specA"
+                                        class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"
+                                        aria-label="Channel A spectrum analyzer"
+                                    ></canvas>
+                                </div>
+                                <div class="relative">
+                                    <div
+                                        class="absolute top-2 left-2 text-xs font-mono text-chip-cyan/70 z-10"
+                                    >
+                                        CH B
+                                    </div>
+                                    <canvas
+                                        id="specB"
+                                        class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"
+                                        aria-label="Channel B spectrum analyzer"
+                                    ></canvas>
+                                </div>
+                                <div class="relative">
+                                    <div
+                                        class="absolute top-2 left-2 text-xs font-mono text-chip-pink/70 z-10"
+                                    >
+                                        CH C
+                                    </div>
+                                    <canvas
+                                        id="specC"
+                                        class="viz-canvas w-full h-24 bg-chip-darker rounded-lg"
+                                        aria-label="Channel C spectrum analyzer"
+                                    ></canvas>
+                                </div>
+                            </div>
+                            <!-- Combined Spectrum -->
+                            <div class="relative">
+                                <div
+                                    class="absolute top-2 left-2 text-xs font-mono text-gray-400 z-10"
+                                >
+                                    COMBINED SPECTRUM
+                                </div>
+                                <canvas
+                                    id="specCombined"
+                                    class="viz-canvas w-full h-32 bg-chip-darker rounded-lg"
+                                    aria-label="Combined spectrum analyzer"
+                                ></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer
+            class="border-t border-gray-800 mt-12 py-6 text-center text-gray-500 text-sm"
+        >
+            <p>
+                Hardware-accurate YM2149 PSG emulation powered by Rust &
+                WebAssembly
+            </p>
+            <p class="mt-1">
+                <a
+                    href="https://github.com/slippyex/ym2149-rs"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-chip-purple hover:text-chip-cyan transition-colors"
+                    >GitHub</a
+                >
+                <span class="mx-2">|</span>
+                <a
+                    href="https://crates.io/crates/ym2149-core"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-chip-purple hover:text-chip-cyan transition-colors"
+                    >crates.io</a
+                >
+                <span class="mx-2">|</span>
+                <a
+                    href="https://docs.rs/ym2149-core"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-chip-purple hover:text-chip-cyan transition-colors"
+                    >docs.rs</a
+                >
+            </p>
+        </footer>
+
+        <script type="module">
+            // ============================================================================
+            // Configuration & Constants
+            // ============================================================================
+            const SAMPLE_RATE = 44100;
+            const BUFFER_SIZE = 4096;
+            const WAVEFORM_SIZE = 256;
+            const SPECTRUM_BINS = 32;
+            const SPECTRUM_DECAY = 0.85;
+            const SPECTRUM_BASE_FREQ = 32.703; // C1
+            const BINS_PER_OCTAVE = 4;
+
+            const COLORS = {
+                purple: "#8b5cf6",
+                cyan: "#06b6d4",
+                pink: "#ec4899",
+                green: "#10b981",
+                grid: "rgba(139, 92, 246, 0.1)",
+                gridLight: "rgba(139, 92, 246, 0.05)",
+            };
+
+            // Demo songs list
+            const DEMO_SONGS = [
+                {
+                    file: "505/Schwerlasttransport.sndh",
+                    name: "Schwerlasttransport",
+                    format: "SNDH",
+                    author: "505",
+                    icon: "1",
+                },
+                {
+                    file: "modmate/jamtrack_(ode_to_scavy).sndh",
+                    name: "Jamtrack (Ode to Scavy)",
+                    format: "SNDH",
+                    author: "Modmate",
+                    icon: "2",
+                },
+                {
+                    file: "tao/Summerblast.sndh",
+                    name: "Summerblast",
+                    format: "SNDH",
+                    author: "Tao",
+                    icon: "3",
+                },
+                {
+                    file: "tao/mOdulator.sndh",
+                    name: "mOdulator",
+                    format: "SNDH",
+                    author: "Tao",
+                    icon: "4",
+                },
+                {
+                    file: "cube/Bullet_Sequence.sndh",
+                    name: "Bullet Sequence",
+                    format: "SNDH",
+                    author: "Cube",
+                    icon: "5",
+                },
+                {
+                    file: "cube/Outpost.sndh",
+                    name: "Outpost",
+                    format: "SNDH",
+                    author: "Cube",
+                    icon: "6",
+                },
+                {
+                    file: "scavenger/DBA_6_Intro.sndh",
+                    name: "DBA 6 Intro",
+                    format: "SNDH",
+                    author: "Scavenger",
+                    icon: "7",
+                },
+                {
+                    file: "madmax/Main_Menu.sndh",
+                    name: "OCWAS - Main Menu",
+                    format: "SNDH",
+                    author: "Mad Max",
+                    icon: "8",
+                },
+                { file: "ym/Scout.ym", name: "Scout", format: "YM", icon: "9" },
+                {
+                    file: "ym/Prelude.ym",
+                    name: "Prelude",
+                    format: "YM",
+                    icon: "A",
+                },
+                {
+                    file: "arkos/JustAddCream.aks",
+                    name: "Just Add Cream",
+                    format: "AKS",
+                    author: "XIA",
+                    icon: "B",
+                },
+                {
+                    file: "arkos/LopEars.aks",
+                    name: "Lop Ears",
+                    format: "AKS",
+                    author: "Andy Severn",
+                    icon: "C",
+                },
+                {
+                    file: "ay/AcousticDreams.ay",
+                    name: "Acoustic Dreams",
+                    format: "AY",
+                    icon: "D",
+                },
+                { file: "ay/ZUB.AY", name: "ZUB", format: "AY", icon: "E" },
+            ];
+
+            // ============================================================================
+            // State
+            // ============================================================================
+            let wasmModule = null;
+            let wasmPlayer = null;
+            let audioContext = null;
+            let scriptProcessor = null;
+            let audioElement = null;
+            let mediaStreamDest = null;
+            let isPlaying = false;
+            let animationId = null;
+            let currentSongIndex = -1;
+
+            // Visualization state
+            const waveforms = {
+                A: new Float32Array(WAVEFORM_SIZE),
+                B: new Float32Array(WAVEFORM_SIZE),
+                C: new Float32Array(WAVEFORM_SIZE),
+                mono: new Float32Array(WAVEFORM_SIZE),
+            };
+            const phases = [0, 0, 0];
+            const spectrums = {
+                A: new Float32Array(SPECTRUM_BINS),
+                B: new Float32Array(SPECTRUM_BINS),
+                C: new Float32Array(SPECTRUM_BINS),
+                combined: new Float32Array(SPECTRUM_BINS),
+            };
+            let lastChannelStates = null;
+
+            // ============================================================================
+            // DOM Elements
+            // ============================================================================
+            const elements = {
+                loadingOverlay: document.getElementById("loadingOverlay"),
+                loadingText: document.getElementById("loadingText"),
+                songList: document.getElementById("songList"),
+                fileInput: document.getElementById("fileInput"),
+                songTitle: document.getElementById("songTitle"),
+                songAuthor: document.getElementById("songAuthor"),
+                songFormat: document.getElementById("songFormat"),
+                songFrames: document.getElementById("songFrames"),
+                envelopeShape: document.getElementById("envelopeShape"),
+                progressBar: document.getElementById("progressBar"),
+                currentTime: document.getElementById("currentTime"),
+                totalTime: document.getElementById("totalTime"),
+                playBtn: document.getElementById("playBtn"),
+                playIcon: document.getElementById("playIcon"),
+                pauseIcon: document.getElementById("pauseIcon"),
+                stopBtn: document.getElementById("stopBtn"),
+                restartBtn: document.getElementById("restartBtn"),
+                volumeSlider: document.getElementById("volumeSlider"),
+                vizModeOsc: document.getElementById("vizModeOsc"),
+                vizModeSpec: document.getElementById("vizModeSpec"),
+                oscView: document.getElementById("oscView"),
+                specView: document.getElementById("specView"),
+                noteA: document.getElementById("noteA"),
+                noteB: document.getElementById("noteB"),
+                noteC: document.getElementById("noteC"),
+            };
+
+            const canvases = {
+                oscA: document.getElementById("oscA"),
+                oscB: document.getElementById("oscB"),
+                oscC: document.getElementById("oscC"),
+                oscMono: document.getElementById("oscMono"),
+                specA: document.getElementById("specA"),
+                specB: document.getElementById("specB"),
+                specC: document.getElementById("specC"),
+                specCombined: document.getElementById("specCombined"),
+            };
+
+            const contexts = {};
+
+            // ============================================================================
+            // Initialization
+            // ============================================================================
+            async function init() {
+                try {
+                    elements.loadingText.textContent =
+                        "Loading WebAssembly module...";
+
+                    // Dynamic import of the WASM module
+                    wasmModule = await import("./pkg/ym2149_wasm.js");
+                    await wasmModule.default();
+
+                    elements.loadingText.textContent = "Initializing...";
+
+                    // Setup canvas contexts (only visible canvases initially - oscilloscope view is default)
+                    // Spectrum canvases are hidden initially, so we setup them when switching to spectrum view
+                    ["oscA", "oscB", "oscC", "oscMono"].forEach((key) => {
+                        setupCanvas(canvases[key]);
+                        contexts[key] = canvases[key].getContext("2d");
+                    });
+
+                    // Build song list
+                    buildSongList();
+
+                    // Setup event listeners
+                    setupEventListeners();
+
+                    // Hide loading overlay
+                    elements.loadingOverlay.classList.add("hidden");
+
+                    // Auto-load first song
+                    if (DEMO_SONGS.length > 0) {
+                        loadSong(0);
+                    }
+                } catch (error) {
+                    console.error("Init error:", error);
+                    elements.loadingText.textContent = `Error: ${error.message}`;
                 }
             }
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            background: #05050a;
-        }
-        .gradient-text {
-            background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 50%, #ec4899 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .glow-purple {
-            box-shadow: 0 0 40px rgba(139, 92, 246, 0.3);
-        }
-        .grid-bg {
-            background-image:
-                linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
-            background-size: 50px 50px;
-        }
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0a0a0f;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #333;
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #555;
-        }
-        /* Canvas styles */
-        .viz-canvas {
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-        /* Progress bar */
-        input[type="range"] {
-            -webkit-appearance: none;
-            appearance: none;
-            background: transparent;
-            cursor: pointer;
-        }
-        input[type="range"]::-webkit-slider-track {
-            background: rgba(255,255,255,0.1);
-            height: 6px;
-            border-radius: 3px;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            background: #8b5cf6;
-            border-radius: 50%;
-            margin-top: -5px;
-        }
-        input[type="range"]::-moz-range-track {
-            background: rgba(255,255,255,0.1);
-            height: 6px;
-            border-radius: 3px;
-        }
-        input[type="range"]::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
-            background: #8b5cf6;
-            border-radius: 50%;
-            border: none;
-        }
-        /* Song list hover */
-        .song-item:hover {
-            background: rgba(139, 92, 246, 0.1);
-            border-color: rgba(139, 92, 246, 0.3);
-        }
-        .song-item.active {
-            background: rgba(139, 92, 246, 0.15);
-            border-color: rgba(139, 92, 246, 0.5);
-        }
-    </style>
-</head>
-<body class="font-display text-gray-100 min-h-screen">
-    <!-- Navigation -->
-    <nav class="fixed top-0 left-0 right-0 z-40 bg-chip-darker/80 backdrop-blur-lg border-b border-purple-900/20">
-        <div class="max-w-7xl mx-auto px-6 py-4">
-            <div class="flex items-center justify-between">
-                <a href="../" class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center">
-                        <span class="font-mono font-bold text-sm">YM</span>
-                    </div>
-                    <span class="font-mono font-semibold text-lg">YM2149-rs</span>
-                </a>
 
-                <!-- Desktop Menu -->
-                <div class="hidden md:flex items-center space-x-6">
-                    <a href="../" class="text-gray-400 hover:text-white transition-colors">Home</a>
-                    <a href="../tutorials.html" class="text-gray-400 hover:text-white transition-colors">Tutorials</a>
-                    <a href="../downloads.html" class="text-gray-400 hover:text-white transition-colors">Downloads</a>
-                    <a href="./" class="text-white font-medium">Demo</a>
-                    <div class="flex items-center space-x-3">
-                        <a href="https://github.com/slippyex/ym2149-rs" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all" title="GitHub">
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-                        </a>
-                        <a href="https://docs.rs/ym2149" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all" title="docs.rs">
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                        </a>
-                    </div>
-                </div>
-
-                <!-- Mobile Menu Button -->
-                <button id="mobileMenuBtn" class="md:hidden p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-all">
-                    <svg id="menuIconOpen" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                    </svg>
-                    <svg id="menuIconClose" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Mobile Menu -->
-            <div id="mobileMenu" class="hidden md:hidden mt-4 pb-4 border-t border-gray-800 pt-4">
-                <div class="flex flex-col space-y-3">
-                    <a href="../" class="text-gray-400 hover:text-white transition-colors py-2">Home</a>
-                    <a href="../tutorials.html" class="text-gray-400 hover:text-white transition-colors py-2">Tutorials</a>
-                    <a href="../downloads.html" class="text-gray-400 hover:text-white transition-colors py-2">Downloads</a>
-                    <a href="./" class="text-white font-medium py-2">Demo</a>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <main class="max-w-7xl mx-auto px-4 py-6 pt-24">
-        <!-- Loading overlay -->
-        <div id="loadingOverlay" class="fixed inset-0 bg-chip-darker/90 flex items-center justify-center z-50">
-            <div class="text-center">
-                <div class="w-16 h-16 border-4 border-chip-purple/30 border-t-chip-purple rounded-full animate-spin mx-auto mb-4"></div>
-                <p class="text-gray-400" id="loadingText">Loading WebAssembly...</p>
-            </div>
-        </div>
-
-        <div class="grid lg:grid-cols-3 gap-6">
-            <!-- Left Column: Song List -->
-            <div class="lg:col-span-1">
-                <div class="bg-chip-dark rounded-2xl border border-gray-800 overflow-hidden">
-                    <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-                        <h2 class="font-semibold text-sm">Demo Songs</h2>
-                        <label class="cursor-pointer text-xs text-chip-purple hover:text-chip-cyan transition-colors">
-                            <input type="file" id="fileInput" accept=".ym,.aks,.sndh,.ay" class="hidden">
-                            + Load File
-                        </label>
-                    </div>
-                    <div id="songList" class="max-h-[400px] lg:max-h-[600px] overflow-y-auto p-2 space-y-1">
-                        <!-- Songs will be populated by JavaScript -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Column: Player & Visualization -->
-            <div class="lg:col-span-2 space-y-6">
-                <!-- Now Playing Card -->
-                <div class="bg-chip-dark rounded-2xl border border-gray-800 p-6">
-                    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
-                        <div class="flex-1 min-w-0">
-                            <h1 id="songTitle" class="text-2xl font-bold truncate">Select a song</h1>
-                            <p id="songAuthor" class="text-gray-400 truncate">-</p>
-                            <div class="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                                <span id="songFormat" class="px-2 py-0.5 rounded bg-chip-purple/20 text-chip-purple">-</span>
-                                <span id="songFrames">-</span>
-                            </div>
-                        </div>
-                        <div id="envelopeShape" class="font-mono text-2xl text-chip-cyan hidden sm:block" title="Envelope Shape">-</div>
-                    </div>
-
-                    <!-- Progress Bar -->
-                    <div class="mb-6">
-                        <input type="range" id="progressBar" min="0" max="100" value="0" class="w-full" disabled>
-                        <div class="flex justify-between text-xs text-gray-500 mt-1">
-                            <span id="currentTime">0:00</span>
-                            <span id="totalTime">0:00</span>
-                        </div>
-                    </div>
-
-                    <!-- Controls -->
-                    <div class="flex items-center justify-center gap-4 mb-6">
-                        <button id="restartBtn" class="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors" disabled>
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-                        </button>
-                        <button id="playBtn" class="w-16 h-16 rounded-full bg-gradient-to-br from-chip-purple to-chip-cyan hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all glow-purple" disabled>
-                            <svg id="playIcon" class="w-7 h-7 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                            <svg id="pauseIcon" class="w-7 h-7 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                        </button>
-                        <button id="stopBtn" class="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors" disabled>
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-                        </button>
-                    </div>
-
-                    <!-- Channel Toggles & Volume -->
-                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-gray-500 mr-2">Channels:</span>
-                            <button class="channel-btn px-4 py-2 rounded-lg text-sm font-mono transition-all" data-channel="0" style="background: rgba(139, 92, 246, 0.2); color: #8b5cf6;">A</button>
-                            <button class="channel-btn px-4 py-2 rounded-lg text-sm font-mono transition-all" data-channel="1" style="background: rgba(6, 182, 212, 0.2); color: #06b6d4;">B</button>
-                            <button class="channel-btn px-4 py-2 rounded-lg text-sm font-mono transition-all" data-channel="2" style="background: rgba(236, 72, 153, 0.2); color: #ec4899;">C</button>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <svg class="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
-                            <input type="range" id="volumeSlider" min="0" max="100" value="100" class="w-24">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Visualization -->
-                <div class="bg-chip-dark rounded-2xl border border-gray-800 overflow-hidden">
-                    <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-                        <h2 class="font-semibold text-sm">Visualization</h2>
-                        <div class="flex items-center gap-2">
-                            <button id="vizModeOsc" class="px-3 py-1 rounded text-xs bg-chip-purple/20 text-chip-purple">Oscilloscope</button>
-                            <button id="vizModeSpec" class="px-3 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700">Spectrum</button>
-                        </div>
-                    </div>
-
-                    <!-- Oscilloscope View -->
-                    <div id="oscView" class="p-4">
-                        <!-- Channel Oscilloscopes -->
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                            <div class="relative">
-                                <div class="absolute top-2 left-2 text-xs font-mono text-chip-purple/70 z-10">CH A</div>
-                                <div class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10" id="noteA">---</div>
-                                <canvas id="oscA" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel A oscilloscope waveform"></canvas>
-                            </div>
-                            <div class="relative">
-                                <div class="absolute top-2 left-2 text-xs font-mono text-chip-cyan/70 z-10">CH B</div>
-                                <div class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10" id="noteB">---</div>
-                                <canvas id="oscB" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel B oscilloscope waveform"></canvas>
-                            </div>
-                            <div class="relative">
-                                <div class="absolute top-2 left-2 text-xs font-mono text-chip-pink/70 z-10">CH C</div>
-                                <div class="absolute top-2 right-2 text-xs font-mono text-gray-500 z-10" id="noteC">---</div>
-                                <canvas id="oscC" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel C oscilloscope waveform"></canvas>
-                            </div>
-                        </div>
-                        <!-- Mono Output -->
-                        <div class="relative">
-                            <div class="absolute top-2 left-2 text-xs font-mono text-gray-400 z-10">MONO OUTPUT</div>
-                            <canvas id="oscMono" class="viz-canvas w-full h-32 bg-chip-darker rounded-lg" aria-label="Combined mono oscilloscope waveform"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- Spectrum View (hidden by default) -->
-                    <div id="specView" class="p-4 hidden">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                            <div class="relative">
-                                <div class="absolute top-2 left-2 text-xs font-mono text-chip-purple/70 z-10">CH A</div>
-                                <canvas id="specA" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel A spectrum analyzer"></canvas>
-                            </div>
-                            <div class="relative">
-                                <div class="absolute top-2 left-2 text-xs font-mono text-chip-cyan/70 z-10">CH B</div>
-                                <canvas id="specB" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel B spectrum analyzer"></canvas>
-                            </div>
-                            <div class="relative">
-                                <div class="absolute top-2 left-2 text-xs font-mono text-chip-pink/70 z-10">CH C</div>
-                                <canvas id="specC" class="viz-canvas w-full h-24 bg-chip-darker rounded-lg" aria-label="Channel C spectrum analyzer"></canvas>
-                            </div>
-                        </div>
-                        <!-- Combined Spectrum -->
-                        <div class="relative">
-                            <div class="absolute top-2 left-2 text-xs font-mono text-gray-400 z-10">COMBINED SPECTRUM</div>
-                            <canvas id="specCombined" class="viz-canvas w-full h-32 bg-chip-darker rounded-lg" aria-label="Combined spectrum analyzer"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="border-t border-gray-800 mt-12 py-6 text-center text-gray-500 text-sm">
-        <p>Hardware-accurate YM2149 PSG emulation powered by Rust & WebAssembly</p>
-        <p class="mt-1">
-            <a href="https://github.com/slippyex/ym2149-rs" target="_blank" rel="noopener" class="text-chip-purple hover:text-chip-cyan transition-colors">GitHub</a>
-            <span class="mx-2">|</span>
-            <a href="https://crates.io/crates/ym2149-core" target="_blank" rel="noopener" class="text-chip-purple hover:text-chip-cyan transition-colors">crates.io</a>
-            <span class="mx-2">|</span>
-            <a href="https://docs.rs/ym2149-core" target="_blank" rel="noopener" class="text-chip-purple hover:text-chip-cyan transition-colors">docs.rs</a>
-        </p>
-    </footer>
-
-    <script type="module">
-        // ============================================================================
-        // Configuration & Constants
-        // ============================================================================
-        const SAMPLE_RATE = 44100;
-        const BUFFER_SIZE = 4096;
-        const WAVEFORM_SIZE = 256;
-        const SPECTRUM_BINS = 32;
-        const SPECTRUM_DECAY = 0.85;
-        const SPECTRUM_BASE_FREQ = 32.703; // C1
-        const BINS_PER_OCTAVE = 4;
-
-        const COLORS = {
-            purple: '#8b5cf6',
-            cyan: '#06b6d4',
-            pink: '#ec4899',
-            green: '#10b981',
-            grid: 'rgba(139, 92, 246, 0.1)',
-            gridLight: 'rgba(139, 92, 246, 0.05)',
-        };
-
-        // Demo songs list
-        const DEMO_SONGS = [
-            { file: 'Scout.ym', name: 'Scout', format: 'YM', icon: '1' },
-            { file: 'Prelude.ym', name: 'Prelude', format: 'YM', icon: '2' },
-            { file: 'Intensity_200hz.sndh', name: 'Intensity (200Hz)', format: 'SNDH', author: 'Tao', icon: '3' },
-            { file: 'Bullet_Sequence.sndh', name: 'Bullet Sequence', format: 'SNDH', author: 'Cube', icon: '4' },
-            { file: 'Elusive_Groove.sndh', name: 'Elusive Groove', format: 'SNDH', author: 'Cube', icon: '5' },
-            { file: 'Outpost.sndh', name: 'Outpost', format: 'SNDH', author: 'Cube', icon: '6' },
-            { file: 'Main_Menu.sndh', name: 'OCWAS - Main Menu', format: 'SNDH', author: 'Mad Max', icon: '7' },
-            { file: 'JustAddCream.aks', name: 'Just Add Cream', format: 'AKS', author: 'XIA', icon: '8' },
-            { file: 'LopEars.aks', name: 'Lop Ears', format: 'AKS', author: 'Andy Severn', icon: '9' },
-            { file: 'AcousticDreams.ay', name: 'Acoustic Dreams', format: 'AY', icon: 'A' },
-            { file: 'ZUB.AY', name: 'ZUB', format: 'AY', icon: 'B' },
-        ];
-
-        // ============================================================================
-        // State
-        // ============================================================================
-        let wasmModule = null;
-        let wasmPlayer = null;
-        let audioContext = null;
-        let scriptProcessor = null;
-        let audioElement = null;
-        let mediaStreamDest = null;
-        let isPlaying = false;
-        let animationId = null;
-        let currentSongIndex = -1;
-
-        // Visualization state
-        const waveforms = {
-            A: new Float32Array(WAVEFORM_SIZE),
-            B: new Float32Array(WAVEFORM_SIZE),
-            C: new Float32Array(WAVEFORM_SIZE),
-            mono: new Float32Array(WAVEFORM_SIZE),
-        };
-        const phases = [0, 0, 0];
-        const spectrums = {
-            A: new Float32Array(SPECTRUM_BINS),
-            B: new Float32Array(SPECTRUM_BINS),
-            C: new Float32Array(SPECTRUM_BINS),
-            combined: new Float32Array(SPECTRUM_BINS),
-        };
-        let lastChannelStates = null;
-
-        // ============================================================================
-        // DOM Elements
-        // ============================================================================
-        const elements = {
-            loadingOverlay: document.getElementById('loadingOverlay'),
-            loadingText: document.getElementById('loadingText'),
-            songList: document.getElementById('songList'),
-            fileInput: document.getElementById('fileInput'),
-            songTitle: document.getElementById('songTitle'),
-            songAuthor: document.getElementById('songAuthor'),
-            songFormat: document.getElementById('songFormat'),
-            songFrames: document.getElementById('songFrames'),
-            envelopeShape: document.getElementById('envelopeShape'),
-            progressBar: document.getElementById('progressBar'),
-            currentTime: document.getElementById('currentTime'),
-            totalTime: document.getElementById('totalTime'),
-            playBtn: document.getElementById('playBtn'),
-            playIcon: document.getElementById('playIcon'),
-            pauseIcon: document.getElementById('pauseIcon'),
-            stopBtn: document.getElementById('stopBtn'),
-            restartBtn: document.getElementById('restartBtn'),
-            volumeSlider: document.getElementById('volumeSlider'),
-            vizModeOsc: document.getElementById('vizModeOsc'),
-            vizModeSpec: document.getElementById('vizModeSpec'),
-            oscView: document.getElementById('oscView'),
-            specView: document.getElementById('specView'),
-            noteA: document.getElementById('noteA'),
-            noteB: document.getElementById('noteB'),
-            noteC: document.getElementById('noteC'),
-        };
-
-        const canvases = {
-            oscA: document.getElementById('oscA'),
-            oscB: document.getElementById('oscB'),
-            oscC: document.getElementById('oscC'),
-            oscMono: document.getElementById('oscMono'),
-            specA: document.getElementById('specA'),
-            specB: document.getElementById('specB'),
-            specC: document.getElementById('specC'),
-            specCombined: document.getElementById('specCombined'),
-        };
-
-        const contexts = {};
-
-        // ============================================================================
-        // Initialization
-        // ============================================================================
-        async function init() {
-            try {
-                elements.loadingText.textContent = 'Loading WebAssembly module...';
-
-                // Dynamic import of the WASM module
-                wasmModule = await import('./pkg/ym2149_wasm.js');
-                await wasmModule.default();
-
-                elements.loadingText.textContent = 'Initializing...';
-
-                // Setup canvas contexts (only visible canvases initially - oscilloscope view is default)
-                // Spectrum canvases are hidden initially, so we setup them when switching to spectrum view
-                ['oscA', 'oscB', 'oscC', 'oscMono'].forEach(key => {
-                    setupCanvas(canvases[key]);
-                    contexts[key] = canvases[key].getContext('2d');
-                });
-
-                // Build song list
-                buildSongList();
-
-                // Setup event listeners
-                setupEventListeners();
-
-                // Hide loading overlay
-                elements.loadingOverlay.classList.add('hidden');
-
-                // Auto-load first song
-                if (DEMO_SONGS.length > 0) {
-                    loadSong(0);
-                }
-            } catch (error) {
-                console.error('Init error:', error);
-                elements.loadingText.textContent = `Error: ${error.message}`;
+            function setupCanvas(canvas) {
+                const dpr = window.devicePixelRatio || 1;
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                const ctx = canvas.getContext("2d");
+                ctx.scale(dpr, dpr);
             }
-        }
 
-        function setupCanvas(canvas) {
-            const dpr = window.devicePixelRatio || 1;
-            const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width * dpr;
-            canvas.height = rect.height * dpr;
-            const ctx = canvas.getContext('2d');
-            ctx.scale(dpr, dpr);
-        }
-
-        function buildSongList() {
-            elements.songList.innerHTML = DEMO_SONGS.map((song, i) => `
+            function buildSongList() {
+                elements.songList.innerHTML = DEMO_SONGS.map(
+                    (song, i) => `
                 <button class="song-item w-full text-left px-3 py-2 rounded-lg border border-transparent transition-all flex items-center gap-3" data-index="${i}">
                     <div class="w-8 h-8 rounded bg-chip-purple/20 flex items-center justify-center font-mono text-chip-purple text-sm flex-shrink-0">${song.icon}</div>
                     <div class="min-w-0 flex-1">
                         <div class="font-medium text-sm truncate">${song.name}</div>
-                        <div class="text-xs text-gray-500">${song.format}${song.author ? ' - ' + song.author : ''}</div>
+                        <div class="text-xs text-gray-500">${song.format}${song.author ? " - " + song.author : ""}</div>
                     </div>
                 </button>
-            `).join('');
-        }
+            `,
+                ).join("");
+            }
 
-        function setupEventListeners() {
-            // Song list
-            elements.songList.addEventListener('click', async (e) => {
-                const btn = e.target.closest('.song-item');
-                if (btn) {
-                    await ensureAudioContext(); // Important for mobile: create AudioContext on user gesture
-                    const index = parseInt(btn.dataset.index);
-                    loadSong(index);
-                }
-            });
-
-            // File input
-            elements.fileInput.addEventListener('change', async (e) => {
-                await ensureAudioContext(); // Important for mobile
-                const file = e.target.files[0];
-                if (file) {
-                    await loadFromFile(file);
-                }
-            });
-
-            // Playback controls
-            elements.playBtn.addEventListener('click', togglePlayPause);
-            elements.stopBtn.addEventListener('click', stop);
-            elements.restartBtn.addEventListener('click', restart);
-
-            // Progress bar
-            elements.progressBar.addEventListener('input', (e) => {
-                if (wasmPlayer) {
-                    wasmPlayer.seek_to_percentage(e.target.value / 100);
-                }
-            });
-
-            // Volume
-            elements.volumeSlider.addEventListener('input', (e) => {
-                if (wasmPlayer) {
-                    wasmPlayer.set_volume(e.target.value / 100);
-                }
-            });
-
-            // Channel toggles
-            document.querySelectorAll('.channel-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    if (!wasmPlayer) return;
-                    const ch = parseInt(btn.dataset.channel);
-                    const isMuted = wasmPlayer.is_channel_muted(ch);
-                    wasmPlayer.set_channel_mute(ch, !isMuted);
-                    btn.style.opacity = isMuted ? '1' : '0.3';
+            function setupEventListeners() {
+                // Song list
+                elements.songList.addEventListener("click", async (e) => {
+                    const btn = e.target.closest(".song-item");
+                    if (btn) {
+                        await ensureAudioContext(); // Important for mobile: create AudioContext on user gesture
+                        const index = parseInt(btn.dataset.index);
+                        loadSong(index);
+                    }
                 });
-            });
 
-            // Visualization mode toggle
-            elements.vizModeOsc.addEventListener('click', () => {
-                elements.oscView.classList.remove('hidden');
-                elements.specView.classList.add('hidden');
-                elements.vizModeOsc.classList.remove('bg-gray-800', 'text-gray-400');
-                elements.vizModeOsc.classList.add('bg-chip-purple/20', 'text-chip-purple');
-                elements.vizModeSpec.classList.remove('bg-chip-purple/20', 'text-chip-purple');
-                elements.vizModeSpec.classList.add('bg-gray-800', 'text-gray-400');
-                // Re-setup oscilloscope canvases after they become visible
-                requestAnimationFrame(() => {
-                    ['oscA', 'oscB', 'oscC', 'oscMono'].forEach(key => {
-                        setupCanvas(canvases[key]);
-                        contexts[key] = canvases[key].getContext('2d');
+                // File input
+                elements.fileInput.addEventListener("change", async (e) => {
+                    await ensureAudioContext(); // Important for mobile
+                    const file = e.target.files[0];
+                    if (file) {
+                        await loadFromFile(file);
+                    }
+                });
+
+                // Playback controls
+                elements.playBtn.addEventListener("click", togglePlayPause);
+                elements.stopBtn.addEventListener("click", stop);
+                elements.restartBtn.addEventListener("click", restart);
+
+                // Progress bar
+                elements.progressBar.addEventListener("input", (e) => {
+                    if (wasmPlayer) {
+                        wasmPlayer.seek_to_percentage(e.target.value / 100);
+                    }
+                });
+
+                // Volume
+                elements.volumeSlider.addEventListener("input", (e) => {
+                    if (wasmPlayer) {
+                        wasmPlayer.set_volume(e.target.value / 100);
+                    }
+                });
+
+                // Channel toggles
+                document.querySelectorAll(".channel-btn").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        if (!wasmPlayer) return;
+                        const ch = parseInt(btn.dataset.channel);
+                        const isMuted = wasmPlayer.is_channel_muted(ch);
+                        wasmPlayer.set_channel_mute(ch, !isMuted);
+                        btn.style.opacity = isMuted ? "1" : "0.3";
                     });
+                });
+
+                // Visualization mode toggle
+                elements.vizModeOsc.addEventListener("click", () => {
+                    elements.oscView.classList.remove("hidden");
+                    elements.specView.classList.add("hidden");
+                    elements.vizModeOsc.classList.remove(
+                        "bg-gray-800",
+                        "text-gray-400",
+                    );
+                    elements.vizModeOsc.classList.add(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    elements.vizModeSpec.classList.remove(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    elements.vizModeSpec.classList.add(
+                        "bg-gray-800",
+                        "text-gray-400",
+                    );
+                    // Re-setup oscilloscope canvases after they become visible
+                    requestAnimationFrame(() => {
+                        ["oscA", "oscB", "oscC", "oscMono"].forEach((key) => {
+                            setupCanvas(canvases[key]);
+                            contexts[key] = canvases[key].getContext("2d");
+                        });
+                        drawAllVisualization();
+                    });
+                });
+
+                elements.vizModeSpec.addEventListener("click", () => {
+                    elements.specView.classList.remove("hidden");
+                    elements.oscView.classList.add("hidden");
+                    elements.vizModeSpec.classList.remove(
+                        "bg-gray-800",
+                        "text-gray-400",
+                    );
+                    elements.vizModeSpec.classList.add(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    elements.vizModeOsc.classList.remove(
+                        "bg-chip-purple/20",
+                        "text-chip-purple",
+                    );
+                    elements.vizModeOsc.classList.add(
+                        "bg-gray-800",
+                        "text-gray-400",
+                    );
+                    // Re-setup spectrum canvases after they become visible
+                    requestAnimationFrame(() => {
+                        ["specA", "specB", "specC", "specCombined"].forEach(
+                            (key) => {
+                                setupCanvas(canvases[key]);
+                                contexts[key] = canvases[key].getContext("2d");
+                            },
+                        );
+                        drawAllVisualization();
+                    });
+                });
+
+                // Resize handler
+                window.addEventListener("resize", () => {
+                    for (const [key, canvas] of Object.entries(canvases)) {
+                        setupCanvas(canvas);
+                        contexts[key] = canvas.getContext("2d");
+                    }
                     drawAllVisualization();
                 });
-            });
+            }
 
-            elements.vizModeSpec.addEventListener('click', () => {
-                elements.specView.classList.remove('hidden');
-                elements.oscView.classList.add('hidden');
-                elements.vizModeSpec.classList.remove('bg-gray-800', 'text-gray-400');
-                elements.vizModeSpec.classList.add('bg-chip-purple/20', 'text-chip-purple');
-                elements.vizModeOsc.classList.remove('bg-chip-purple/20', 'text-chip-purple');
-                elements.vizModeOsc.classList.add('bg-gray-800', 'text-gray-400');
-                // Re-setup spectrum canvases after they become visible
-                requestAnimationFrame(() => {
-                    ['specA', 'specB', 'specC', 'specCombined'].forEach(key => {
-                        setupCanvas(canvases[key]);
-                        contexts[key] = canvases[key].getContext('2d');
+            // ============================================================================
+            // Audio Handling
+            // ============================================================================
+            async function ensureAudioContext() {
+                if (!audioContext) {
+                    audioContext = new (
+                        window.AudioContext || window.webkitAudioContext
+                    )({ sampleRate: SAMPLE_RATE });
+                }
+                if (audioContext.state === "suspended") {
+                    await audioContext.resume();
+                }
+                return audioContext.state === "running";
+            }
+
+            function startAudioProcessing() {
+                if (scriptProcessor) return;
+
+                scriptProcessor = audioContext.createScriptProcessor(
+                    BUFFER_SIZE,
+                    1,
+                    1,
+                );
+                scriptProcessor.onaudioprocess = (e) => {
+                    const output = e.outputBuffer.getChannelData(0);
+                    if (!isPlaying || !wasmPlayer) {
+                        output.fill(0);
+                        return;
+                    }
+                    const samples = wasmPlayer.generateSamples(output.length);
+                    for (
+                        let i = 0;
+                        i < output.length && i < samples.length;
+                        i++
+                    ) {
+                        output[i] = samples[i];
+                    }
+                };
+
+                // MediaStream approach for iOS/mobile
+                try {
+                    mediaStreamDest =
+                        audioContext.createMediaStreamDestination();
+                    scriptProcessor.connect(mediaStreamDest);
+                    audioElement = new Audio();
+                    audioElement.srcObject = mediaStreamDest.stream;
+                    audioElement.play().catch(() => {
+                        // Fallback to direct connection if MediaStream fails
+                        scriptProcessor.disconnect();
+                        scriptProcessor.connect(audioContext.destination);
                     });
-                    drawAllVisualization();
-                });
-            });
+                } catch (e) {
+                    // Fallback for browsers without MediaStream support
+                    scriptProcessor.connect(audioContext.destination);
+                }
+            }
 
-            // Resize handler
-            window.addEventListener('resize', () => {
-                for (const [key, canvas] of Object.entries(canvases)) {
-                    setupCanvas(canvas);
-                    contexts[key] = canvas.getContext('2d');
+            function stopAudioProcessing() {
+                if (scriptProcessor) {
+                    scriptProcessor.disconnect();
+                    scriptProcessor = null;
+                }
+                if (audioElement) {
+                    audioElement.pause();
+                    audioElement.srcObject = null;
+                    audioElement = null;
+                }
+                mediaStreamDest = null;
+            }
+
+            // ============================================================================
+            // Song Loading
+            // ============================================================================
+            async function loadSong(index) {
+                const song = DEMO_SONGS[index];
+                if (!song) return;
+
+                const wasPlaying = isPlaying;
+                if (isPlaying) stop();
+
+                currentSongIndex = index;
+                updateSongListUI();
+
+                try {
+                    elements.songTitle.textContent = "Loading...";
+                    elements.songAuthor.textContent = "";
+
+                    const response = await fetch(song.file);
+                    if (!response.ok)
+                        throw new Error(`HTTP ${response.status}`);
+                    const data = new Uint8Array(await response.arrayBuffer());
+
+                    wasmPlayer = new wasmModule.Ym2149Player(data);
+                    wasmPlayer.set_volume(elements.volumeSlider.value / 100);
+                    updateMetadataUI();
+                    enableControls();
+                    resetVisualization();
+
+                    // Auto-play if previous song was playing
+                    if (wasPlaying) {
+                        await ensureAudioContext();
+                        play();
+                    }
+                } catch (error) {
+                    console.error("Load error:", error);
+                    elements.songTitle.textContent = "Error loading";
+                    elements.songAuthor.textContent = error.message;
+                }
+            }
+
+            async function loadFromFile(file) {
+                const wasPlaying = isPlaying;
+                if (isPlaying) stop();
+
+                try {
+                    currentSongIndex = -1;
+                    updateSongListUI();
+                    elements.songTitle.textContent = "Loading...";
+
+                    const data = new Uint8Array(await file.arrayBuffer());
+                    wasmPlayer = new wasmModule.Ym2149Player(data);
+                    wasmPlayer.set_volume(elements.volumeSlider.value / 100);
+                    updateMetadataUI();
+                    enableControls();
+                    resetVisualization();
+
+                    // Auto-play if previous song was playing
+                    if (wasPlaying) {
+                        await ensureAudioContext();
+                        play();
+                    }
+                } catch (error) {
+                    console.error("Load error:", error);
+                    elements.songTitle.textContent = "Error loading";
+                    elements.songAuthor.textContent = error.message;
+                }
+            }
+
+            function updateSongListUI() {
+                document.querySelectorAll(".song-item").forEach((item, i) => {
+                    item.classList.toggle("active", i === currentSongIndex);
+                });
+            }
+
+            function updateMetadataUI() {
+                if (!wasmPlayer) return;
+                const meta = wasmPlayer.metadata;
+                elements.songTitle.textContent = meta.title || "Unknown";
+                elements.songAuthor.textContent =
+                    meta.author || "Unknown Artist";
+                elements.songFormat.textContent = meta.format || "-";
+                elements.songFrames.textContent = `${meta.frame_count} frames`;
+                elements.totalTime.textContent = formatTime(
+                    meta.duration_seconds,
+                );
+                elements.progressBar.value = 0;
+                elements.currentTime.textContent = "0:00";
+            }
+
+            function enableControls() {
+                elements.playBtn.disabled = false;
+                elements.stopBtn.disabled = false;
+                elements.restartBtn.disabled = false;
+                elements.progressBar.disabled = false;
+            }
+
+            // ============================================================================
+            // Playback Controls
+            // ============================================================================
+            async function togglePlayPause() {
+                if (!wasmPlayer) return;
+                await ensureAudioContext();
+
+                if (isPlaying) {
+                    pause();
+                } else {
+                    play();
+                }
+            }
+
+            function play() {
+                if (!wasmPlayer) return;
+                wasmPlayer.play();
+                isPlaying = true;
+                startAudioProcessing();
+                startVisualization();
+                elements.playIcon.classList.add("hidden");
+                elements.pauseIcon.classList.remove("hidden");
+            }
+
+            function pause() {
+                if (!wasmPlayer) return;
+                wasmPlayer.pause();
+                isPlaying = false;
+                elements.playIcon.classList.remove("hidden");
+                elements.pauseIcon.classList.add("hidden");
+            }
+
+            function stop() {
+                if (!wasmPlayer) return;
+                wasmPlayer.stop();
+                isPlaying = false;
+                stopAudioProcessing();
+                stopVisualization();
+                elements.playIcon.classList.remove("hidden");
+                elements.pauseIcon.classList.add("hidden");
+                elements.progressBar.value = 0;
+                elements.currentTime.textContent = "0:00";
+                resetVisualization();
+            }
+
+            function restart() {
+                if (!wasmPlayer) return;
+                const wasPlaying = isPlaying;
+                stop();
+                if (wasPlaying) {
+                    play();
+                }
+            }
+
+            // ============================================================================
+            // Visualization
+            // ============================================================================
+            function startVisualization() {
+                if (animationId) return;
+                animationId = requestAnimationFrame(visualizationLoop);
+            }
+
+            function stopVisualization() {
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+            }
+
+            function resetVisualization() {
+                for (const arr of Object.values(waveforms)) arr.fill(0);
+                for (const arr of Object.values(spectrums)) arr.fill(0);
+                phases.fill(0);
+                drawAllVisualization();
+            }
+
+            function visualizationLoop() {
+                if (wasmPlayer && isPlaying) {
+                    updateVisualizationData();
+                    updateProgressUI();
                 }
                 drawAllVisualization();
-            });
-        }
-
-        // ============================================================================
-        // Audio Handling
-        // ============================================================================
-        async function ensureAudioContext() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-            }
-            if (audioContext.state === 'suspended') {
-                await audioContext.resume();
-            }
-            return audioContext.state === 'running';
-        }
-
-        function startAudioProcessing() {
-            if (scriptProcessor) return;
-
-            scriptProcessor = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
-            scriptProcessor.onaudioprocess = (e) => {
-                const output = e.outputBuffer.getChannelData(0);
-                if (!isPlaying || !wasmPlayer) {
-                    output.fill(0);
-                    return;
-                }
-                const samples = wasmPlayer.generateSamples(output.length);
-                for (let i = 0; i < output.length && i < samples.length; i++) {
-                    output[i] = samples[i];
-                }
-            };
-
-            // MediaStream approach for iOS/mobile
-            try {
-                mediaStreamDest = audioContext.createMediaStreamDestination();
-                scriptProcessor.connect(mediaStreamDest);
-                audioElement = new Audio();
-                audioElement.srcObject = mediaStreamDest.stream;
-                audioElement.play().catch(() => {
-                    // Fallback to direct connection if MediaStream fails
-                    scriptProcessor.disconnect();
-                    scriptProcessor.connect(audioContext.destination);
-                });
-            } catch (e) {
-                // Fallback for browsers without MediaStream support
-                scriptProcessor.connect(audioContext.destination);
-            }
-        }
-
-        function stopAudioProcessing() {
-            if (scriptProcessor) {
-                scriptProcessor.disconnect();
-                scriptProcessor = null;
-            }
-            if (audioElement) {
-                audioElement.pause();
-                audioElement.srcObject = null;
-                audioElement = null;
-            }
-            mediaStreamDest = null;
-        }
-
-        // ============================================================================
-        // Song Loading
-        // ============================================================================
-        async function loadSong(index) {
-            const song = DEMO_SONGS[index];
-            if (!song) return;
-
-            const wasPlaying = isPlaying;
-            if (isPlaying) stop();
-
-            currentSongIndex = index;
-            updateSongListUI();
-
-            try {
-                elements.songTitle.textContent = 'Loading...';
-                elements.songAuthor.textContent = '';
-
-                const response = await fetch(song.file);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = new Uint8Array(await response.arrayBuffer());
-
-                wasmPlayer = new wasmModule.Ym2149Player(data);
-                wasmPlayer.set_volume(elements.volumeSlider.value / 100);
-                updateMetadataUI();
-                enableControls();
-                resetVisualization();
-
-                // Auto-play if previous song was playing
-                if (wasPlaying) {
-                    await ensureAudioContext();
-                    play();
-                }
-            } catch (error) {
-                console.error('Load error:', error);
-                elements.songTitle.textContent = 'Error loading';
-                elements.songAuthor.textContent = error.message;
-            }
-        }
-
-        async function loadFromFile(file) {
-            const wasPlaying = isPlaying;
-            if (isPlaying) stop();
-
-            try {
-                currentSongIndex = -1;
-                updateSongListUI();
-                elements.songTitle.textContent = 'Loading...';
-
-                const data = new Uint8Array(await file.arrayBuffer());
-                wasmPlayer = new wasmModule.Ym2149Player(data);
-                wasmPlayer.set_volume(elements.volumeSlider.value / 100);
-                updateMetadataUI();
-                enableControls();
-                resetVisualization();
-
-                // Auto-play if previous song was playing
-                if (wasPlaying) {
-                    await ensureAudioContext();
-                    play();
-                }
-            } catch (error) {
-                console.error('Load error:', error);
-                elements.songTitle.textContent = 'Error loading';
-                elements.songAuthor.textContent = error.message;
-            }
-        }
-
-        function updateSongListUI() {
-            document.querySelectorAll('.song-item').forEach((item, i) => {
-                item.classList.toggle('active', i === currentSongIndex);
-            });
-        }
-
-        function updateMetadataUI() {
-            if (!wasmPlayer) return;
-            const meta = wasmPlayer.metadata;
-            elements.songTitle.textContent = meta.title || 'Unknown';
-            elements.songAuthor.textContent = meta.author || 'Unknown Artist';
-            elements.songFormat.textContent = meta.format || '-';
-            elements.songFrames.textContent = `${meta.frame_count} frames`;
-            elements.totalTime.textContent = formatTime(meta.duration_seconds);
-            elements.progressBar.value = 0;
-            elements.currentTime.textContent = '0:00';
-        }
-
-        function enableControls() {
-            elements.playBtn.disabled = false;
-            elements.stopBtn.disabled = false;
-            elements.restartBtn.disabled = false;
-            elements.progressBar.disabled = false;
-        }
-
-        // ============================================================================
-        // Playback Controls
-        // ============================================================================
-        async function togglePlayPause() {
-            if (!wasmPlayer) return;
-            await ensureAudioContext();
-
-            if (isPlaying) {
-                pause();
-            } else {
-                play();
-            }
-        }
-
-        function play() {
-            if (!wasmPlayer) return;
-            wasmPlayer.play();
-            isPlaying = true;
-            startAudioProcessing();
-            startVisualization();
-            elements.playIcon.classList.add('hidden');
-            elements.pauseIcon.classList.remove('hidden');
-        }
-
-        function pause() {
-            if (!wasmPlayer) return;
-            wasmPlayer.pause();
-            isPlaying = false;
-            elements.playIcon.classList.remove('hidden');
-            elements.pauseIcon.classList.add('hidden');
-        }
-
-        function stop() {
-            if (!wasmPlayer) return;
-            wasmPlayer.stop();
-            isPlaying = false;
-            stopAudioProcessing();
-            stopVisualization();
-            elements.playIcon.classList.remove('hidden');
-            elements.pauseIcon.classList.add('hidden');
-            elements.progressBar.value = 0;
-            elements.currentTime.textContent = '0:00';
-            resetVisualization();
-        }
-
-        function restart() {
-            if (!wasmPlayer) return;
-            const wasPlaying = isPlaying;
-            stop();
-            if (wasPlaying) {
-                play();
-            }
-        }
-
-        // ============================================================================
-        // Visualization
-        // ============================================================================
-        function startVisualization() {
-            if (animationId) return;
-            animationId = requestAnimationFrame(visualizationLoop);
-        }
-
-        function stopVisualization() {
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
-        }
-
-        function resetVisualization() {
-            for (const arr of Object.values(waveforms)) arr.fill(0);
-            for (const arr of Object.values(spectrums)) arr.fill(0);
-            phases.fill(0);
-            drawAllVisualization();
-        }
-
-        function visualizationLoop() {
-            if (wasmPlayer && isPlaying) {
-                updateVisualizationData();
-                updateProgressUI();
-            }
-            drawAllVisualization();
-            animationId = requestAnimationFrame(visualizationLoop);
-        }
-
-        function updateVisualizationData() {
-            if (!wasmPlayer) return;
-
-            // Get channel states from WASM
-            const states = wasmPlayer.getChannelStates();
-            lastChannelStates = states;
-
-            // Update note displays
-            elements.noteA.textContent = states.channels[0].note || '---';
-            elements.noteB.textContent = states.channels[1].note || '---';
-            elements.noteC.textContent = states.channels[2].note || '---';
-
-            // Update envelope shape display
-            if (states.envelope) {
-                elements.envelopeShape.textContent = states.envelope.shapeName || '-';
+                animationId = requestAnimationFrame(visualizationLoop);
             }
 
-            // Synthesize waveforms
-            synthesizeWaveforms(states);
+            function updateVisualizationData() {
+                if (!wasmPlayer) return;
 
-            // Update spectrum
-            updateSpectrum(states);
-        }
+                // Get channel states from WASM
+                const states = wasmPlayer.getChannelStates();
+                lastChannelStates = states;
 
-        function synthesizeWaveforms(states) {
-            const samplesPerFrame = 64;
+                // Update note displays
+                elements.noteA.textContent = states.channels[0].note || "---";
+                elements.noteB.textContent = states.channels[1].note || "---";
+                elements.noteC.textContent = states.channels[2].note || "---";
 
-            for (let ch = 0; ch < 3; ch++) {
-                const chState = states.channels[ch];
-                const waveform = ch === 0 ? waveforms.A : ch === 1 ? waveforms.B : waveforms.C;
-                const freq = chState.frequency || 0;
-                const amplitude = chState.amplitude || 0;
-                const hasOutput = chState.toneEnabled || chState.noiseEnabled || chState.envelopeEnabled;
-
-                const phaseIncrement = freq > 0 ? freq / SAMPLE_RATE : 0;
-
-                // Shift existing samples
-                for (let i = 0; i < WAVEFORM_SIZE - samplesPerFrame; i++) {
-                    waveform[i] = waveform[i + samplesPerFrame];
+                // Update envelope shape display
+                if (states.envelope) {
+                    elements.envelopeShape.textContent =
+                        states.envelope.shapeName || "-";
                 }
 
-                // Generate new samples
-                for (let i = 0; i < samplesPerFrame; i++) {
-                    const idx = WAVEFORM_SIZE - samplesPerFrame + i;
-                    let sample = 0;
+                // Synthesize waveforms
+                synthesizeWaveforms(states);
+
+                // Update spectrum
+                updateSpectrum(states);
+            }
+
+            function synthesizeWaveforms(states) {
+                const samplesPerFrame = 64;
+
+                for (let ch = 0; ch < 3; ch++) {
+                    const chState = states.channels[ch];
+                    const waveform =
+                        ch === 0
+                            ? waveforms.A
+                            : ch === 1
+                              ? waveforms.B
+                              : waveforms.C;
+                    const freq = chState.frequency || 0;
+                    const amplitude = chState.amplitude || 0;
+                    const hasOutput =
+                        chState.toneEnabled ||
+                        chState.noiseEnabled ||
+                        chState.envelopeEnabled;
+
+                    const phaseIncrement = freq > 0 ? freq / SAMPLE_RATE : 0;
+
+                    // Shift existing samples
+                    for (let i = 0; i < WAVEFORM_SIZE - samplesPerFrame; i++) {
+                        waveform[i] = waveform[i + samplesPerFrame];
+                    }
+
+                    // Generate new samples
+                    for (let i = 0; i < samplesPerFrame; i++) {
+                        const idx = WAVEFORM_SIZE - samplesPerFrame + i;
+                        let sample = 0;
+
+                        if (hasOutput && amplitude > 0) {
+                            if (chState.envelopeEnabled && freq > 0) {
+                                // Envelope/buzz waveform
+                                const shape = states.envelope?.shape || 0;
+                                sample = synthesizeEnvelope(
+                                    shape,
+                                    phases[ch],
+                                    amplitude,
+                                );
+                            } else if (chState.toneEnabled && freq > 0) {
+                                // Square wave
+                                sample =
+                                    phases[ch] < 0.5 ? amplitude : -amplitude;
+                            } else if (chState.noiseEnabled) {
+                                // Noise
+                                sample =
+                                    (Math.random() * 2 - 1) * amplitude * 0.7;
+                            }
+                        }
+
+                        waveform[idx] = sample;
+                        phases[ch] = (phases[ch] + phaseIncrement) % 1;
+                    }
+                }
+
+                // Calculate mono output (sum of all channels)
+                for (let i = 0; i < WAVEFORM_SIZE; i++) {
+                    waveforms.mono[i] =
+                        (waveforms.A[i] + waveforms.B[i] + waveforms.C[i]) / 3;
+                }
+            }
+
+            function synthesizeEnvelope(shape, phase, amplitude) {
+                let sample;
+                switch (shape & 0x0f) {
+                    case 0:
+                    case 1:
+                    case 2:
+                    case 3:
+                    case 9:
+                        sample = 1.0 - phase * 2.0; // Decay
+                        break;
+                    case 4:
+                    case 5:
+                    case 6:
+                    case 7:
+                    case 15:
+                        sample = phase * 2.0 - 1.0; // Attack
+                        break;
+                    case 8:
+                        sample = 1.0 - phase * 2.0; // Sawtooth down
+                        break;
+                    case 10:
+                        sample =
+                            phase < 0.5 ? phase * 4.0 - 1.0 : 3.0 - phase * 4.0; // Triangle
+                        break;
+                    case 11:
+                        sample = phase < 0.5 ? 1.0 - phase * 4.0 : 1.0; // Decay + hold
+                        break;
+                    case 12:
+                        sample = phase * 2.0 - 1.0; // Sawtooth up
+                        break;
+                    case 13:
+                        sample = phase < 0.5 ? phase * 4.0 - 1.0 : 1.0; // Attack + hold
+                        break;
+                    case 14:
+                        sample =
+                            phase < 0.5 ? 1.0 - phase * 4.0 : phase * 4.0 - 3.0; // Triangle inverted
+                        break;
+                    default:
+                        sample = 0;
+                }
+                return sample * amplitude;
+            }
+
+            function updateSpectrum(states) {
+                // Decay existing values
+                for (const spectrum of Object.values(spectrums)) {
+                    for (let i = 0; i < SPECTRUM_BINS; i++) {
+                        spectrum[i] *= SPECTRUM_DECAY;
+                    }
+                }
+
+                // Update per-channel spectrum
+                for (let ch = 0; ch < 3; ch++) {
+                    const chState = states.channels[ch];
+                    const spectrum =
+                        ch === 0
+                            ? spectrums.A
+                            : ch === 1
+                              ? spectrums.B
+                              : spectrums.C;
+                    const hasOutput =
+                        chState.toneEnabled ||
+                        chState.noiseEnabled ||
+                        chState.envelopeEnabled;
+                    const amplitude = chState.amplitude || 0;
 
                     if (hasOutput && amplitude > 0) {
-                        if (chState.envelopeEnabled && freq > 0) {
-                            // Envelope/buzz waveform
-                            const shape = states.envelope?.shape || 0;
-                            sample = synthesizeEnvelope(shape, phases[ch], amplitude);
-                        } else if (chState.toneEnabled && freq > 0) {
-                            // Square wave
-                            sample = phases[ch] < 0.5 ? amplitude : -amplitude;
-                        } else if (chState.noiseEnabled) {
-                            // Noise
-                            sample = (Math.random() * 2 - 1) * amplitude * 0.7;
+                        const freq = chState.frequency || 0;
+                        if (freq > 0) {
+                            const bin = freqToBin(freq);
+                            spectrum[bin] = Math.max(spectrum[bin], amplitude);
                         }
                     }
-
-                    waveform[idx] = sample;
-                    phases[ch] = (phases[ch] + phaseIncrement) % 1;
                 }
-            }
 
-            // Calculate mono output (sum of all channels)
-            for (let i = 0; i < WAVEFORM_SIZE; i++) {
-                waveforms.mono[i] = (waveforms.A[i] + waveforms.B[i] + waveforms.C[i]) / 3;
-            }
-        }
-
-        function synthesizeEnvelope(shape, phase, amplitude) {
-            let sample;
-            switch (shape & 0x0F) {
-                case 0: case 1: case 2: case 3: case 9:
-                    sample = 1.0 - phase * 2.0; // Decay
-                    break;
-                case 4: case 5: case 6: case 7: case 15:
-                    sample = phase * 2.0 - 1.0; // Attack
-                    break;
-                case 8:
-                    sample = 1.0 - phase * 2.0; // Sawtooth down
-                    break;
-                case 10:
-                    sample = phase < 0.5 ? phase * 4.0 - 1.0 : 3.0 - phase * 4.0; // Triangle
-                    break;
-                case 11:
-                    sample = phase < 0.5 ? 1.0 - phase * 4.0 : 1.0; // Decay + hold
-                    break;
-                case 12:
-                    sample = phase * 2.0 - 1.0; // Sawtooth up
-                    break;
-                case 13:
-                    sample = phase < 0.5 ? phase * 4.0 - 1.0 : 1.0; // Attack + hold
-                    break;
-                case 14:
-                    sample = phase < 0.5 ? 1.0 - phase * 4.0 : phase * 4.0 - 3.0; // Triangle inverted
-                    break;
-                default:
-                    sample = 0;
-            }
-            return sample * amplitude;
-        }
-
-        function updateSpectrum(states) {
-            // Decay existing values
-            for (const spectrum of Object.values(spectrums)) {
+                // Combined spectrum (max across channels)
                 for (let i = 0; i < SPECTRUM_BINS; i++) {
-                    spectrum[i] *= SPECTRUM_DECAY;
+                    spectrums.combined[i] = Math.max(
+                        spectrums.A[i],
+                        spectrums.B[i],
+                        spectrums.C[i],
+                    );
                 }
             }
 
-            // Update per-channel spectrum
-            for (let ch = 0; ch < 3; ch++) {
-                const chState = states.channels[ch];
-                const spectrum = ch === 0 ? spectrums.A : ch === 1 ? spectrums.B : spectrums.C;
-                const hasOutput = chState.toneEnabled || chState.noiseEnabled || chState.envelopeEnabled;
-                const amplitude = chState.amplitude || 0;
+            function freqToBin(freq) {
+                if (freq <= 0) return 0;
+                const octavesAboveC1 = Math.log2(freq / SPECTRUM_BASE_FREQ);
+                const bin = Math.round(octavesAboveC1 * BINS_PER_OCTAVE);
+                return Math.max(0, Math.min(SPECTRUM_BINS - 1, bin));
+            }
 
-                if (hasOutput && amplitude > 0) {
-                    const freq = chState.frequency || 0;
-                    if (freq > 0) {
-                        const bin = freqToBin(freq);
-                        spectrum[bin] = Math.max(spectrum[bin], amplitude);
+            function drawAllVisualization() {
+                // Oscilloscopes
+                drawOscilloscope(contexts.oscA, waveforms.A, COLORS.purple);
+                drawOscilloscope(contexts.oscB, waveforms.B, COLORS.cyan);
+                drawOscilloscope(contexts.oscC, waveforms.C, COLORS.pink);
+                drawOscilloscope(
+                    contexts.oscMono,
+                    waveforms.mono,
+                    COLORS.green,
+                );
+
+                // Spectrums
+                drawSpectrum(contexts.specA, spectrums.A, COLORS.purple);
+                drawSpectrum(contexts.specB, spectrums.B, COLORS.cyan);
+                drawSpectrum(contexts.specC, spectrums.C, COLORS.pink);
+                drawSpectrum(
+                    contexts.specCombined,
+                    spectrums.combined,
+                    COLORS.green,
+                );
+            }
+
+            function drawOscilloscope(ctx, data, color) {
+                if (!ctx) return;
+                const canvas = ctx.canvas;
+                const dpr = window.devicePixelRatio || 1;
+                const w = canvas.width / dpr;
+                const h = canvas.height / dpr;
+                if (w === 0 || h === 0) return;
+
+                // Clear
+                ctx.fillStyle = "#0a0a0f";
+                ctx.fillRect(0, 0, w, h);
+
+                // Grid
+                ctx.strokeStyle = COLORS.gridLight;
+                ctx.lineWidth = 1;
+
+                // Horizontal center line
+                ctx.beginPath();
+                ctx.moveTo(0, h / 2);
+                ctx.lineTo(w, h / 2);
+                ctx.stroke();
+
+                // Vertical lines
+                for (let i = 1; i < 4; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo((w * i) / 4, 0);
+                    ctx.lineTo((w * i) / 4, h);
+                    ctx.stroke();
+                }
+
+                // Waveform
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                const step = w / data.length;
+                for (let i = 0; i < data.length; i++) {
+                    const x = i * step;
+                    const y = h / 2 - data[i] * (h / 2) * 0.8;
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
                     }
                 }
-            }
+                ctx.stroke();
 
-            // Combined spectrum (max across channels)
-            for (let i = 0; i < SPECTRUM_BINS; i++) {
-                spectrums.combined[i] = Math.max(spectrums.A[i], spectrums.B[i], spectrums.C[i]);
-            }
-        }
-
-        function freqToBin(freq) {
-            if (freq <= 0) return 0;
-            const octavesAboveC1 = Math.log2(freq / SPECTRUM_BASE_FREQ);
-            const bin = Math.round(octavesAboveC1 * BINS_PER_OCTAVE);
-            return Math.max(0, Math.min(SPECTRUM_BINS - 1, bin));
-        }
-
-        function drawAllVisualization() {
-            // Oscilloscopes
-            drawOscilloscope(contexts.oscA, waveforms.A, COLORS.purple);
-            drawOscilloscope(contexts.oscB, waveforms.B, COLORS.cyan);
-            drawOscilloscope(contexts.oscC, waveforms.C, COLORS.pink);
-            drawOscilloscope(contexts.oscMono, waveforms.mono, COLORS.green);
-
-            // Spectrums
-            drawSpectrum(contexts.specA, spectrums.A, COLORS.purple);
-            drawSpectrum(contexts.specB, spectrums.B, COLORS.cyan);
-            drawSpectrum(contexts.specC, spectrums.C, COLORS.pink);
-            drawSpectrum(contexts.specCombined, spectrums.combined, COLORS.green);
-        }
-
-        function drawOscilloscope(ctx, data, color) {
-            if (!ctx) return;
-            const canvas = ctx.canvas;
-            const dpr = window.devicePixelRatio || 1;
-            const w = canvas.width / dpr;
-            const h = canvas.height / dpr;
-            if (w === 0 || h === 0) return;
-
-            // Clear
-            ctx.fillStyle = '#0a0a0f';
-            ctx.fillRect(0, 0, w, h);
-
-            // Grid
-            ctx.strokeStyle = COLORS.gridLight;
-            ctx.lineWidth = 1;
-
-            // Horizontal center line
-            ctx.beginPath();
-            ctx.moveTo(0, h / 2);
-            ctx.lineTo(w, h / 2);
-            ctx.stroke();
-
-            // Vertical lines
-            for (let i = 1; i < 4; i++) {
-                ctx.beginPath();
-                ctx.moveTo(w * i / 4, 0);
-                ctx.lineTo(w * i / 4, h);
+                // Glow effect
+                ctx.strokeStyle = color + "40";
+                ctx.lineWidth = 6;
                 ctx.stroke();
             }
 
-            // Waveform
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
+            function drawSpectrum(ctx, data, color) {
+                if (!ctx) return;
+                const canvas = ctx.canvas;
+                const dpr = window.devicePixelRatio || 1;
+                const w = canvas.width / dpr;
+                const h = canvas.height / dpr;
+                if (w === 0 || h === 0) return;
 
-            const step = w / data.length;
-            for (let i = 0; i < data.length; i++) {
-                const x = i * step;
-                const y = h / 2 - data[i] * (h / 2) * 0.8;
-                if (i === 0) {
-                    ctx.moveTo(x, y);
-                } else {
-                    ctx.lineTo(x, y);
+                // Clear
+                ctx.fillStyle = "#0a0a0f";
+                ctx.fillRect(0, 0, w, h);
+
+                // Grid
+                ctx.strokeStyle = COLORS.gridLight;
+                ctx.lineWidth = 1;
+                for (let i = 1; i < 4; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, (h * i) / 4);
+                    ctx.lineTo(w, (h * i) / 4);
+                    ctx.stroke();
+                }
+
+                // Bars
+                const barWidth = w / SPECTRUM_BINS - 2;
+                for (let i = 0; i < SPECTRUM_BINS; i++) {
+                    const x = i * (barWidth + 2) + 1;
+                    const barHeight = data[i] * h * 0.9;
+                    const y = h - barHeight;
+                    const gradient = ctx.createLinearGradient(x, h, x, y);
+                    gradient.addColorStop(0, color + "40");
+                    gradient.addColorStop(1, color);
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x, y, barWidth, barHeight);
                 }
             }
-            ctx.stroke();
 
-            // Glow effect
-            ctx.strokeStyle = color + '40';
-            ctx.lineWidth = 6;
-            ctx.stroke();
-        }
-
-        function drawSpectrum(ctx, data, color) {
-            if (!ctx) return;
-            const canvas = ctx.canvas;
-            const dpr = window.devicePixelRatio || 1;
-            const w = canvas.width / dpr;
-            const h = canvas.height / dpr;
-            if (w === 0 || h === 0) return;
-
-            // Clear
-            ctx.fillStyle = '#0a0a0f';
-            ctx.fillRect(0, 0, w, h);
-
-            // Grid
-            ctx.strokeStyle = COLORS.gridLight;
-            ctx.lineWidth = 1;
-            for (let i = 1; i < 4; i++) {
-                ctx.beginPath();
-                ctx.moveTo(0, h * i / 4);
-                ctx.lineTo(w, h * i / 4);
-                ctx.stroke();
+            function updateProgressUI() {
+                if (!wasmPlayer) return;
+                const position = wasmPlayer.position_percentage();
+                const duration = wasmPlayer.metadata.duration_seconds;
+                elements.progressBar.value = position * 100;
+                elements.currentTime.textContent = formatTime(
+                    position * duration,
+                );
             }
 
-            // Bars
-            const barWidth = w / SPECTRUM_BINS - 2;
-            for (let i = 0; i < SPECTRUM_BINS; i++) {
-                const x = i * (barWidth + 2) + 1;
-                const barHeight = data[i] * h * 0.9;
-                const y = h - barHeight;
-                const gradient = ctx.createLinearGradient(x, h, x, y);
-                gradient.addColorStop(0, color + '40');
-                gradient.addColorStop(1, color);
-                ctx.fillStyle = gradient;
-                ctx.fillRect(x, y, barWidth, barHeight);
+            // ============================================================================
+            // Utilities
+            // ============================================================================
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, "0")}`;
             }
-        }
 
-        function updateProgressUI() {
-            if (!wasmPlayer) return;
-            const position = wasmPlayer.position_percentage();
-            const duration = wasmPlayer.metadata.duration_seconds;
-            elements.progressBar.value = position * 100;
-            elements.currentTime.textContent = formatTime(position * duration);
-        }
+            // ============================================================================
+            // Start
+            // ============================================================================
+            // Mobile menu toggle
+            const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+            const mobileMenu = document.getElementById("mobileMenu");
+            const menuIconOpen = document.getElementById("menuIconOpen");
+            const menuIconClose = document.getElementById("menuIconClose");
 
-        // ============================================================================
-        // Utilities
-        // ============================================================================
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
-        }
+            if (mobileMenuBtn && mobileMenu) {
+                mobileMenuBtn.addEventListener("click", () => {
+                    mobileMenu.classList.toggle("hidden");
+                    menuIconOpen.classList.toggle("hidden");
+                    menuIconClose.classList.toggle("hidden");
+                });
+            }
 
-        // ============================================================================
-        // Start
-        // ============================================================================
-        // Mobile menu toggle
-        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        const mobileMenu = document.getElementById('mobileMenu');
-        const menuIconOpen = document.getElementById('menuIconOpen');
-        const menuIconClose = document.getElementById('menuIconClose');
-
-        if (mobileMenuBtn && mobileMenu) {
-            mobileMenuBtn.addEventListener('click', () => {
-                mobileMenu.classList.toggle('hidden');
-                menuIconOpen.classList.toggle('hidden');
-                menuIconClose.classList.toggle('hidden');
-            });
-        }
-
-        init();
-    </script>
-</body>
+            init();
+        </script>
+    </body>
 </html>

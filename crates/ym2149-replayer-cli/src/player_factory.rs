@@ -125,12 +125,28 @@ fn load_sndh_file(
     };
     let player_rate = metadata.frame_rate;
 
+    // Get duration from FRMS/TIME metadata (use trait method)
+    use ym2149_common::ChiptunePlayerBase;
+    let duration_secs = player.duration_seconds();
+    let total_samples = if duration_secs > 0.0 {
+        (duration_secs * DEFAULT_SAMPLE_RATE as f32) as usize
+    } else {
+        // Fallback: 3 minutes if duration unknown
+        DEFAULT_SAMPLE_RATE as usize * 180
+    };
+
+    let duration_str = if duration_secs > 0.0 {
+        let mins = (duration_secs / 60.0) as u32;
+        let secs = (duration_secs % 60.0) as u32;
+        format!("{mins}:{secs:02}")
+    } else {
+        "unknown".to_string()
+    };
+
     let info_str = format!(
-        "File: {file_path}\nFormat: SNDH (Atari ST)\nTitle: {title}\nAuthor: {author}\nPlayer rate: {player_rate} Hz"
+        "File: {file_path}\nFormat: SNDH (Atari ST)\nTitle: {title}\nAuthor: {author}\nPlayer rate: {player_rate} Hz\nDuration: {duration_str}"
     );
 
-    // Estimate duration (3 minutes if unknown)
-    let total_samples = DEFAULT_SAMPLE_RATE as usize * 180;
     let color_filter = color_filter_override.unwrap_or(false);
 
     Ok(PlayerInfo {

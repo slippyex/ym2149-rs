@@ -11,6 +11,7 @@ use ym2149_common::{ChiptunePlayerBase, PlaybackState};
 pub struct AyWasmPlayer {
     player: AyPlayer,
     frame_count: usize,
+    duration_secs: f32,
     unsupported: bool,
 }
 
@@ -19,14 +20,21 @@ impl AyWasmPlayer {
     pub fn new(player: AyPlayer, meta: &AyFileMetadata) -> (Self, YmMetadata) {
         let metadata = metadata_from_ay(meta);
         let frame_count = metadata.frame_count as usize;
+        let duration_secs = metadata.duration_seconds;
         (
             Self {
                 player,
                 frame_count,
+                duration_secs,
                 unsupported: false,
             },
             metadata,
         )
+    }
+
+    /// Get duration in seconds.
+    pub fn duration_seconds(&self) -> f32 {
+        self.duration_secs
     }
 
     /// Start playback.

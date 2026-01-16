@@ -33,8 +33,8 @@ exports, and the wasm/CLI stacks.
 
 ```toml
 [dependencies]
-ym2149-arkos-replayer = "0.7"
-ym2149 = "0.7"              # required by ArkosPlayer for PSG backends
+ym2149-arkos-replayer = "0.9"
+ym2149 = "0.9"              # required by ArkosPlayer for PSG backends
 ```
 
 ```rust

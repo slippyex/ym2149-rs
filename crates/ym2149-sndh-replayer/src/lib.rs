@@ -43,8 +43,10 @@
 
 #![warn(missing_docs)]
 
+mod cpu_backend;
 mod error;
 mod ice;
+mod lmc1992;
 mod machine;
 mod mfp68901;
 mod parser;
@@ -53,7 +55,7 @@ mod ste_dac;
 
 pub use error::{Result, SndhError};
 pub use ice::{ice_depack, is_ice_packed};
-pub use parser::{SndhFile, SndhMetadata, SubsongInfo};
+pub use parser::{DmaSampleRate, SndhFile, SndhFlags, SndhMetadata, SubsongInfo};
 pub use player::SndhPlayer;
 
 // Re-export common traits for convenience

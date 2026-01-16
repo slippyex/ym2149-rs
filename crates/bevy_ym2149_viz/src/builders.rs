@@ -5,7 +5,9 @@
 
 use crate::components::*;
 use crate::helpers::{format_freq_label, format_note_label};
+use bevy::picking::Pickable;
 use bevy::prelude::*;
+use bevy::ui::FocusPolicy;
 
 // UI Layout Constants
 const UI_PADDING: f32 = 10.0;
@@ -392,15 +394,21 @@ pub fn create_channel_visualization(commands: &mut Commands, num_channels: usize
                             ..default()
                         },
                         BackgroundColor(Color::srgba(0.1, 0.12, 0.14, 0.8)),
+                        Interaction::default(),
+                        ProgressBarContainer,
                     ))
                     .with_children(|bar| {
                         bar.spawn((
                             Node {
                                 width: Val::Percent(0.0),
                                 height: Val::Percent(100.0),
+                                position_type: PositionType::Absolute,
                                 ..default()
                             },
                             BackgroundColor(Color::srgb(0.3, 0.85, 0.95)),
+                            // Allow clicks/hover to pass through to parent container
+                            Pickable::IGNORE,
+                            FocusPolicy::Pass,
                             SongProgressFill,
                         ));
                     });

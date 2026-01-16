@@ -108,3 +108,7 @@ pub struct ChannelFreqLabel {
     /// Channel index (0-2).
     pub channel: usize,
 }
+
+/// Clickable container for the song progress bar (enables seeking).
+#[derive(Component)]
+pub struct ProgressBarContainer;

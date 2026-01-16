@@ -33,13 +33,13 @@ This crate provides **pure chip emulation only** with cycle-accurate behavior. F
 
 ```toml
 [dependencies]
-ym2149 = "0.7"
+ym2149 = "0.9"
 ```
 
 For YM file playback with real-time audio, add the CLI:
 
 ```toml
-ym2149-replayer-cli = "0.7"
+ym2149-replayer-cli = "0.9"
 ```
 
 ## Quick Start

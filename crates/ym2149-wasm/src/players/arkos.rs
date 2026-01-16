@@ -12,6 +12,7 @@ use ym2149_common::{ChiptunePlayerBase, PlaybackState};
 pub struct ArkosWasmPlayer {
     player: ArkosPlayer,
     estimated_frames: usize,
+    duration_secs: f32,
 }
 
 impl ArkosWasmPlayer {
@@ -44,9 +45,15 @@ impl ArkosWasmPlayer {
             Self {
                 player,
                 estimated_frames,
+                duration_secs: duration_seconds,
             },
             metadata,
         )
+    }
+
+    /// Get duration in seconds.
+    pub fn duration_seconds(&self) -> f32 {
+        self.duration_secs
     }
 
     /// Start playback.

@@ -1561,7 +1561,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bevy",
  "parking_lot",
@@ -1578,7 +1578,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_examples"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bevy",
  "bevy_embedded_assets",
@@ -1597,7 +1597,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_ym2149_viz"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bevy",
  "bevy_ym2149",
@@ -3344,12 +3344,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "m68000"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae608876c3e5b088c53d7b310dda17bae1b5aa33cb61a5824e7bc730a3f9c7fe"
-
-[[package]]
 name = "mach2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4223,6 +4217,12 @@ name = "r-efi"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
+
+[[package]]
+name = "r68k"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0288c78e4059a9533105a56373794fa16d33702dc87f8d899906c0364370c4bd"
 
 [[package]]
 name = "radsort"
@@ -6314,7 +6314,7 @@ checksum = "e01738255b5a16e78bbb83e7fbba0a1e7dd506905cfc53f4622d89015a03fbb5"
 
 [[package]]
 name = "ym2149"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "approx",
  "criterion",
@@ -6324,7 +6324,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-arkos-replayer"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -6340,7 +6340,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-ay-replayer"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "iz80",
  "thiserror 1.0.69",
@@ -6350,11 +6350,11 @@ dependencies = [
 
 [[package]]
 name = "ym2149-common"
-version = "0.8.1"
+version = "0.9.0"
 
 [[package]]
 name = "ym2149-gist-replayer"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "cpal",
  "parking_lot",
@@ -6364,7 +6364,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-replayer-cli"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "crossterm",
  "parking_lot",
@@ -6380,10 +6380,10 @@ dependencies = [
 
 [[package]]
 name = "ym2149-sndh-replayer"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
- "m68000",
+ "r68k",
  "thiserror 1.0.69",
  "ym2149",
  "ym2149-common",
@@ -6391,7 +6391,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-softsynth"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "approx",
  "ym2149",
@@ -6400,7 +6400,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-wasm"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "bitflags 2.10.0",
  "console_error_panic_hook",
@@ -6421,7 +6421,7 @@ dependencies = [
 
 [[package]]
 name = "ym2149-ym-replayer"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "approx",
  "bitflags 2.10.0",

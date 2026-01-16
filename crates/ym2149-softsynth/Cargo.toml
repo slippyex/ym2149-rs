@@ -14,9 +14,9 @@ categories = ["multimedia::audio"]
 
 [dependencies]
 # Core YM2149 backend trait
-ym2149 = { path = "../ym2149-core", version = "0.8" }
+ym2149 = { path = "../ym2149-core", version = "0.9" }
 # Shared utilities
-ym2149-common = { path = "../ym2149-common", version = "0.8" }
+ym2149-common = { path = "../ym2149-common", version = "0.9" }
 
 [dev-dependencies]
 approx.workspace = true

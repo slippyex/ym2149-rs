@@ -3,9 +3,6 @@
 //! This module provides real-time audio playback with a ring buffer that allows
 //! concurrent sample generation and playback. Memory usage is limited to the ring buffer size.
 
-// Allow unused methods - these are part of a complete streaming API
-#![allow(dead_code)]
-
 pub mod audio_device;
 pub mod realtime;
 pub mod ring_buffer;
@@ -40,22 +37,22 @@ pub struct StreamConfig {
 
 impl StreamConfig {
     /// Create a streaming configuration optimized for low latency
-    /// Buffer = 4096 samples ≈ 93ms @ 44.1kHz
+    /// Buffer = 4096 samples ≈ 93ms @ 44.1kHz (stereo)
     pub fn low_latency(sample_rate: u32) -> Self {
         StreamConfig {
             ring_buffer_size: 4096,
             sample_rate,
-            channels: 1,
+            channels: 2, // Stereo output
         }
     }
 
     /// Create a streaming configuration optimized for stability
-    /// Buffer = 16384 samples ≈ 372ms @ 44.1kHz
+    /// Buffer = 16384 samples ≈ 372ms @ 44.1kHz (stereo)
     pub fn stable(sample_rate: u32) -> Self {
         StreamConfig {
             ring_buffer_size: 16384,
             sample_rate,
-            channels: 1,
+            channels: 2, // Stereo output
         }
     }
 

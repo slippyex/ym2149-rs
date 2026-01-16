@@ -10,6 +10,6 @@ description = "Visualization systems for the bevy_ym2149 plugin (oscilloscope, s
 
 [dependencies]
 bevy = { version = "0.17", features = ["bevy_ui"] }
-bevy_ym2149 = { path = "../bevy_ym2149", version = "0.8" }
-ym2149 = { path = "../ym2149-core", version = "0.8" }
-ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.8" }
+bevy_ym2149 = { path = "../bevy_ym2149", version = "0.9" }
+ym2149 = { path = "../ym2149-core", version = "0.9" }
+ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.9" }

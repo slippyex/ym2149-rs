@@ -4,24 +4,49 @@
 //! for running SNDH music drivers. It includes:
 //!
 //! - 4MB RAM
-//! - Motorola 68000 CPU (via m68000 crate)
+//! - Motorola 68000 CPU (configurable backend via features)
 //! - YM2149 sound chip (via ym2149 crate)
 //! - MFP 68901 timers (for SID voice and effects)
+//! - STE DAC (DMA audio)
+//! - LMC1992 audio mixer/filter (bass, treble, volume control)
 //!
 //! Memory map:
 //! - 0x000000 - 0x3FFFFF: RAM (4MB)
 //! - 0xFF8800 - 0xFF88FF: YM2149 PSG
+//! - 0xFF8900 - 0xFF8921: STE DAC (DMA audio)
+//! - 0xFF8922 - 0xFF8925: LMC1992 Microwire interface
 //! - 0xFFFA00 - 0xFFFA25: MFP 68901
 
+use crate::cpu_backend::{Cpu68k, CpuMemory, DefaultCpu};
 use crate::error::{Result, SndhError};
-use crate::mfp68901::Mfp68901;
+use crate::lmc1992::Lmc1992;
+use crate::mfp68901::{Mfp68901, TimerId};
 use crate::ste_dac::SteDac;
-use m68000::cpu_details::Mc68000;
-use m68000::{M68000, MemoryAccess};
 use ym2149::Ym2149;
+use ym2149_common::MASTER_GAIN;
+
+/// Map timer index to TimerId for interrupt acknowledgment.
+const TIMER_ID_MAP: [TimerId; 5] = [
+    TimerId::TimerA,
+    TimerId::TimerB,
+    TimerId::TimerC,
+    TimerId::TimerD,
+    TimerId::Gpi7,
+];
 
 /// RAM size (4 MB)
 const RAM_SIZE: usize = 4 * 1024 * 1024;
+
+// Memory-mapped hardware address ranges
+const YM2149_START: u32 = 0xFF8800;
+const YM2149_END: u32 = 0xFF8900;
+const STE_DAC_START: u32 = 0xFF8900;
+const STE_DAC_END: u32 = 0xFF8922;
+const LMC1992_START: u32 = 0xFF8922;
+const LMC1992_END: u32 = 0xFF8926;
+const MFP_START: u32 = 0xFFFA00;
+const MFP_END: u32 = 0xFFFA26;
+const MFP_WRITE_END: u32 = 0xFFFB00;
 
 /// Address for RTE instruction (to return from interrupts)
 const RTE_INSTRUCTION_ADDR: u32 = 0x500;
@@ -52,19 +77,21 @@ struct XbiosTimerConfig {
 }
 
 /// Memory and peripheral subsystem (separate from CPU to avoid borrow issues).
-struct AtariMemory {
+pub(crate) struct AtariMemory {
     /// RAM (4MB)
-    ram: Vec<u8>,
+    pub(crate) ram: Vec<u8>,
     /// YM2149 sound chip
-    ym2149: Ym2149,
+    pub(crate) ym2149: Ym2149,
     /// MFP 68901 timer chip
-    mfp: Mfp68901,
+    pub(crate) mfp: Mfp68901,
     /// STE DAC (DMA audio)
-    ste_dac: SteDac,
+    pub(crate) ste_dac: SteDac,
+    /// LMC1992 STE audio mixer/filter
+    pub(crate) lmc1992: Lmc1992,
     /// Next GEMDOS malloc address
     next_malloc_addr: u32,
     /// Reset instruction executed flag
-    reset_triggered: bool,
+    pub(crate) reset_triggered: bool,
     /// Host sample rate
     host_rate: u32,
 }
@@ -76,6 +103,7 @@ impl AtariMemory {
             ym2149: Ym2149::with_clocks(2_000_000, sample_rate),
             mfp: Mfp68901::new(sample_rate),
             ste_dac: SteDac::new(sample_rate),
+            lmc1992: Lmc1992::new(sample_rate),
             next_malloc_addr: GEMDOS_MALLOC_START,
             reset_triggered: false,
             host_rate: sample_rate,
@@ -87,6 +115,7 @@ impl AtariMemory {
         self.ym2149.reset();
         self.mfp.reset();
         self.ste_dac.reset(self.host_rate);
+        self.lmc1992.reset(self.host_rate);
         self.next_malloc_addr = GEMDOS_MALLOC_START;
         self.reset_triggered = false;
 
@@ -125,18 +154,23 @@ impl AtariMemory {
         }
 
         // YM2149 PSG read
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             return self.ym2149.read_port((addr & 0xff) as u8);
         }
 
-        // STE DAC read
-        if (0xFF8900..0xFF8926).contains(&addr) {
-            return self.ste_dac.read8((addr - 0xFF8900) as u8);
+        // STE DAC read (excluding Microwire registers)
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) {
+            return self.ste_dac.read8((addr - STE_DAC_START) as u8);
+        }
+
+        // LMC1992 Microwire registers
+        if (LMC1992_START..LMC1992_END).contains(&addr) {
+            return self.lmc1992.read8((addr - STE_DAC_START) as u8);
         }
 
         // MFP 68901
-        if (0xFFFA00..0xFFFA26).contains(&addr) {
-            return self.mfp.read8((addr - 0xFFFA00) as u8);
+        if (MFP_START..MFP_END).contains(&addr) {
+            return self.mfp.read8((addr - MFP_START) as u8);
         }
 
         // Video resolution (simulate low res)
@@ -161,38 +195,49 @@ impl AtariMemory {
         }
 
         // YM2149 PSG write
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             self.ym2149.write_port((addr & 0xfe) as u8, value);
             return;
         }
 
-        // STE DAC write
-        if (0xFF8900..0xFF8926).contains(&addr) {
-            self.ste_dac.write8((addr - 0xFF8900) as u8, value);
+        // STE DAC write (excluding Microwire registers)
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) {
+            self.ste_dac.write8((addr - STE_DAC_START) as u8, value);
+            return;
+        }
+
+        // LMC1992 Microwire registers
+        if (LMC1992_START..LMC1992_END).contains(&addr) {
+            self.lmc1992.write8((addr - STE_DAC_START) as u8, value);
             return;
         }
 
         // MFP 68901
-        if (0xFFFA00..0xFFFB00).contains(&addr) {
-            self.mfp.write8((addr - 0xFFFA00) as u8, value);
+        if (MFP_START..MFP_WRITE_END).contains(&addr) {
+            self.mfp.write8((addr - MFP_START) as u8, value);
         }
     }
 
-    fn read_word(&mut self, addr: u32) -> u16 {
+    pub(crate) fn read_word(&mut self, addr: u32) -> u16 {
         let addr = addr & 0x00FF_FFFF;
 
         // MFP word read
-        if (0xFFFA00..0xFFFA26).contains(&addr) {
-            return self.mfp.read16((addr - 0xFFFA00) as u8);
+        if (MFP_START..MFP_END).contains(&addr) {
+            return self.mfp.read16((addr - MFP_START) as u8);
         }
 
-        // STE DAC word read
-        if (0xFF8900..0xFF8926).contains(&addr) && (addr & 1) == 0 {
-            return self.ste_dac.read16((addr - 0xFF8900) as u8);
+        // STE DAC word read (excluding Microwire registers)
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) && (addr & 1) == 0 {
+            return self.ste_dac.read16((addr - STE_DAC_START) as u8);
+        }
+
+        // LMC1992 Microwire word read
+        if (LMC1992_START..LMC1992_END).contains(&addr) && (addr & 1) == 0 {
+            return self.lmc1992.read16((addr - STE_DAC_START) as u8);
         }
 
         // YM2149
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             return (self.ym2149.read_port((addr & 0xfe) as u8) as u16) << 8;
         }
 
@@ -200,25 +245,31 @@ impl AtariMemory {
         ((self.read_byte(addr) as u16) << 8) | (self.read_byte(addr + 1) as u16)
     }
 
-    fn write_word(&mut self, addr: u32, value: u16) {
+    pub(crate) fn write_word(&mut self, addr: u32, value: u16) {
         let addr = addr & 0x00FF_FFFF;
 
         // YM2149 PSG word write
-        if (0xFF8800..0xFF8900).contains(&addr) {
+        if (YM2149_START..YM2149_END).contains(&addr) {
             self.ym2149
                 .write_port((addr & 0xfe) as u8, (value >> 8) as u8);
             return;
         }
 
-        // STE DAC word write
-        if (0xFF8900..0xFF8926).contains(&addr) {
-            self.ste_dac.write16((addr - 0xFF8900) as u8, value);
+        // STE DAC word write (excluding Microwire registers)
+        if (STE_DAC_START..STE_DAC_END).contains(&addr) {
+            self.ste_dac.write16((addr - STE_DAC_START) as u8, value);
+            return;
+        }
+
+        // LMC1992 Microwire word write
+        if (LMC1992_START..LMC1992_END).contains(&addr) {
+            self.lmc1992.write16((addr - STE_DAC_START) as u8, value);
             return;
         }
 
         // MFP 68901 word write
-        if (0xFFFA00..0xFFFB00).contains(&addr) {
-            self.mfp.write16((addr - 0xFFFA00) as u8, value);
+        if (MFP_START..MFP_WRITE_END).contains(&addr) {
+            self.mfp.write16((addr - MFP_START) as u8, value);
             return;
         }
 
@@ -229,33 +280,32 @@ impl AtariMemory {
         }
     }
 
-    fn read_long(&mut self, addr: u32) -> u32 {
+    pub(crate) fn read_long(&mut self, addr: u32) -> u32 {
         ((self.read_word(addr) as u32) << 16) | (self.read_word(addr + 2) as u32)
     }
 
-    fn write_long(&mut self, addr: u32, value: u32) {
+    pub(crate) fn write_long(&mut self, addr: u32, value: u32) {
         self.write_word(addr, (value >> 16) as u16);
         self.write_word(addr + 2, value as u16);
     }
 }
 
-impl MemoryAccess for AtariMemory {
-    fn get_byte(&mut self, addr: u32) -> Option<u8> {
-        Some(self.read_byte(addr))
+// Implement our CpuMemory trait for AtariMemory
+impl CpuMemory for AtariMemory {
+    fn get_byte(&mut self, addr: u32) -> u8 {
+        self.read_byte(addr)
     }
 
-    fn get_word(&mut self, addr: u32) -> Option<u16> {
-        Some(self.read_word(addr))
+    fn get_word(&mut self, addr: u32) -> u16 {
+        self.read_word(addr)
     }
 
-    fn set_byte(&mut self, addr: u32, value: u8) -> Option<()> {
+    fn set_byte(&mut self, addr: u32, value: u8) {
         self.write_byte(addr, value);
-        Some(())
     }
 
-    fn set_word(&mut self, addr: u32, value: u16) -> Option<()> {
+    fn set_word(&mut self, addr: u32, value: u16) {
         self.write_word(addr, value);
-        Some(())
     }
 
     fn reset_instruction(&mut self) {
@@ -265,8 +315,8 @@ impl MemoryAccess for AtariMemory {
 
 /// Atari ST machine emulation for SNDH playback.
 pub struct AtariMachine {
-    /// 68000 CPU (m68000 crate)
-    cpu: M68000<Mc68000>,
+    /// 68000 CPU (backend selected via features)
+    cpu: DefaultCpu,
     /// Memory and peripherals
     memory: AtariMemory,
     /// Prevent nested interrupt execution
@@ -279,7 +329,7 @@ impl AtariMachine {
     /// Create a new Atari ST machine.
     pub fn new(sample_rate: u32) -> Self {
         let mut machine = Self {
-            cpu: M68000::new(),
+            cpu: DefaultCpu::new(),
             memory: AtariMemory::new(sample_rate),
             in_interrupt: false,
             next_gemdos_malloc: GEMDOS_MALLOC_START,
@@ -291,7 +341,7 @@ impl AtariMachine {
     /// Reset the machine to initial state.
     pub fn reset(&mut self) {
         self.memory.reset();
-        self.cpu = M68000::new();
+        self.cpu = DefaultCpu::new();
         self.in_interrupt = false;
         self.next_gemdos_malloc = GEMDOS_MALLOC_START;
     }
@@ -317,26 +367,26 @@ impl AtariMachine {
     /// Call a subroutine (JSR) with D0 parameter.
     pub fn jsr(&mut self, addr: u32, d0: u32) -> Result<bool> {
         self.configure_return_by_rts();
-        self.cpu.regs.d[0].0 = d0;
+        self.cpu.set_d(0, d0);
         self.jmp_binary(addr, INIT_TIMEOUT_FRAMES)
     }
 
     /// Call a subroutine (JSR) with D0 parameter and limited cycles.
     pub fn jsr_limited(&mut self, addr: u32, d0: u32, max_cycles: usize) -> Result<bool> {
         self.configure_return_by_rts();
-        self.cpu.regs.d[0].0 = d0;
+        self.cpu.set_d(0, d0);
 
         self.memory.write_long(0x14, RTE_INSTRUCTION_ADDR);
         self.memory.write_long(4, addr);
 
-        self.cpu.regs.pc.0 = addr;
-        self.cpu.regs.a_mut(7).0 = self.memory.read_long(0);
-        self.cpu.stop = false;
+        self.cpu.set_pc(addr);
+        self.cpu.set_a(7, self.memory.read_long(0));
+        self.cpu.set_stopped(false);
         self.memory.reset_triggered = false;
 
         let mut executed = 0;
-        while executed < max_cycles && !self.memory.reset_triggered && !self.cpu.stop {
-            executed += self.cpu.interpreter(&mut self.memory);
+        while executed < max_cycles && !self.memory.reset_triggered && !self.cpu.is_stopped() {
+            executed += self.cpu.step(&mut self.memory);
         }
 
         Ok(self.memory.reset_triggered)
@@ -345,11 +395,11 @@ impl AtariMachine {
     /// Tick all MFP timers and dispatch their interrupts.
     fn tick_timers(&mut self) {
         let fired = self.memory.mfp.tick();
-        for (timer_id, active) in fired.into_iter().enumerate() {
+        for (timer_idx, active) in fired.into_iter().enumerate() {
             if !active {
                 continue;
             }
-            let vector_addr = IVECTOR[timer_id];
+            let vector_addr = IVECTOR[timer_idx];
             let pc = self.memory.read_long(vector_addr);
             let pc24 = pc & 0x00FF_FFFF;
 
@@ -358,10 +408,19 @@ impl AtariMachine {
                     continue;
                 }
                 self.in_interrupt = true;
+
+                // Acknowledge interrupt (sets in-service, clears pending)
+                let timer_id = TIMER_ID_MAP[timer_idx];
+                self.memory.mfp.acknowledge_timer(timer_id);
+
                 self.configure_return_by_rte();
                 self.memory.ym2149.inside_timer_irq(true);
                 let _ = self.jmp_binary(pc, 1);
                 self.memory.ym2149.inside_timer_irq(false);
+
+                // End of interrupt (clears in-service for automatic EOI mode)
+                self.memory.mfp.end_of_interrupt_timer(timer_id);
+
                 self.in_interrupt = false;
             }
         }
@@ -389,8 +448,8 @@ impl AtariMachine {
         match func {
             0x01 => {
                 // Supervisor
-                let sr_raw: u16 = self.cpu.regs.sr.into();
-                self.cpu.regs.d[0].0 = sr_raw as u32;
+                let sr_raw: u16 = self.cpu.sr();
+                self.cpu.set_d(0, sr_raw as u32);
             }
             0x48 => {
                 // Malloc
@@ -399,17 +458,17 @@ impl AtariMachine {
                 self.next_gemdos_malloc =
                     self.next_gemdos_malloc.saturating_add(size + 1) & (!1u32);
                 if (self.next_gemdos_malloc as usize) > RAM_SIZE {
-                    self.cpu.regs.d[0].0 = 0;
+                    self.cpu.set_d(0, 0);
                 } else {
-                    self.cpu.regs.d[0].0 = addr;
+                    self.cpu.set_d(0, addr);
                 }
             }
             0x30 => {
                 // System version
-                self.cpu.regs.d[0].0 = 0x0000;
+                self.cpu.set_d(0, 0x0000);
             }
             _ => {
-                self.cpu.regs.d[0].0 = 0;
+                self.cpu.set_d(0, 0);
             }
         }
     }
@@ -474,32 +533,31 @@ impl AtariMachine {
             38 => {
                 // Supexec
                 let callback = self.memory.read_long(sp.wrapping_add(2));
-                let mut a7 = self.cpu.regs.a_mut(7).0;
+                let mut a7 = self.cpu.a(7);
                 a7 = a7.wrapping_sub(4);
-                self.memory
-                    .write_long(a7, self.cpu.regs.pc.0.wrapping_add(2));
-                self.cpu.regs.a_mut(7).0 = a7;
-                self.cpu.regs.pc.0 = callback & 0x00FF_FFFF;
+                self.memory.write_long(a7, self.cpu.pc().wrapping_add(2));
+                self.cpu.set_a(7, a7);
+                self.cpu.set_pc(callback & 0x00FF_FFFF);
             }
             _ => {}
         }
     }
 
     fn handle_trap(&mut self, vector: u8) -> bool {
-        let sp = self.cpu.regs.a(7);
+        let sp = self.cpu.a(7);
         let func = self.memory.read_word(sp);
 
         match vector {
             1 => {
                 self.handle_gemdos(func, sp);
-                self.cpu.regs.pc.0 = self.cpu.regs.pc.0.wrapping_add(2);
+                self.cpu.set_pc(self.cpu.pc().wrapping_add(2));
                 true
             }
             14 => {
-                let old_pc = self.cpu.regs.pc.0;
+                let old_pc = self.cpu.pc();
                 self.handle_xbios(func, sp);
-                if self.cpu.regs.pc.0 == old_pc {
-                    self.cpu.regs.pc.0 = self.cpu.regs.pc.0.wrapping_add(2);
+                if self.cpu.pc() == old_pc {
+                    self.cpu.set_pc(self.cpu.pc().wrapping_add(2));
                 }
                 true
             }
@@ -507,21 +565,40 @@ impl AtariMachine {
         }
     }
 
-    /// Compute the next audio sample.
-    pub fn compute_sample(&mut self) -> i16 {
-        let sample_i16 = self.memory.ym2149.compute_next_sample();
-        let mut level = sample_i16 as i32;
+    /// Compute the next stereo audio sample.
+    /// Returns (left, right) samples.
+    pub fn compute_sample_stereo(&mut self) -> (i16, i16) {
+        // Get YM2149 sample (mono, duplicated to both channels)
+        // Only if LMC1992 mix is enabled
+        let ym_sample = if self.memory.lmc1992.should_mix_ym() {
+            self.memory.ym2149.compute_next_sample() as i32
+        } else {
+            // Still need to tick YM2149 for internal state
+            let _ = self.memory.ym2149.compute_next_sample();
+            0
+        };
 
-        let ste_level = self
+        // Get STE DAC stereo sample
+        let (ste_left, ste_right) = self
             .memory
             .ste_dac
-            .compute_sample(&self.memory.ram, &mut self.memory.mfp) as i32;
-        level += ste_level;
+            .compute_sample_stereo(&self.memory.ram, &mut self.memory.mfp);
+
+        // Mix YM2149 (mono) with STE DAC (stereo)
+        let mixed_left = (ym_sample + ste_left as i32).clamp(-32768, 32767) as i16;
+        let mixed_right = (ym_sample + ste_right as i32).clamp(-32768, 32767) as i16;
+
+        // Process through LMC1992 (bass/treble EQ + volume control)
+        let (lmc_left, lmc_right) = self.memory.lmc1992.process_stereo(mixed_left, mixed_right);
+
+        // Apply master gain
+        let out_left = ((lmc_left as f32 * MASTER_GAIN) as i32).clamp(-32768, 32767) as i16;
+        let out_right = ((lmc_right as f32 * MASTER_GAIN) as i32).clamp(-32768, 32767) as i16;
 
         // Tick timers after mixing
         self.tick_timers();
 
-        level.clamp(-32768, 32767) as i16
+        (out_left, out_right)
     }
 
     /// Get reference to YM2149.
@@ -551,18 +628,18 @@ impl AtariMachine {
         self.memory.write_long(0x14, RTE_INSTRUCTION_ADDR);
         self.memory.write_long(4, pc);
 
-        self.cpu.regs.pc.0 = pc;
-        self.cpu.regs.a_mut(7).0 = self.memory.read_long(0);
-        self.cpu.stop = false;
+        self.cpu.set_pc(pc);
+        self.cpu.set_a(7, self.memory.read_long(0));
+        self.cpu.set_stopped(false);
         self.memory.reset_triggered = false;
 
         let cycles_per_frame = 512 * 313;
         let total_cycles = (timeout_frames as usize) * cycles_per_frame;
         let mut executed = 0;
 
-        while executed < total_cycles && !self.memory.reset_triggered && !self.cpu.stop {
-            let pc = self.cpu.regs.pc.0;
-            let pc24 = pc & 0x00FF_FFFF;
+        while executed < total_cycles && !self.memory.reset_triggered && !self.cpu.is_stopped() {
+            let current_pc = self.cpu.pc();
+            let pc24 = current_pc & 0x00FF_FFFF;
 
             // Intercept TRAP #1/#14
             let opcode = self.memory.read_word(pc24);
@@ -580,11 +657,11 @@ impl AtariMachine {
                 break;
             }
 
-            let step_cycles = self.cpu.interpreter(&mut self.memory);
+            let step_cycles = self.cpu.step(&mut self.memory);
             executed += step_cycles;
         }
 
-        if !self.memory.reset_triggered && !self.cpu.stop {
+        if !self.memory.reset_triggered && !self.cpu.is_stopped() {
             return Err(SndhError::InitTimeout {
                 frames: timeout_frames,
             });

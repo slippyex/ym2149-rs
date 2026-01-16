@@ -6,6 +6,7 @@
 //! - Keyboard-based playback control
 
 use bevy::prelude::*;
+use bevy::ui::UiGlobalTransform;
 use bevy::window::FileDragAndDrop;
 use bevy_ym2149::{
     PatternTrigger, PatternTriggerSet, PatternTriggered, PlaybackState, Ym2149Playback,
@@ -13,8 +14,8 @@ use bevy_ym2149::{
 };
 use bevy_ym2149_examples::{embedded_asset_plugin, example_plugins_with_window};
 use bevy_ym2149_viz::{
-    Ym2149VizPlugin, create_channel_visualization, create_detailed_channel_display,
-    create_oscilloscope, create_status_display,
+    ProgressBarContainer, Ym2149VizPlugin, create_channel_visualization,
+    create_detailed_channel_display, create_oscilloscope, create_status_display,
 };
 
 fn main() {
@@ -29,7 +30,12 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (handle_file_drop, playback_controls, log_pattern_hits),
+            (
+                handle_file_drop,
+                playback_controls,
+                progress_bar_seek,
+                log_pattern_hits,
+            ),
         )
         .run();
 }
@@ -44,6 +50,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         Text::new(
             "Controls:\n\
              - Drag & Drop: Load YM/AKS/AY/SNDH file\n\
+             - Click Progress Bar: Seek to position\n\
              - SPACE: Play/Pause\n\
              - R: Restart\n\
              - L: Toggle Looping\n\
@@ -273,5 +280,46 @@ fn log_pattern_hits(mut hits: MessageReader<PatternTriggered>) {
             "Pattern '{}' hit on channel {} (amp {:.2}, freq {:?})",
             hit.pattern_id, hit.channel, hit.amplitude, hit.frequency
         );
+    }
+}
+
+/// Handle clicks and drags on the progress bar to seek.
+fn progress_bar_seek(
+    mut playbacks: Query<&mut Ym2149Playback>,
+    progress_bars: Query<(&ComputedNode, &UiGlobalTransform), With<ProgressBarContainer>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+) {
+    if !mouse.pressed(MouseButton::Left) {
+        return;
+    }
+
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+
+    let scale_factor = window.scale_factor();
+    let cursor_physical = cursor_pos * scale_factor;
+
+    for (computed, ui_transform) in &progress_bars {
+        let node_size = computed.size();
+        let half_width = node_size.x / 2.0;
+        let half_height = node_size.y / 2.0;
+        let node_left = ui_transform.translation.x - half_width;
+        let node_top = ui_transform.translation.y - half_height;
+        let node_bottom = ui_transform.translation.y + half_height;
+
+        if cursor_physical.y >= node_top && cursor_physical.y <= node_bottom {
+            let clamped_x = cursor_physical.x.clamp(node_left, node_left + node_size.x);
+            let percentage = ((clamped_x - node_left) / node_size.x).clamp(0.0, 1.0);
+
+            for mut playback in &mut playbacks {
+                playback.seek_percentage(percentage);
+            }
+            return;
+        }
     }
 }

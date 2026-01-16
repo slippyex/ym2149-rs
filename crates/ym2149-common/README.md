@@ -120,7 +120,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-ym2149-common = "0.7"
+ym2149-common = "0.9"
 ```
 
 All replayer crates re-export these types, so you typically don't need to depend on `ym2149-common` directly:
