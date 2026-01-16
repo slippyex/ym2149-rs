@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YM2149 Web Player</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        h1 {
+            color: #00ff88;
+            font-size: 24px;
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .back-link {
+            display: inline-block;
+            color: #00ff88;
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Song info card */
+        .song-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .song-card.visible {
+            display: block;
+        }
+
+        .song-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .song-author {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .song-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Progress bar */
+        .progress-container {
+            margin-bottom: 20px;
+        }
+
+        .progress-bar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            height: 6px;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: #00ff88;
+            height: 100%;
+            width: 0%;
+            transition: width 0.1s linear;
+            border-radius: 4px;
+        }
+
+        .progress-time {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        /* Main controls */
+        .main-controls {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .play-btn {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: #00ff88;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .play-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 25px rgba(0, 255, 136, 0.4);
+        }
+
+        .play-btn:active {
+            transform: scale(0.98);
+        }
+
+        .play-btn:disabled {
+            background: #333;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .control-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #fff;
+            transition: background 0.2s;
+            align-self: center;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .control-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Channel toggles */
+        .channels {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .channel-btn {
+            padding: 10px 20px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .channel-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .channel-btn.muted {
+            background: rgba(255, 0, 0, 0.2);
+            color: #ff6666;
+        }
+
+        /* Volume */
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding: 0 20px;
+        }
+
+        .volume-icon {
+            font-size: 18px;
+            color: #666;
+        }
+
+        .volume-slider {
+            flex: 1;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #00ff88;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #00ff88;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        /* File input */
+        .file-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .file-label:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .file-hint {
+            font-size: 11px;
+            color: #555;
+            margin-top: 8px;
+        }
+
+        /* Status */
+        .status {
+            text-align: center;
+            font-size: 12px;
+            color: #444;
+            margin-top: 20px;
+        }
+
+        .status.ready {
+            color: #00ff88;
+        }
+
+        .status.error {
+            color: #ff6666;
+        }
+
+        /* Responsive */
+        @media (max-width: 400px) {
+            body {
+                padding: 15px;
+            }
+
+            .play-btn {
+                width: 64px;
+                height: 64px;
+                font-size: 24px;
+            }
+
+            .control-btn {
+                width: 44px;
+                height: 44px;
+            }
+
+            .channel-btn {
+                padding: 8px 14px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-link">← Back to songs</a>
+
+        <header>
+            <h1>YM2149 Player</h1>
+            <div class="subtitle">Atari ST Chiptune Player</div>
+        </header>
+
+        <div class="song-card" id="songCard">
+            <div class="song-title" id="songTitle">-</div>
+            <div class="song-author" id="songAuthor">-</div>
+            <div class="song-meta">
+                <span id="songFormat">-</span>
+                <span id="songFrames">- frames</span>
+            </div>
+        </div>
+
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-time">
+                <span id="currentTime">0:00</span>
+                <span id="totalTime">0:00</span>
+            </div>
+        </div>
+
+        <div class="main-controls">
+            <button class="control-btn" id="restartBtn" disabled>⏮</button>
+            <button class="play-btn" id="playBtn" disabled>▶</button>
+            <button class="control-btn" id="stopBtn" disabled>⏹</button>
+        </div>
+
+        <div class="channels">
+            <button class="channel-btn" data-channel="0">A</button>
+            <button class="channel-btn" data-channel="1">B</button>
+            <button class="channel-btn" data-channel="2">C</button>
+        </div>
+
+        <div class="volume-container">
+            <span class="volume-icon">🔊</span>
+            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="100">
+        </div>
+
+        <div class="file-section">
+            <input type="file" class="file-input" id="fileInput" accept=".ym,.aks,.sndh,.ay">
+            <label for="fileInput" class="file-label">Load File</label>
+            <div class="file-hint">YM, AKS, SNDH, AY formats supported</div>
+        </div>
+
+        <div class="status" id="status">Loading...</div>
+    </div>
+
+    <script type="module">
+        import init, { Ym2149Player } from './pkg/ym2149_wasm.js';
+
+        let wasmPlayer = null;
+        let audioContext = null;
+        let isPlaying = false;
+        let updateInterval = null;
+        let scriptProcessor = null;
+        let audioElement = null;
+        let mediaStreamDest = null;
+
+        // DOM elements
+        const playBtn = document.getElementById('playBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const currentTime = document.getElementById('currentTime');
+        const totalTime = document.getElementById('totalTime');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const fileInput = document.getElementById('fileInput');
+        const songCard = document.getElementById('songCard');
+        const statusEl = document.getElementById('status');
+
+        function setStatus(message, type = '') {
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function updateUI() {
+            if (!wasmPlayer) return;
+            const position = wasmPlayer.position_percentage();
+            const duration = wasmPlayer.metadata.duration_seconds;
+            progressFill.style.width = `${position * 100}%`;
+            currentTime.textContent = formatTime(position * duration);
+        }
+
+        async function ensureAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+                } catch (e) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+            return audioContext.state === 'running';
+        }
+
+        function startScriptProcessor() {
+            if (scriptProcessor) return;
+
+            const bufferSize = 4096;
+            scriptProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+
+            scriptProcessor.onaudioprocess = (e) => {
+                const outputBuffer = e.outputBuffer.getChannelData(0);
+                if (!isPlaying || !wasmPlayer) {
+                    for (let i = 0; i < outputBuffer.length; i++) outputBuffer[i] = 0;
+                    return;
+                }
+                const samples = wasmPlayer.generateSamples(outputBuffer.length);
+                for (let i = 0; i < outputBuffer.length && i < samples.length; i++) {
+                    outputBuffer[i] = samples[i];
+                }
+            };
+
+            // MediaStream approach for iOS
+            try {
+                mediaStreamDest = audioContext.createMediaStreamDestination();
+                scriptProcessor.connect(mediaStreamDest);
+                audioElement = new Audio();
+                audioElement.srcObject = mediaStreamDest.stream;
+                audioElement.play().catch(() => {
+                    scriptProcessor.disconnect();
+                    scriptProcessor.connect(audioContext.destination);
+                });
+            } catch (e) {
+                scriptProcessor.connect(audioContext.destination);
+            }
+        }
+
+        function stopScriptProcessor() {
+            if (scriptProcessor) {
+                scriptProcessor.disconnect();
+                scriptProcessor = null;
+            }
+            if (audioElement) {
+                audioElement.pause();
+                audioElement.srcObject = null;
+                audioElement = null;
+            }
+            mediaStreamDest = null;
+        }
+
+        function updateMetadata(metadata) {
+            document.getElementById('songTitle').textContent = metadata.title || 'Unknown';
+            document.getElementById('songAuthor').textContent = metadata.author || 'Unknown Artist';
+            document.getElementById('songFormat').textContent = metadata.format;
+            document.getElementById('songFrames').textContent = `${metadata.frame_count} frames`;
+            totalTime.textContent = formatTime(metadata.duration_seconds);
+            songCard.classList.add('visible');
+        }
+
+        async function loadFromUrl(fileName) {
+            try {
+                setStatus(`Loading ${fileName}...`);
+                const response = await fetch(fileName);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                wasmPlayer = new Ym2149Player(uint8Array);
+                updateMetadata(wasmPlayer.metadata);
+
+                playBtn.disabled = false;
+                stopBtn.disabled = false;
+                restartBtn.disabled = false;
+
+                setStatus('Tap play to start', 'ready');
+            } catch (error) {
+                console.error('Load error:', error);
+                setStatus(`Error: ${error?.message || error}`, 'error');
+            }
+        }
+
+        async function loadFromFile(file) {
+            try {
+                setStatus(`Loading ${file.name}...`);
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                wasmPlayer = new Ym2149Player(uint8Array);
+                updateMetadata(wasmPlayer.metadata);
+
+                playBtn.disabled = false;
+                stopBtn.disabled = false;
+                restartBtn.disabled = false;
+
+                setStatus('Tap play to start', 'ready');
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function play() {
+            if (!wasmPlayer || isPlaying) return;
+
+            await ensureAudioContext();
+            wasmPlayer.play();
+            isPlaying = true;
+            startScriptProcessor();
+            updateInterval = setInterval(updateUI, 100);
+
+            playBtn.textContent = '⏸';
+            setStatus('Playing', 'ready');
+        }
+
+        function pause() {
+            if (!wasmPlayer || !isPlaying) return;
+
+            wasmPlayer.pause();
+            isPlaying = false;
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+
+            playBtn.textContent = '▶';
+            setStatus('Paused');
+        }
+
+        function stop() {
+            if (!wasmPlayer) return;
+
+            wasmPlayer.stop();
+            isPlaying = false;
+            stopScriptProcessor();
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+
+            playBtn.textContent = '▶';
+            progressFill.style.width = '0%';
+            currentTime.textContent = '0:00';
+            setStatus('Stopped');
+        }
+
+        function restart() {
+            if (!wasmPlayer) return;
+            const wasPlaying = isPlaying;
+            stop();
+            wasmPlayer.restart();
+            if (wasPlaying) play();
+        }
+
+        // Event listeners
+        playBtn.addEventListener('click', async () => {
+            await ensureAudioContext();
+            if (isPlaying) {
+                pause();
+            } else {
+                play();
+            }
+        });
+
+        stopBtn.addEventListener('click', stop);
+        restartBtn.addEventListener('click', restart);
+
+        volumeSlider.addEventListener('input', (e) => {
+            if (wasmPlayer) wasmPlayer.set_volume(e.target.value / 100);
+        });
+
+        progressBar.addEventListener('click', (e) => {
+            if (!wasmPlayer) return;
+            const rect = progressBar.getBoundingClientRect();
+            const percentage = (e.clientX - rect.left) / rect.width;
+            wasmPlayer.seek_to_percentage(percentage);
+            updateUI();
+        });
+
+        document.querySelectorAll('.channel-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!wasmPlayer) return;
+                const channel = parseInt(btn.dataset.channel);
+                const isMuted = wasmPlayer.is_channel_muted(channel);
+                wasmPlayer.set_channel_mute(channel, !isMuted);
+                btn.classList.toggle('muted', !isMuted);
+            });
+        });
+
+        fileInput.addEventListener('change', async (e) => {
+            await ensureAudioContext();
+            const file = e.target.files[0];
+            if (file) await loadFromFile(file);
+        });
+
+        // Initialize
+        async function initialize() {
+            setStatus('Loading...');
+            await init();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const fileName = urlParams.get('file');
+
+            if (fileName) {
+                await loadFromUrl(fileName);
+            } else {
+                setStatus('Select a file to play');
+            }
+        }
+
+        initialize().catch(e => {
+            console.error('Init error:', e);
+            setStatus(`Error: ${e?.message || e}`, 'error');
+        });
+    </script>
+</body>
+</html>

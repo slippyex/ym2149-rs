@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>YM2149 Web Player</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                color: #fff;
+                min-height: 100vh;
+                padding: 20px;
+                padding-bottom: 40px;
+            }
+
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+            }
+
+            header {
+                text-align: center;
+                padding: 30px 0;
+            }
+
+            h1 {
+                color: #00ff88;
+                font-size: 28px;
+                margin-bottom: 8px;
+                font-weight: 600;
+            }
+
+            .subtitle {
+                color: #888;
+                font-size: 14px;
+            }
+
+            .cta-button {
+                display: block;
+                background: #00ff88;
+                color: #000;
+                text-decoration: none;
+                padding: 18px;
+                text-align: center;
+                font-size: 18px;
+                font-weight: 600;
+                border-radius: 12px;
+                margin: 20px 0 30px 0;
+                transition:
+                    transform 0.2s,
+                    box-shadow 0.2s;
+                box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+            }
+
+            .cta-button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 25px rgba(0, 255, 136, 0.4);
+            }
+
+            .cta-button:active {
+                transform: translateY(0);
+            }
+
+            .section-title {
+                color: #00ff88;
+                font-size: 13px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                margin-bottom: 12px;
+                padding-left: 4px;
+            }
+
+            .song-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 30px;
+            }
+
+            .song-item {
+                display: flex;
+                align-items: center;
+                background: rgba(255, 255, 255, 0.05);
+                padding: 14px 16px;
+                border-radius: 10px;
+                text-decoration: none;
+                color: #fff;
+                transition: background 0.2s;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            .song-item:hover {
+                background: rgba(0, 255, 136, 0.1);
+            }
+
+            .song-item:active {
+                background: rgba(0, 255, 136, 0.15);
+            }
+
+            .song-icon {
+                font-size: 24px;
+                margin-right: 14px;
+                width: 32px;
+                text-align: center;
+            }
+
+            .song-info {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .song-name {
+                font-size: 15px;
+                font-weight: 500;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .song-format {
+                font-size: 12px;
+                color: #666;
+                margin-top: 2px;
+            }
+
+            .song-arrow {
+                color: #444;
+                font-size: 18px;
+                margin-left: 10px;
+            }
+
+            .features {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                margin-bottom: 30px;
+            }
+
+            .feature {
+                background: rgba(255, 255, 255, 0.03);
+                padding: 14px;
+                border-radius: 10px;
+                text-align: center;
+            }
+
+            .feature-icon {
+                font-size: 24px;
+                margin-bottom: 6px;
+            }
+
+            .feature-text {
+                font-size: 12px;
+                color: #888;
+            }
+
+            .tech-badges {
+                display: flex;
+                justify-content: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-bottom: 20px;
+            }
+
+            .tech-badge {
+                background: rgba(255, 255, 255, 0.05);
+                padding: 6px 12px;
+                border-radius: 20px;
+                font-size: 11px;
+                color: #666;
+            }
+
+            footer {
+                text-align: center;
+                padding-top: 20px;
+                border-top: 1px solid rgba(255, 255, 255, 0.05);
+                font-size: 12px;
+                color: #444;
+            }
+
+            footer a {
+                color: #00ff88;
+                text-decoration: none;
+            }
+
+            @media (max-width: 400px) {
+                body {
+                    padding: 15px;
+                }
+
+                h1 {
+                    font-size: 24px;
+                }
+
+                .cta-button {
+                    font-size: 16px;
+                    padding: 16px;
+                }
+
+                .features {
+                    grid-template-columns: 1fr 1fr;
+                    gap: 8px;
+                }
+
+                .feature {
+                    padding: 12px 8px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>YM2149 Web Player</h1>
+                <div class="subtitle">Atari ST Chiptunes in Your Browser</div>
+            </header>
+
+            <a href="simple-player.html" class="cta-button"> Open Player </a>
+
+            <div class="section-title">Example Songs</div>
+            <div class="song-list">
+                <a href="simple-player.html?file=Scout.ym" class="song-item">
+                    <span class="song-icon">🎵</span>
+                    <div class="song-info">
+                        <div class="song-name">Scout</div>
+                        <div class="song-format">YM - Atari ST</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a href="simple-player.html?file=Prelude.ym" class="song-item">
+                    <span class="song-icon">🎵</span>
+                    <div class="song-info">
+                        <div class="song-name">Prelude</div>
+                        <div class="song-format">YM - Atari ST</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Intensity_200hz.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎧</span>
+                    <div class="song-info">
+                        <div class="song-name">Intensity (200Hz)</div>
+                        <div class="song-format">SNDH - Tao</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Bullet_Sequence.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎧</span>
+                    <div class="song-info">
+                        <div class="song-name">Bullet Sequence</div>
+                        <div class="song-format">SNDH - Cube</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Elusive_Groove.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎧</span>
+                    <div class="song-info">
+                        <div class="song-name">Elusive Groove</div>
+                        <div class="song-format">SNDH - Cube</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Outpost.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎧</span>
+                    <div class="song-info">
+                        <div class="song-name">Outpost</div>
+                        <div class="song-format">SNDH - Cube</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=Main_Menu.sndh"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎮</span>
+                    <div class="song-info">
+                        <div class="song-name">OCWAS - Main Menu</div>
+                        <div class="song-format">SNDH - Mad Max</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=JustAddCream.aks"
+                    class="song-item"
+                >
+                    <span class="song-icon">🎹</span>
+                    <div class="song-info">
+                        <div class="song-name">Just Add Cream</div>
+                        <div class="song-format">AKS - XIA</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a href="simple-player.html?file=LopEars.aks" class="song-item">
+                    <span class="song-icon">🎹</span>
+                    <div class="song-info">
+                        <div class="song-name">Lop Ears</div>
+                        <div class="song-format">AKS - Andy Severn</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a
+                    href="simple-player.html?file=AcousticDreams.ay"
+                    class="song-item"
+                >
+                    <span class="song-icon">💾</span>
+                    <div class="song-info">
+                        <div class="song-name">Acoustic Dreams</div>
+                        <div class="song-format">AY - ZX Spectrum</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+                <a href="simple-player.html?file=ZUB.AY" class="song-item">
+                    <span class="song-icon">💾</span>
+                    <div class="song-info">
+                        <div class="song-name">ZUB</div>
+                        <div class="song-format">AY - ZX Spectrum</div>
+                    </div>
+                    <span class="song-arrow">›</span>
+                </a>
+            </div>
+
+            <div class="section-title">Features</div>
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">🎛️</div>
+                    <div class="feature-text">Channel Muting</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔊</div>
+                    <div class="feature-text">Volume Control</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📱</div>
+                    <div class="feature-text">Mobile Ready</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">⚡</div>
+                    <div class="feature-text">Low CPU Usage</div>
+                </div>
+            </div>
+
+            <div class="tech-badges">
+                <span class="tech-badge">Rust</span>
+                <span class="tech-badge">WebAssembly</span>
+                <span class="tech-badge">Web Audio</span>
+            </div>
+
+            <footer>
+                <p>Hardware-accurate YM2149 PSG emulation</p>
+                <p><a href="https://github.com/slippyex">GitHub</a></p>
+            </footer>
+        </div>
+    </body>
+</html>
