@@ -611,6 +611,95 @@ impl AtariMachine {
         &mut self.memory.ym2149
     }
 
+    /// Check if YM2149 output is being mixed (via LMC1992 setting).
+    ///
+    /// Returns false when the SNDH driver has set the mixer to DMA-only mode.
+    pub fn is_ym_mixed(&self) -> bool {
+        self.memory.lmc1992.should_mix_ym()
+    }
+
+    /// Mute or unmute the STE DAC left channel.
+    pub fn set_dac_mute_left(&mut self, mute: bool) {
+        self.memory.ste_dac.set_mute_left(mute);
+    }
+
+    /// Mute or unmute the STE DAC right channel.
+    pub fn set_dac_mute_right(&mut self, mute: bool) {
+        self.memory.ste_dac.set_mute_right(mute);
+    }
+
+    /// Check if DAC left channel is muted.
+    pub fn is_dac_left_muted(&self) -> bool {
+        self.memory.ste_dac.is_left_muted()
+    }
+
+    /// Check if DAC right channel is muted.
+    pub fn is_dac_right_muted(&self) -> bool {
+        self.memory.ste_dac.is_right_muted()
+    }
+
+    /// Get current DAC levels for visualization (normalized 0.0 to 1.0).
+    pub fn get_dac_levels(&self) -> (f32, f32) {
+        self.memory.ste_dac.get_levels()
+    }
+
+    /// Check if STE DAC has been used (DMA playback was activated).
+    ///
+    /// Runtime detection of STE features, independent of FLAG tag.
+    pub fn was_ste_dac_used(&self) -> bool {
+        self.memory.ste_dac.was_used()
+    }
+
+    /// Get LMC1992 master volume in dB (-80 to 0).
+    pub fn lmc1992_master_volume_db(&self) -> i8 {
+        self.memory.lmc1992.master_volume_db()
+    }
+
+    /// Get LMC1992 left volume in dB (-40 to 0).
+    pub fn lmc1992_left_volume_db(&self) -> i8 {
+        self.memory.lmc1992.left_volume_db()
+    }
+
+    /// Get LMC1992 right volume in dB (-40 to 0).
+    pub fn lmc1992_right_volume_db(&self) -> i8 {
+        self.memory.lmc1992.right_volume_db()
+    }
+
+    /// Get LMC1992 bass in dB (-12 to +12).
+    pub fn lmc1992_bass_db(&self) -> i8 {
+        self.memory.lmc1992.bass_db()
+    }
+
+    /// Get LMC1992 treble in dB (-12 to +12).
+    pub fn lmc1992_treble_db(&self) -> i8 {
+        self.memory.lmc1992.treble_db()
+    }
+
+    /// Get LMC1992 master volume raw value (0-40).
+    pub fn lmc1992_master_volume_raw(&self) -> u8 {
+        self.memory.lmc1992.master_volume()
+    }
+
+    /// Get LMC1992 left volume raw value (0-20).
+    pub fn lmc1992_left_volume_raw(&self) -> u8 {
+        self.memory.lmc1992.left_volume()
+    }
+
+    /// Get LMC1992 right volume raw value (0-20).
+    pub fn lmc1992_right_volume_raw(&self) -> u8 {
+        self.memory.lmc1992.right_volume()
+    }
+
+    /// Get LMC1992 bass raw value (0-12).
+    pub fn lmc1992_bass_raw(&self) -> u8 {
+        self.memory.lmc1992.bass()
+    }
+
+    /// Get LMC1992 treble raw value (0-12).
+    pub fn lmc1992_treble_raw(&self) -> u8 {
+        self.memory.lmc1992.treble()
+    }
+
     fn configure_return_by_rts(&mut self) {
         self.memory
             .write_long(RAM_SIZE as u32 - 4, RESET_INSTRUCTION_ADDR);

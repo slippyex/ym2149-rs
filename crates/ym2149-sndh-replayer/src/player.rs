@@ -5,7 +5,7 @@
 
 use crate::error::{Result, SndhError};
 use crate::machine::AtariMachine;
-use crate::parser::{SndhFile, SubsongInfo};
+use crate::parser::{SndhFile, SndhFlags, SubsongInfo};
 use ym2149::Ym2149Backend;
 use ym2149_common::{BasicMetadata, ChiptunePlayer, ChiptunePlayerBase, PlaybackState};
 
@@ -222,6 +222,112 @@ impl SndhPlayer {
         self.machine.ym2149_mut()
     }
 
+    /// Check if YM2149 output is being mixed (via LMC1992 setting).
+    ///
+    /// Returns false when the SNDH driver has set the mixer to DMA-only mode.
+    /// In DMA-only mode, channel muting has no effect on the audio output.
+    pub fn is_ym_mixed(&self) -> bool {
+        self.machine.is_ym_mixed()
+    }
+
+    /// Check if this SNDH uses STE hardware features (DMA audio, LMC1992).
+    ///
+    /// Returns true if:
+    /// - The FLAG tag indicates STE, LMC1992, stereo, or DMA rate (metadata)
+    /// - OR the STE DAC was actually used during playback (runtime detection)
+    ///
+    /// Runtime detection is important for older SNDH files without FLAG tags.
+    pub fn uses_ste_features(&self) -> bool {
+        let flags = &self.sndh.metadata.flags;
+        flags.ste || flags.lmc || flags.stereo || flags.dma_rate.is_some()
+            || self.machine.was_ste_dac_used()
+    }
+
+    /// Get reference to the SNDH feature flags.
+    pub fn sndh_flags(&self) -> &SndhFlags {
+        &self.sndh.metadata.flags
+    }
+
+    /// Check if the STE DAC was used during playback (runtime detection).
+    pub fn was_ste_dac_used(&self) -> bool {
+        self.machine.was_ste_dac_used()
+    }
+
+    /// Mute or unmute the STE DAC left channel.
+    pub fn set_dac_mute_left(&mut self, mute: bool) {
+        self.machine.set_dac_mute_left(mute);
+    }
+
+    /// Mute or unmute the STE DAC right channel.
+    pub fn set_dac_mute_right(&mut self, mute: bool) {
+        self.machine.set_dac_mute_right(mute);
+    }
+
+    /// Check if DAC left channel is muted.
+    pub fn is_dac_left_muted(&self) -> bool {
+        self.machine.is_dac_left_muted()
+    }
+
+    /// Check if DAC right channel is muted.
+    pub fn is_dac_right_muted(&self) -> bool {
+        self.machine.is_dac_right_muted()
+    }
+
+    /// Get current DAC levels for visualization (normalized 0.0 to 1.0).
+    pub fn get_dac_levels(&self) -> (f32, f32) {
+        self.machine.get_dac_levels()
+    }
+
+    /// Get LMC1992 master volume in dB (-80 to 0).
+    pub fn lmc1992_master_volume_db(&self) -> i8 {
+        self.machine.lmc1992_master_volume_db()
+    }
+
+    /// Get LMC1992 left volume in dB (-40 to 0).
+    pub fn lmc1992_left_volume_db(&self) -> i8 {
+        self.machine.lmc1992_left_volume_db()
+    }
+
+    /// Get LMC1992 right volume in dB (-40 to 0).
+    pub fn lmc1992_right_volume_db(&self) -> i8 {
+        self.machine.lmc1992_right_volume_db()
+    }
+
+    /// Get LMC1992 bass in dB (-12 to +12).
+    pub fn lmc1992_bass_db(&self) -> i8 {
+        self.machine.lmc1992_bass_db()
+    }
+
+    /// Get LMC1992 treble in dB (-12 to +12).
+    pub fn lmc1992_treble_db(&self) -> i8 {
+        self.machine.lmc1992_treble_db()
+    }
+
+    /// Get LMC1992 master volume raw value (0-40).
+    pub fn lmc1992_master_volume_raw(&self) -> u8 {
+        self.machine.lmc1992_master_volume_raw()
+    }
+
+    /// Get LMC1992 left volume raw value (0-20).
+    pub fn lmc1992_left_volume_raw(&self) -> u8 {
+        self.machine.lmc1992_left_volume_raw()
+    }
+
+    /// Get LMC1992 right volume raw value (0-20).
+    pub fn lmc1992_right_volume_raw(&self) -> u8 {
+        self.machine.lmc1992_right_volume_raw()
+    }
+
+    /// Get LMC1992 bass raw value (0-12).
+    pub fn lmc1992_bass_raw(&self) -> u8 {
+        self.machine.lmc1992_bass_raw()
+    }
+
+    /// Get LMC1992 treble raw value (0-12).
+    pub fn lmc1992_treble_raw(&self) -> u8 {
+        self.machine.lmc1992_treble_raw()
+    }
+
     /// Get the current frame position (0-based).
     pub fn current_frame(&self) -> u32 {
         self.frame
@@ -248,9 +354,10 @@ impl SndhPlayer {
     /// Get playback progress as a fraction (0.0 to 1.0).
     ///
     /// Returns 0.0 if total duration is unknown.
+    /// For looping songs, wraps around using modulo.
     pub fn progress(&self) -> f32 {
         if self.frame_count > 0 {
-            (self.frame as f32 / self.frame_count as f32).min(1.0)
+            (self.frame % self.frame_count) as f32 / self.frame_count as f32
         } else {
             0.0
         }

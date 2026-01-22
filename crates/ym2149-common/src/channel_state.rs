@@ -184,13 +184,20 @@ impl ChannelStates {
         // Convert to musical note
         let (note_name, midi_note) = frequency_hz.map(frequency_to_note).unwrap_or((None, None));
 
+        // For envelope mode, use max amplitude for visualization since envelope controls volume
+        let amplitude_normalized = if envelope_enabled {
+            1.0
+        } else {
+            amplitude as f32 / 15.0
+        };
+
         ChannelState {
             tone_period,
             frequency_hz,
             note_name,
             midi_note,
             amplitude,
-            amplitude_normalized: amplitude as f32 / 15.0,
+            amplitude_normalized,
             tone_enabled,
             noise_enabled,
             envelope_enabled,

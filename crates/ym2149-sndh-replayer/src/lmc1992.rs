@@ -543,6 +543,56 @@ impl Lmc1992 {
         self.mix_ym
     }
 
+    /// Get master volume (0-40, where 40 = 0dB, 0 = -80dB).
+    pub fn master_volume(&self) -> u8 {
+        self.master_volume
+    }
+
+    /// Get left channel volume (0-20, where 20 = 0dB, 0 = -40dB).
+    pub fn left_volume(&self) -> u8 {
+        self.left_volume
+    }
+
+    /// Get right channel volume (0-20, where 20 = 0dB, 0 = -40dB).
+    pub fn right_volume(&self) -> u8 {
+        self.right_volume
+    }
+
+    /// Get bass setting (0-12, where 6 = flat, 0 = -12dB, 12 = +12dB).
+    pub fn bass(&self) -> u8 {
+        self.bass
+    }
+
+    /// Get treble setting (0-12, where 6 = flat, 0 = -12dB, 12 = +12dB).
+    pub fn treble(&self) -> u8 {
+        self.treble
+    }
+
+    /// Get master volume in dB (-80 to 0).
+    pub fn master_volume_db(&self) -> i8 {
+        (self.master_volume as i8 - 40) * 2
+    }
+
+    /// Get left volume in dB (-40 to 0).
+    pub fn left_volume_db(&self) -> i8 {
+        (self.left_volume as i8 - 20) * 2
+    }
+
+    /// Get right volume in dB (-40 to 0).
+    pub fn right_volume_db(&self) -> i8 {
+        (self.right_volume as i8 - 20) * 2
+    }
+
+    /// Get bass in dB (-12 to +12).
+    pub fn bass_db(&self) -> i8 {
+        (self.bass as i8 - 6) * 2
+    }
+
+    /// Get treble in dB (-12 to +12).
+    pub fn treble_db(&self) -> i8 {
+        (self.treble as i8 - 6) * 2
+    }
+
     /// Process stereo audio through the LMC1992.
     /// Takes left/right samples (i16), applies bass/treble EQ and volume.
     pub fn process_stereo(&mut self, left: i16, right: i16) -> (i16, i16) {

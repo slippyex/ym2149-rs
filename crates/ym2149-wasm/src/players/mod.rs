@@ -280,4 +280,104 @@ impl BrowserSongPlayer {
             BrowserSongPlayer::Sndh(player) => player.set_subsong(index),
         }
     }
+
+    /// Get the number of audio channels.
+    ///
+    /// Returns:
+    /// - 3 for YM/AY (single PSG chip)
+    /// - 6/9/12 for Arkos (multi-chip)
+    /// - 5 for SNDH (3 YM channels + 2 DAC L/R)
+    pub fn channel_count(&self) -> usize {
+        match self {
+            BrowserSongPlayer::Ym(_) => 3,
+            BrowserSongPlayer::Arkos(player) => player.channel_count(),
+            BrowserSongPlayer::Ay(_) => 3,
+            BrowserSongPlayer::Sndh(player) => player.channel_count(),
+        }
+    }
+
+    /// Dump registers for all PSG chips.
+    ///
+    /// Returns an array of register dumps, one per PSG chip.
+    pub fn dump_all_registers(&self) -> Vec<[u8; 16]> {
+        match self {
+            BrowserSongPlayer::Ym(player) => vec![player.get_chip().dump_registers()],
+            BrowserSongPlayer::Arkos(player) => player.dump_all_registers(),
+            BrowserSongPlayer::Ay(player) => vec![player.dump_registers()],
+            BrowserSongPlayer::Sndh(player) => vec![player.dump_registers()],
+        }
+    }
+
+    /// Get the number of times the song has looped.
+    ///
+    /// Currently only supported for SNDH format. Returns 0 for other formats.
+    pub fn loop_count(&self) -> u32 {
+        match self {
+            BrowserSongPlayer::Ym(_) => 0,
+            BrowserSongPlayer::Arkos(_) => 0,
+            BrowserSongPlayer::Ay(_) => 0,
+            BrowserSongPlayer::Sndh(player) => player.loop_count(),
+        }
+    }
+
+    /// Get current per-channel audio outputs.
+    ///
+    /// Returns the actual audio output values for each channel (not register values).
+    /// This is updated at audio sample rate, perfect for oscilloscope visualization.
+    ///
+    /// Returns a vector of (channel_a, channel_b, channel_c) tuples, one per PSG chip.
+    pub fn get_channel_outputs(&self) -> Vec<[f32; 3]> {
+        match self {
+            BrowserSongPlayer::Ym(player) => {
+                let (a, b, c) = player.get_chip().get_channel_outputs();
+                vec![[a, b, c]]
+            }
+            BrowserSongPlayer::Arkos(player) => player.get_channel_outputs(),
+            BrowserSongPlayer::Ay(player) => {
+                let (a, b, c) = player.get_channel_outputs();
+                vec![[a, b, c]]
+            }
+            BrowserSongPlayer::Sndh(player) => {
+                let (a, b, c) = player.get_channel_outputs();
+                vec![[a, b, c]]
+            }
+        }
+    }
+
+    /// Generate samples with per-sample channel outputs for visualization.
+    ///
+    /// Returns (mono_samples, channel_outputs) where channel_outputs is a flattened
+    /// array of per-sample channel values: [A0, B0, C0, A0, B0, C0, ...] for each sample.
+    ///
+    /// This captures the actual audio output per channel at sample rate, enabling
+    /// accurate oscilloscope visualization of the individual channel waveforms.
+    pub fn generate_samples_with_channels(&mut self, count: usize) -> (Vec<f32>, Vec<f32>) {
+        let mut mono = vec![0.0f32; count];
+        let channel_count = self.channel_count();
+        let mut channels = vec![0.0f32; count * channel_count];
+
+        match self {
+            BrowserSongPlayer::Ym(player) => {
+                use ym2149::Ym2149Backend;
+                for i in 0..count {
+                    mono[i] = player.generate_sample();
+                    let (a, b, c) = player.get_chip().get_channel_outputs();
+                    channels[i * 3] = a;
+                    channels[i * 3 + 1] = b;
+                    channels[i * 3 + 2] = c;
+                }
+            }
+            BrowserSongPlayer::Arkos(player) => {
+                player.generate_samples_with_channels_into(&mut mono, &mut channels);
+            }
+            BrowserSongPlayer::Ay(player) => {
+                player.generate_samples_with_channels_into(&mut mono, &mut channels);
+            }
+            BrowserSongPlayer::Sndh(player) => {
+                player.generate_samples_with_channels_into(&mut mono, &mut channels);
+            }
+        }
+
+        (mono, channels)
+    }
 }

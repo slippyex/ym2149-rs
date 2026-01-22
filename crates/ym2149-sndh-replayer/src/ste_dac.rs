@@ -59,6 +59,16 @@ pub struct SteDac {
     current_dac_level_l: i16,
     /// Current DAC level (right channel)
     current_dac_level_r: i16,
+    /// Left channel mute flag
+    mute_left: bool,
+    /// Right channel mute flag
+    mute_right: bool,
+    /// Track if STE DAC has ever been used (registers written/playback started)
+    was_used: bool,
+    /// Last output sample (left) - for visualization
+    last_output_l: i16,
+    /// Last output sample (right) - for visualization
+    last_output_r: i16,
 }
 
 impl SteDac {
@@ -78,6 +88,11 @@ impl SteDac {
             acc_50_r: 0,
             current_dac_level_l: 0,
             current_dac_level_r: 0,
+            mute_left: false,
+            mute_right: false,
+            was_used: false,
+            last_output_l: 0,
+            last_output_r: 0,
         };
         dac.reset(host_replay_rate);
         dac
@@ -99,6 +114,45 @@ impl SteDac {
         self.acc_50_l = 0;
         self.acc_50_r = 0;
         self.flip_50_to_25 = false;
+        // Note: was_used and mute state preserved across reset for detection purposes
+    }
+
+    /// Check if STE DAC has been used (DMA playback activated).
+    ///
+    /// This is set when the 68000 code enables DMA playback.
+    /// Used for runtime STE feature detection.
+    pub fn was_used(&self) -> bool {
+        self.was_used
+    }
+
+    /// Mute or unmute the left DAC channel.
+    pub fn set_mute_left(&mut self, mute: bool) {
+        self.mute_left = mute;
+    }
+
+    /// Mute or unmute the right DAC channel.
+    pub fn set_mute_right(&mut self, mute: bool) {
+        self.mute_right = mute;
+    }
+
+    /// Check if left channel is muted.
+    pub fn is_left_muted(&self) -> bool {
+        self.mute_left
+    }
+
+    /// Check if right channel is muted.
+    pub fn is_right_muted(&self) -> bool {
+        self.mute_right
+    }
+
+    /// Get current DAC levels for visualization (normalized 0.0 to 1.0).
+    pub fn get_levels(&self) -> (f32, f32) {
+        // Normalize from i16 range to 0.0-1.0
+        // DAC levels are typically in range -8192 to 8192 (with master volume)
+        let max_level = 8192.0;
+        let left = (self.last_output_l.abs() as f32 / max_level).min(1.0);
+        let right = (self.last_output_r.abs() as f32 / max_level).min(1.0);
+        (left, right)
     }
 
     fn fetch_sample_ptr(&mut self) {
@@ -119,6 +173,7 @@ impl SteDac {
                     if (data & 1) != 0 && ((data ^ self.regs[1]) & 1) != 0 {
                         // Replay just started
                         self.fetch_sample_ptr();
+                        self.was_used = true;
                     }
                 }
                 0x07 | 0x0d => {
@@ -255,7 +310,13 @@ impl SteDac {
             self.current_dac_level_l = 0;
             self.current_dac_level_r = 0;
         }
-        (self.current_dac_level_l, self.current_dac_level_r)
+        // Apply muting
+        let out_l = if self.mute_left { 0 } else { self.current_dac_level_l };
+        let out_r = if self.mute_right { 0 } else { self.current_dac_level_r };
+        // Store for visualization (before muting, to show actual DAC activity)
+        self.last_output_l = self.current_dac_level_l;
+        self.last_output_r = self.current_dac_level_r;
+        (out_l, out_r)
     }
 
     /// Emulate internal rol to please any user 68k code reading & waiting the complete cycle
