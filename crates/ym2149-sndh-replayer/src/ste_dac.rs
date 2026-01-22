@@ -145,13 +145,13 @@ impl SteDac {
         self.mute_right
     }
 
-    /// Get current DAC levels for visualization (normalized 0.0 to 1.0).
+    /// Get current DAC levels for visualization (normalized -1.0 to 1.0, bipolar).
     pub fn get_levels(&self) -> (f32, f32) {
-        // Normalize from i16 range to 0.0-1.0
+        // Normalize from i16 range to -1.0 to 1.0 (bipolar)
         // DAC levels are typically in range -8192 to 8192 (with master volume)
         let max_level = 8192.0;
-        let left = (self.last_output_l.abs() as f32 / max_level).min(1.0);
-        let right = (self.last_output_r.abs() as f32 / max_level).min(1.0);
+        let left = (self.last_output_l as f32 / max_level).clamp(-1.0, 1.0);
+        let right = (self.last_output_r as f32 / max_level).clamp(-1.0, 1.0);
         (left, right)
     }
 

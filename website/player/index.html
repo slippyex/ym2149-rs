@@ -757,11 +757,34 @@
                     min-height: 44px;
                 }
             }
+
+            /* Drag & drop overlay */
+            #dropOverlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(20, 20, 30, 0.95);
+                display: none;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.5rem;
+                color: #4ade80;
+                border: 3px dashed #4ade80;
+                margin: 1rem;
+                border-radius: 1rem;
+                z-index: 9999;
+                pointer-events: none;
+            }
+            #dropOverlay.visible {
+                display: flex;
+            }
         </style>
     </head>
     <body
         class="font-display text-gray-100 h-screen flex flex-col overflow-hidden"
     >
+        <!-- Drop overlay for drag & drop -->
+        <div id="dropOverlay">Drop audio files here</div>
+
         <!-- Header -->
         <header
             class="bg-chip-darker/90 backdrop-blur-lg border-b border-purple-900/20 px-3 py-2 shrink-0"
@@ -859,6 +882,11 @@
                         />
                         + Load
                     </label>
+                    <button
+                        id="helpBtn"
+                        class="w-6 h-6 rounded-full border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 text-xs font-bold transition-colors"
+                        title="Keyboard shortcuts (?)"
+                    >?</button>
                     <a
                         href="../"
                         class="text-gray-400 hover:text-white text-xs hidden md:block"
@@ -1621,7 +1649,13 @@
             const STORAGE_KEY_STATS = "ym2149_stats";
             const STORAGE_KEY_FINGERPRINTS = "ym2149_fingerprints";
             const STORAGE_KEY_PINNED = "ym2149_pinned_authors";
+            const STORAGE_KEY_OWN_FILES = "ym2149_own_files";
+            const OWN_FILES_DB_NAME = "ym2149-own-files";
+            const OWN_FILES_DB_VERSION = 1;
+            const OWN_FILES_STORE = "files";
+            const RECENT_DISPLAY_LIMIT = 50;
             let favorites = new Set(); // Set of track paths
+            let ownFiles = []; // Array of { id, name, size, addedAt }
             let playStats = {}; // { path: { playCount: N, lastPlayed: timestamp } }
             let audioFingerprints = {}; // { path: { avgAmp, lowFreq, midFreq, highFreq, noteDensity } }
             let pinnedAuthors = new Set(); // Set of "collection:author" keys
@@ -1664,6 +1698,121 @@
                 } catch (e) {
                     console.warn("Failed to save pinned authors:", e);
                 }
+            }
+
+            // Own Files (IndexedDB + localStorage metadata)
+            async function openOwnFilesDB() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(OWN_FILES_DB_NAME, OWN_FILES_DB_VERSION);
+                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => resolve(request.result);
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(OWN_FILES_STORE)) {
+                            db.createObjectStore(OWN_FILES_STORE, { keyPath: "id" });
+                        }
+                    };
+                });
+            }
+
+            function loadOwnFilesMeta() {
+                try {
+                    const stored = localStorage.getItem(STORAGE_KEY_OWN_FILES);
+                    if (stored) ownFiles = JSON.parse(stored);
+                } catch (e) {
+                    console.warn("Failed to load own files:", e);
+                }
+            }
+
+            function saveOwnFilesMeta() {
+                try {
+                    localStorage.setItem(STORAGE_KEY_OWN_FILES, JSON.stringify(ownFiles));
+                } catch (e) {
+                    console.warn("Failed to save own files:", e);
+                }
+            }
+
+            async function saveOwnFile(file) {
+                const id = `own_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const arrayBuffer = await file.arrayBuffer();
+                const data = new Uint8Array(arrayBuffer);
+
+                const db = await openOwnFilesDB();
+                const tx = db.transaction(OWN_FILES_STORE, "readwrite");
+                const store = tx.objectStore(OWN_FILES_STORE);
+                await new Promise((resolve, reject) => {
+                    const request = store.put({ id, data, name: file.name });
+                    request.onsuccess = resolve;
+                    request.onerror = () => reject(request.error);
+                });
+                db.close();
+
+                ownFiles.push({ id, name: file.name, size: file.size, addedAt: Date.now() });
+                saveOwnFilesMeta();
+                return id;
+            }
+
+            async function loadOwnFileData(id) {
+                const db = await openOwnFilesDB();
+                const tx = db.transaction(OWN_FILES_STORE, "readonly");
+                const store = tx.objectStore(OWN_FILES_STORE);
+                return new Promise((resolve, reject) => {
+                    const request = store.get(id);
+                    request.onsuccess = () => {
+                        db.close();
+                        resolve(request.result?.data || null);
+                    };
+                    request.onerror = () => {
+                        db.close();
+                        reject(request.error);
+                    };
+                });
+            }
+
+            async function deleteOwnFile(id) {
+                const db = await openOwnFilesDB();
+                const tx = db.transaction(OWN_FILES_STORE, "readwrite");
+                const store = tx.objectStore(OWN_FILES_STORE);
+                await new Promise((resolve, reject) => {
+                    const request = store.delete(id);
+                    request.onsuccess = resolve;
+                    request.onerror = () => reject(request.error);
+                });
+                db.close();
+
+                ownFiles = ownFiles.filter(f => f.id !== id);
+                saveOwnFilesMeta();
+            }
+
+            async function clearOwnFiles() {
+                if (!confirm("Clear all own files?")) return;
+                const db = await openOwnFilesDB();
+                const tx = db.transaction(OWN_FILES_STORE, "readwrite");
+                const store = tx.objectStore(OWN_FILES_STORE);
+                await new Promise((resolve, reject) => {
+                    const request = store.clear();
+                    request.onsuccess = resolve;
+                    request.onerror = () => reject(request.error);
+                });
+                db.close();
+
+                ownFiles = [];
+                saveOwnFilesMeta();
+                renderCollections();
+                if (currentCollection === "own") {
+                    filterAndGroupTracks();
+                }
+            }
+
+            function getOwnFileTracks() {
+                return ownFiles.map(f => ({
+                    path: f.id,
+                    title: f.name.replace(/\.[^.]+$/, ""),
+                    author: "Local",
+                    collection: "own",
+                    format: f.name.split(".").pop()?.toUpperCase() || "?",
+                    isOwnFile: true
+                }));
             }
 
             function isAuthorPinned(collection, author) {
@@ -1755,7 +1904,7 @@
                 const tab = document.querySelector(
                     '[data-collection="favorites"]',
                 );
-                if (tab) tab.textContent = `♥ (${favorites.size})`;
+                if (tab) tab.textContent = `♥ (${getValidFavoritesCount()})`;
             }
 
             // ============================================================================
@@ -2615,17 +2764,24 @@
                 // Filter by collection
                 if (currentCollection === "favorites") {
                     tracks = tracks.filter((t) => favorites.has(t.path));
+                    // Also include favorited own files
+                    const favOwnTracks = getOwnFileTracks().filter((t) => favorites.has(t.path));
+                    tracks = [...tracks, ...favOwnTracks];
                 } else if (currentCollection === "recent") {
-                    // Get recently played tracks, sorted by lastPlayed descending, limit to 50
+                    // Get recently played tracks, sorted by lastPlayed descending
                     const recentPaths = Object.entries(playStats)
                         .filter(([, stats]) => stats.lastPlayed > 0)
                         .sort((a, b) => b[1].lastPlayed - a[1].lastPlayed)
-                        .slice(0, 50)
+                        .slice(0, RECENT_DISPLAY_LIMIT)
                         .map(([path]) => path);
-                    const pathSet = new Set(recentPaths);
+                    // Include both catalog tracks and own files
+                    const ownTracks = getOwnFileTracks();
+                    const allTracks = [...tracks, ...ownTracks];
                     tracks = recentPaths
-                        .map((path) => tracks.find((t) => t.path === path))
+                        .map((path) => allTracks.find((t) => t.path === path))
                         .filter(Boolean);
+                } else if (currentCollection === "own") {
+                    tracks = getOwnFileTracks();
                 } else if (currentCollection !== "all") {
                     tracks = tracks.filter(
                         (t) => t.collection === currentCollection,
@@ -2801,7 +2957,7 @@
                 updateVisibleRows();
             }
 
-            function updateVisibleRows() {
+            function updateVisibleRows(force = false) {
                 const scrollTop = elements.trackList.scrollTop;
                 const containerHeight = elements.trackList.clientHeight;
 
@@ -2815,7 +2971,7 @@
                         BUFFER_ROWS,
                 );
 
-                if (start === visibleStart && end === visibleEnd) return;
+                if (!force && start === visibleStart && end === visibleEnd) return;
                 visibleStart = start;
                 visibleEnd = end;
 
@@ -2956,17 +3112,53 @@
                 ).length;
             }
 
+            function getValidFavoritesCount() {
+                if (!catalog) return favorites.size;
+                const catalogPaths = new Set(catalog.tracks.map((t) => t.path));
+                const ownPaths = new Set(ownFiles.map((f) => f.id));
+                let count = 0;
+                for (const path of favorites) {
+                    if (catalogPaths.has(path) || ownPaths.has(path)) count++;
+                }
+                return count;
+            }
+
+            function clearRecentHistory() {
+                if (!confirm("Clear recent play history?")) return;
+                playStats = {};
+                savePlayStats();
+                renderCollections();
+                if (currentCollection === "recent") {
+                    filterAndGroupTracks();
+                }
+            }
+
             function renderCollections() {
                 if (!catalog) return;
 
                 let html = `<button class="collection-tab px-2 py-1 rounded text-xs border border-transparent ${currentCollection === "all" ? "active" : "hover:bg-gray-800"}" data-collection="all">All</button>`;
 
                 // Favorites tab
-                html += `<button class="collection-tab px-2 py-1 rounded text-xs border border-transparent ${currentCollection === "favorites" ? "active" : "hover:bg-gray-800"}" data-collection="favorites">♥ (${favorites.size})</button>`;
+                html += `<button class="collection-tab px-2 py-1 rounded text-xs border border-transparent ${currentCollection === "favorites" ? "active" : "hover:bg-gray-800"}" data-collection="favorites">♥ (${getValidFavoritesCount()})</button>`;
 
-                // Recently Played tab
+                // Recently Played tab with clear button
                 const recentCount = getRecentlyPlayedCount();
-                html += `<button class="collection-tab px-2 py-1 rounded text-xs border border-transparent ${currentCollection === "recent" ? "active" : "hover:bg-gray-800"}" data-collection="recent">⏱ Recent (${recentCount})</button>`;
+                const recentDisplayCount = Math.min(recentCount, RECENT_DISPLAY_LIMIT);
+                html += `<span class="inline-flex flex-nowrap"><button class="collection-tab px-2 py-1 rounded-l text-xs border border-transparent ${currentCollection === "recent" ? "active" : "hover:bg-gray-800"}" data-collection="recent">⏱ Recent (${recentDisplayCount})</button>`;
+                if (recentCount > 0) {
+                    html += `<button class="collection-tab px-1 py-1 rounded-r text-xs border border-transparent hover:bg-red-900/50 text-gray-500 hover:text-red-400" data-clear="recent" title="Clear recent history">×</button>`;
+                }
+                html += `</span>`;
+
+                // Own files tab with clear button
+                const ownCount = ownFiles.length;
+                if (ownCount > 0 || currentCollection === "own") {
+                    html += `<span class="inline-flex flex-nowrap"><button class="collection-tab px-2 py-1 rounded-l text-xs border border-transparent ${currentCollection === "own" ? "active" : "hover:bg-gray-800"}" data-collection="own">📁 Own (${ownCount})</button>`;
+                    if (ownCount > 0) {
+                        html += `<button class="collection-tab px-1 py-1 rounded-r text-xs border border-transparent hover:bg-red-900/50 text-gray-500 hover:text-red-400" data-clear="own" title="Clear own files">×</button>`;
+                    }
+                    html += `</span>`;
+                }
 
                 for (const col of catalog.collections) {
                     if (col.trackCount === 0) continue;
@@ -2978,12 +3170,26 @@
                     catalog.tracks.length.toLocaleString();
 
                 elements.collectionTabs
-                    .querySelectorAll(".collection-tab")
+                    .querySelectorAll(".collection-tab[data-collection]")
                     .forEach((tab) => {
                         tab.addEventListener("click", () => {
                             currentCollection = tab.dataset.collection;
                             renderCollections();
                             filterAndGroupTracks();
+                        });
+                    });
+
+                // Clear buttons
+                elements.collectionTabs
+                    .querySelectorAll("[data-clear]")
+                    .forEach((btn) => {
+                        btn.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            if (btn.dataset.clear === "recent") {
+                                clearRecentHistory();
+                            } else if (btn.dataset.clear === "own") {
+                                clearOwnFiles();
+                            }
                         });
                     });
             }
@@ -3180,6 +3386,13 @@
             // Playback
             // ============================================================================
             async function loadTrack(path) {
+                // Check if this is an own file (stored in IndexedDB)
+                if (path.startsWith("own_")) {
+                    const data = await loadOwnFileData(path);
+                    if (!data) throw new Error("Own file not found");
+                    return data;
+                }
+
                 const response = await fetch(path);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 return new Uint8Array(await response.arrayBuffer());
@@ -3226,11 +3439,15 @@
                     enableControls();
                     resetVisualization();
                     updateLmc1992Display(); // Show LMC1992 panel for SNDH
-                    updateVisibleRows();
+                    updateVisibleRows(true); // Force re-render to show active track
 
                     // Use pre-rendered waveform from catalog if available
                     if (track.w) {
                         loadPrerenderedWaveform(track.w);
+                    } else if (track.isOwnFile) {
+                        // Generate and cache waveform for own files
+                        const duration = wasmPlayer.metadata?.duration_seconds || 0;
+                        loadOrGenerateWaveform(data, duration);
                     } else {
                         // Fall back to progress bar for tracks without waveform data
                         elements.waveformScrubber.classList.add("hidden");
@@ -3245,6 +3462,7 @@
                         startAudioProcessing();
                         startVisualization();
                         updatePlayButton();
+                        updateVisibleRows(true); // Force re-render to show playing indicator
                     } catch (audioErr) {
                         console.warn(
                             "Audio autoplay blocked, click play to start:",
@@ -3480,12 +3698,13 @@
                     startVisualization();
                 }
                 updatePlayButton();
-                updateVisibleRows();
+                updateVisibleRows(true); // Force re-render to update playing indicator
             }
 
             function stop() {
                 if (!wasmPlayer) return;
                 wasmPlayer.stop();
+                wasmPlayer.seek_to_percentage(0);
                 isPlaying = false;
                 stopAudioProcessing();
                 // Don't stop visualization - let it keep running for decay effect
@@ -3493,20 +3712,19 @@
                 updatePlayButton();
                 elements.progressBar.value = 0;
                 elements.currentTime.textContent = "0:00";
+                updateWaveformPlayhead();
                 resetVisualization();
-                updateVisibleRows();
+                updateVisibleRows(true); // Force re-render to clear playing indicator
             }
 
             function restart() {
                 if (!wasmPlayer) return;
-                const wasPlaying = isPlaying;
-                stop();
-                if (wasPlaying) {
-                    wasmPlayer.play();
-                    isPlaying = true;
-                    startAudioProcessing();
-                    startVisualization();
-                    updatePlayButton();
+                wasmPlayer.seek_to_percentage(0);
+                elements.progressBar.value = 0;
+                elements.currentTime.textContent = "0:00";
+                updateWaveformPlayhead();
+                if (!isPlaying) {
+                    togglePlayPause();
                 }
             }
 
@@ -3793,31 +4011,42 @@
                 )
                     return;
 
+                // Handle space key separately (check both e.key and e.code)
+                if (e.code === "Space" || e.key === " ") {
+                    e.preventDefault();
+                    togglePlayPause();
+                    return;
+                }
+
+                // Calculate 5 seconds as percentage of duration
+                const duration = wasmPlayer?.metadata?.duration_seconds || 180;
+                const seekAmount = 5 / duration; // 5 seconds as percentage
+
                 switch (e.key.toLowerCase()) {
-                    case " ": // Space - Play/Pause
-                        e.preventDefault();
-                        togglePlayPause();
-                        break;
                     case "arrowleft": // Previous or seek back
                         if (e.shiftKey && wasmPlayer) {
+                            e.preventDefault();
                             wasmPlayer.seek_to_percentage(
                                 Math.max(
                                     0,
-                                    wasmPlayer.position_percentage() - 0.05,
+                                    wasmPlayer.position_percentage() - seekAmount,
                                 ),
                             );
                             updateProgressUI();
+                            updateWaveformPlayhead();
                         }
                         break;
                     case "arrowright": // Next or seek forward
                         if (e.shiftKey && wasmPlayer) {
+                            e.preventDefault();
                             wasmPlayer.seek_to_percentage(
                                 Math.min(
                                     1,
-                                    wasmPlayer.position_percentage() + 0.05,
+                                    wasmPlayer.position_percentage() + seekAmount,
                                 ),
                             );
                             updateProgressUI();
+                            updateWaveformPlayhead();
                         } else if (!e.shiftKey) {
                             playNext();
                         }
@@ -3877,7 +4106,8 @@
                         e.preventDefault();
                         toggleSidebar();
                         break;
-                    case "escape": // Hide sidebar
+                    case "escape": // Hide sidebar / help modal
+                        hideKeyboardHelp();
                         if (sidebarVisible) toggleSidebar();
                         break;
                     case "[": // Previous subsong
@@ -3886,7 +4116,18 @@
                     case "]": // Next subsong
                         nextSubsong();
                         break;
+                    case "?": // Show help
+                        showKeyboardHelp();
+                        break;
                 }
+            }
+
+            function showKeyboardHelp() {
+                document.getElementById("helpModal").classList.remove("hidden");
+            }
+
+            function hideKeyboardHelp() {
+                document.getElementById("helpModal").classList.add("hidden");
             }
 
             function prevSubsong() {
@@ -4356,47 +4597,19 @@
                 const h = canvas.height / dpr;
                 if (w === 0 || h === 0) return;
 
-                // Phosphor persistence effect - fade previous frame instead of clearing
-                ctx.fillStyle = "rgba(10, 10, 15, 0.20)";
+                // Clear canvas completely
+                ctx.fillStyle = "rgba(10, 10, 15, 1)";
                 ctx.fillRect(0, 0, w, h);
 
-                // Draw tracker-style scrolling data in background
-                if (noteHistory && noteHistory.length > 0) {
-                    ctx.font = "8px monospace";
-                    ctx.textAlign = "left";
-                    const blockX = w / 2 - 25; // Fixed left edge for block alignment
-                    for (const entry of noteHistory) {
-                        // Calculate alpha based on position (fade as it scrolls up)
-                        const alpha = Math.max(0, 1 - entry.y / h) * 0.5;
-                        const y = h - entry.y;
-                        if (y > 0 && y < h) {
-                            // Build display string: ### NOTE NE////
-                            const volBar = "▮".repeat(Math.ceil(entry.amp * 3)).padEnd(3, " ");
-                            const noteText = (entry.note || "···").padStart(3, " ").padEnd(4, " ");
-                            let flags = "";
-                            if (entry.noise) flags += "N";
-                            if (entry.env) flags += "E";
-                            const envText = entry.envName || "";
-
-                            // Draw as fixed-width block with spacing
-                            const line = volBar + "  " + noteText + "  " + flags + envText;
-                            ctx.fillStyle = color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
-                            ctx.fillText(line, blockX, y);
-                        }
-                    }
-                }
-
-                // Draw grid
+                // Draw subtle grid
                 ctx.strokeStyle = "rgba(139, 92, 246, 0.08)";
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                // Vertical lines (8 divisions)
                 for (let i = 1; i < 8; i++) {
                     const x = (w / 8) * i;
                     ctx.moveTo(x, 0);
                     ctx.lineTo(x, h);
                 }
-                // Horizontal lines (4 divisions)
                 for (let i = 1; i < 4; i++) {
                     const y = (h / 4) * i;
                     ctx.moveTo(0, y);
@@ -4404,52 +4617,26 @@
                 }
                 ctx.stroke();
 
-                // Center line (brighter)
-                ctx.strokeStyle = "rgba(139, 92, 246, 0.2)";
+                // Center line
+                ctx.strokeStyle = "rgba(139, 92, 246, 0.15)";
                 ctx.beginPath();
                 ctx.moveTo(0, h / 2);
                 ctx.lineTo(w, h / 2);
                 ctx.stroke();
 
-                // Build the waveform path
+                // Draw waveform - clean thin line
                 ctx.beginPath();
                 const step = w / data.length;
-                const amp = 2.5; // Amplification factor for better visibility
                 for (let i = 0; i < data.length; i++) {
                     const x = i * step;
-                    const y = Math.max(
-                        0,
-                        Math.min(h, h / 2 - data[i] * (h / 2) * amp),
-                    );
+                    // Data is already bipolar (-1 to 1), scale to canvas
+                    const y = h / 2 - data[i] * (h / 2) * 0.9;
                     if (i === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
 
-                // Draw glow layers (outer to inner) for phosphor effect
-                ctx.strokeStyle = color + "08";
-                ctx.lineWidth = 12;
-                ctx.stroke();
-
-                ctx.strokeStyle = color + "15";
-                ctx.lineWidth = 8;
-                ctx.stroke();
-
-                ctx.strokeStyle = color + "30";
-                ctx.lineWidth = 5;
-                ctx.stroke();
-
-                ctx.strokeStyle = color + "60";
-                ctx.lineWidth = 3;
-                ctx.stroke();
-
-                // Core bright line
                 ctx.strokeStyle = color;
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-
-                // Hot center (white-ish)
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-                ctx.lineWidth = 0.5;
+                ctx.lineWidth = 1;
                 ctx.stroke();
             }
 
@@ -5172,7 +5359,75 @@
             // ============================================================================
             // Event Handlers
             // ============================================================================
+            async function handleFileDrop(e) {
+                const files = [...e.dataTransfer.files].filter(f =>
+                    /\.(ym|sndh|ay|vtx|psg|stc|pt3|sqt|asc|fxm|fc|aks)$/i.test(f.name)
+                );
+
+                if (files.length === 0) {
+                    showToast("No supported audio files found");
+                    return;
+                }
+
+                for (const file of files) {
+                    await saveOwnFile(file);
+                }
+                showToast(`Added ${files.length} file${files.length > 1 ? "s" : ""}`);
+
+                renderCollections();
+
+                // Switch to Own tab and play first dropped file
+                currentCollection = "own";
+                filterAndGroupTracks();
+                const lastAdded = ownFiles[ownFiles.length - 1];
+                if (lastAdded) {
+                    const idx = filteredTracks.findIndex(t => t.path === lastAdded.id);
+                    if (idx >= 0) playTrack(idx);
+                }
+            }
+
+            function setupDragAndDrop() {
+                const overlay = document.getElementById("dropOverlay");
+                let dragCounter = 0;
+
+                document.body.addEventListener("dragenter", (e) => {
+                    e.preventDefault();
+                    dragCounter++;
+                    overlay.classList.add("visible");
+                });
+
+                document.body.addEventListener("dragleave", (e) => {
+                    e.preventDefault();
+                    dragCounter--;
+                    if (dragCounter <= 0) {
+                        dragCounter = 0;
+                        overlay.classList.remove("visible");
+                    }
+                });
+
+                document.body.addEventListener("dragover", (e) => {
+                    e.preventDefault();
+                });
+
+                document.body.addEventListener("drop", (e) => {
+                    e.preventDefault();
+                    dragCounter = 0;
+                    overlay.classList.remove("visible");
+                    handleFileDrop(e);
+                });
+            }
+
             function setupEventHandlers() {
+                // Setup drag and drop
+                setupDragAndDrop();
+
+                // Help modal
+                document.getElementById("helpBtn").addEventListener("click", showKeyboardHelp);
+                document.getElementById("helpModal").addEventListener("click", (e) => {
+                    if (e.target.id === "helpModal") hideKeyboardHelp();
+                });
+                document.getElementById("helpCloseBtn").addEventListener("click", hideKeyboardHelp);
+
                 // iOS audio unlock on first touch
                 const unlockAudio = async () => {
                     await ensureAudioContext();
@@ -5383,38 +5638,6 @@
                     if (waveformOverviewData) drawWaveformOverview();
                 });
 
-                // Keyboard
-                document.addEventListener("keydown", (e) => {
-                    if (e.target.tagName === "INPUT") return;
-
-                    switch (e.code) {
-                        case "Space":
-                            e.preventDefault();
-                            togglePlayPause();
-                            break;
-                        case "ArrowLeft":
-                            if (wasmPlayer) {
-                                const pos = Math.max(
-                                    0,
-                                    wasmPlayer.position_percentage() - 0.05,
-                                );
-                                wasmPlayer.seek_to_percentage(pos);
-                            }
-                            break;
-                        case "ArrowRight":
-                            if (wasmPlayer) {
-                                const pos = Math.min(
-                                    1,
-                                    wasmPlayer.position_percentage() + 0.05,
-                                );
-                                wasmPlayer.seek_to_percentage(pos);
-                            }
-                            break;
-                        case "KeyN":
-                            playNext();
-                            break;
-                    }
-                });
             }
 
             // ============================================================================
@@ -5441,6 +5664,7 @@
                     loadPlayStats();
                     loadFingerprints();
                     loadPinnedAuthors();
+                    loadOwnFilesMeta();
 
                     // Load catalog (with caching and gzip support)
                     loadCatalogCached()
@@ -5542,5 +5766,55 @@
                 });
             });
         </script>
+
+        <!-- Help Modal -->
+        <div id="helpModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-chip-darker border border-gray-700 rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold gradient-text">YM2149 Web Player</h2>
+                    <button id="helpCloseBtn" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-chip-cyan font-semibold mb-2">Features</h3>
+                    <ul class="text-sm text-gray-300 space-y-1">
+                        <li>Play YM, SNDH, AY, and Arkos chiptune files</li>
+                        <li>Real-time oscilloscope and spectrum visualization</li>
+                        <li>Waveform scrubber for precise navigation</li>
+                        <li>A-B loop for practicing or enjoying sections</li>
+                        <li>Variable playback speed (0.5x - 2x)</li>
+                        <li>Multi-subsong support for SNDH files</li>
+                        <li>Similar tracks discovery (audio fingerprinting)</li>
+                        <li>Favorites, recently played, and pinned authors</li>
+                        <li>Drag & drop your own audio files</li>
+                        <li>WAV export with channel selection</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 class="text-chip-cyan font-semibold mb-2">Keyboard Shortcuts</h3>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="flex justify-between"><span class="text-gray-400">Space</span><span>Play / Pause</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">R</span><span>Restart</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Arrow Right</span><span>Next track</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Shift + Arrows</span><span>Seek +/- 5s</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Arrow Up/Down</span><span>Volume</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">M</span><span>Mute/Unmute</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">S</span><span>Shuffle toggle</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">N</span><span>Auto-play toggle</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">F</span><span>Toggle favorite</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">A / B</span><span>Set loop points</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Shift + C</span><span>Clear loop</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">[ / ]</span><span>Prev/Next subsong</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Tab</span><span>Toggle sidebar</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">?</span><span>Show this help</span></div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-gray-500 text-center">
+                    Drag & drop YM, SNDH, AY files anywhere to add them to your library
+                </div>
+            </div>
+        </div>
     </body>
 </html>

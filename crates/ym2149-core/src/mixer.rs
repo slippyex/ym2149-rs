@@ -40,8 +40,10 @@ pub struct ChannelState {
     pub muted: bool,
     /// DigiDrum sample override
     pub drum_override: Option<f32>,
-    /// Last computed output level (0.0 to 1.0)
+    /// Last computed output level (bipolar: -1.0 to 1.0 for visualization)
     pub last_output: f32,
+    /// Last ungated amplitude level (for bipolar computation)
+    pub last_amplitude: f32,
 }
 
 /// Audio mixer and output stage
@@ -69,9 +71,14 @@ impl Mixer {
     ///
     /// # Returns
     ///
-    /// Packed level values (5 bits per channel)
+    /// Tuple of (gated_levels, ungated_levels) - packed level values (5 bits per channel)
     #[inline]
-    pub fn compute_levels(&self, volume_regs: [u8; 3], envelope_level: u32, gate_mask: u32) -> u32 {
+    pub fn compute_levels(
+        &self,
+        volume_regs: [u8; 3],
+        envelope_level: u32,
+        gate_mask: u32,
+    ) -> (u32, u32) {
         let mut levels: u32 = 0;
 
         for (i, &vol_reg) in volume_regs.iter().enumerate() {
@@ -85,8 +92,8 @@ impl Mixer {
             levels |= level << (i * 5);
         }
 
-        // Apply gate mask
-        levels & gate_mask
+        // Return both ungated and gated levels
+        (levels & gate_mask, levels)
     }
 
     /// Compute final output for a channel
@@ -94,7 +101,8 @@ impl Mixer {
     /// # Arguments
     ///
     /// * `channel` - Channel index (0-2)
-    /// * `level_index` - Level from compute_levels (0-31)
+    /// * `level_index` - Gated level from compute_levels (0-31)
+    /// * `ungated_level_index` - Ungated level (amplitude without gate)
     /// * `half_amplitude` - Whether to halve amplitude (period <= 1)
     ///
     /// # Returns
@@ -105,6 +113,7 @@ impl Mixer {
         &mut self,
         channel: usize,
         level_index: u32,
+        ungated_level_index: u32,
         half_amplitude: bool,
     ) -> u32 {
         let state = &mut self.channels[channel];
@@ -123,7 +132,39 @@ impl Mixer {
             }
         };
 
-        state.last_output = output as f32 / MAX_LEVEL as f32;
+        // Compute bipolar output for visualization (-1.0 to 1.0)
+        // Square wave oscillates around zero: HIGH = +1, LOW = -1
+        if state.muted {
+            state.last_output = 0.0;
+            state.last_amplitude = 0.0;
+        } else if state.drum_override.is_some() {
+            // DigiDrum: already bipolar-ish, normalize to -1..1
+            state.last_output = (output as f32 / MAX_LEVEL as f32) * 2.0 - 1.0;
+            state.last_amplitude = 1.0;
+        } else {
+            // Get the ungated amplitude (what the level would be if gate was on)
+            let ungated_output = YM2149_LOG_LEVELS[ungated_level_index as usize];
+            let ungated_output = if half_amplitude {
+                ungated_output >> 1
+            } else {
+                ungated_output
+            };
+            let amplitude = ungated_output as f32 / MAX_LEVEL as f32;
+            state.last_amplitude = amplitude;
+
+            // Bipolar with amplitude: show actual volume level, not just +1/-1
+            // This creates a more "musical" waveform where quiet notes have smaller
+            // deflections and loud notes have larger deflections
+            if ungated_level_index > 0 {
+                // Channel has signal - scale by amplitude
+                let gate_on = level_index == ungated_level_index;
+                state.last_output = if gate_on { amplitude } else { -amplitude };
+            } else {
+                // No signal (volume is 0)
+                state.last_output = 0.0;
+            }
+        }
+
         output
     }
 
@@ -202,13 +243,13 @@ mod tests {
         let mut mixer = Mixer::new();
 
         mixer.set_drum_override(0, Some(128.0));
-        let output = mixer.compute_channel_output(0, 0, false);
+        let output = mixer.compute_channel_output(0, 0, 0, false);
 
         // Should use drum sample, not normal level
         assert!(output > 0);
 
         mixer.set_drum_override(0, None);
-        let output_normal = mixer.compute_channel_output(0, 0, false);
+        let output_normal = mixer.compute_channel_output(0, 0, 0, false);
 
         // With level 0 and no drum, should be minimal
         assert!(output_normal < output);

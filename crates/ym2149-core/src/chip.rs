@@ -310,20 +310,21 @@ impl Ym2149 {
         // Get envelope level
         let envelope_level = self.envelope_generator.level();
 
-        // Build channel levels
+        // Build channel levels (gated and ungated for bipolar visualization)
         let volume_regs = [self.registers[8], self.registers[9], self.registers[10]];
-        let levels =
+        let (gated_levels, ungated_levels) =
             self.mixer
                 .compute_levels(volume_regs, envelope_level, accumulated_mask as u32);
 
         // Compute individual channel outputs
         let mut total_output = 0u32;
         for channel in 0..NUM_CHANNELS {
-            let level_index = (levels >> (channel * 5)) & 0x1F;
+            let level_index = (gated_levels >> (channel * 5)) & 0x1F;
+            let ungated_level_index = (ungated_levels >> (channel * 5)) & 0x1F;
             let half_amplitude = self.tone_generators[channel].is_half_amplitude();
             total_output += self
                 .mixer
-                .compute_channel_output(channel, level_index, half_amplitude);
+                .compute_channel_output(channel, level_index, ungated_level_index, half_amplitude);
         }
 
         // Apply DC filter and return
