@@ -13,6 +13,7 @@ members = [
     "crates/ym2149-wasm",
     "crates/ym2149-ay-replayer",
     "crates/ym2149-sndh-replayer",
+    "crates/ym2149-metadata",
 ]
 resolver = "2"
 
@@ -33,6 +34,7 @@ parking_lot = "0.12"
 delharc = "0.6"
 tempfile = "3.8"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 bitflags = "2.0"
 approx = "0.5"
 base64 = "0.22"
