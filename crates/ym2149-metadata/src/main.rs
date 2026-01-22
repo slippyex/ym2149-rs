@@ -248,7 +248,7 @@ fn compute_spectral_features(
     let mut chroma = [0.0f32; 12];
     for (i, &mag) in magnitudes.iter().take(nyquist_bin).enumerate() {
         let freq = bin_to_freq(i, sample_rate, fft_size);
-        if freq >= 60.0 && freq <= 4000.0 {
+        if (60.0..=4000.0).contains(&freq) {
             // Focus on musical range
             let midi = freq_to_midi(freq);
             let pitch_class = (midi.round() as i32 % 12).unsigned_abs() as usize;
@@ -535,7 +535,7 @@ fn compute_chromagram(
             // Compute chroma from this window
             for (i, c) in buffer.iter().take(fft_size / 2).enumerate() {
                 let freq = i as f32 * sample_rate as f32 / fft_size as f32;
-                if freq >= 60.0 && freq <= 4000.0 {
+                if (60.0..=4000.0).contains(&freq) {
                     let mag = c.norm();
                     let midi = freq_to_midi(freq);
                     let pitch_class = (midi.round() as i32 % 12).unsigned_abs() as usize;
@@ -811,7 +811,7 @@ fn generate_waveform<P: ChiptunePlayer>(player: &mut P, duration: f32) -> Wavefo
             .collect();
 
         // Process multiple windows across the song
-        let step = all_samples.len().saturating_sub(FFT_SIZE) / 20.max(1); // ~20 windows
+        let step = all_samples.len().saturating_sub(FFT_SIZE) / 20; // ~20 windows
         let step = step.max(FFT_SIZE / 2); // At least 50% overlap
 
         let mut pos = 0;
@@ -1267,7 +1267,7 @@ fn main() {
     });
     let removed = before_dedup - tracks.len();
     if removed > 0 {
-        eprintln!("Removed {} duplicates", removed);
+        eprintln!("Removed {removed} duplicates");
     }
 
     // Count per collection
