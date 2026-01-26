@@ -6,10 +6,12 @@ import {
     WAVEFORM_SIZE,
     SPECTRUM_BINS,
     SPECTRUM_DECAY,
+    SPECTRUM_ATTACK,
     SPECTRUM_BASE_FREQ,
     BINS_PER_OCTAVE,
     AUDIO_VIS_BUFFER_SIZE,
     NOTE_HISTORY_SIZE,
+    NOTE_SCROLL_SPEED,
     COLORS,
 } from '../config.js';
 import * as state from '../state.js';
@@ -329,48 +331,112 @@ function freqToBin(freq) {
 function updateSpectrum(states) {
     const channelCount = states.channels?.length || 0;
 
-    // Apply decay
-    for (const spectrum of state.channelSpectrums) {
-        for (let i = 0; i < SPECTRUM_BINS; i++) {
-            spectrum[i] *= SPECTRUM_DECAY;
+    // Helper: Apply attack/decay smoothing to a spectrum bin
+    function smoothValue(current, target) {
+        if (target > current) {
+            // Attack: gradually rise toward target (resistance when going up)
+            return current + (target - current) * SPECTRUM_ATTACK;
+        } else {
+            // Decay: gradually fall
+            return current * SPECTRUM_DECAY;
         }
     }
-    for (let i = 0; i < SPECTRUM_BINS; i++) {
-        state.combinedSpectrum[i] *= SPECTRUM_DECAY;
-    }
 
-    // Update each channel's spectrum
+    // Build target values for each channel
+    const targets = state.channelSpectrums.map(() => new Float32Array(SPECTRUM_BINS));
+
     for (let ch = 0; ch < channelCount && ch < state.channelSpectrums.length; ch++) {
         const chState = states.channels[ch];
-        const spectrum = state.channelSpectrums[ch];
-        if (!chState || !spectrum) continue;
+        if (!chState) continue;
 
-        const hasOutput = chState.toneEnabled || chState.noiseEnabled || chState.envelopeEnabled;
         const amplitude = chState.amplitude || 0;
+        if (amplitude <= 0) continue;
 
-        if (chState.isDac && amplitude > 0) {
-            for (let bin = 4; bin <= 12; bin++) {
-                const falloff = 1.0 - Math.abs(bin - 8) / 8;
-                spectrum[bin] = Math.max(spectrum[bin], amplitude * falloff * 0.8);
+        const toneEnabled = chState.toneEnabled;
+        const noiseEnabled = chState.noiseEnabled;
+        const envEnabled = chState.envelopeEnabled;
+        const frequency = chState.frequency || 0;
+
+        // DAC channels: spread across mid frequencies
+        if (chState.isDac) {
+            for (let bin = 8; bin <= 24; bin++) {
+                const falloff = 1.0 - Math.abs(bin - 16) / 16;
+                targets[ch][bin] = Math.max(targets[ch][bin], amplitude * falloff * 0.8);
             }
-        } else if (!hasOutput && amplitude > 0) {
-            for (let bin = 4; bin <= 14; bin++) {
-                const falloff = 1.0 - Math.abs(bin - 9) / 10;
-                spectrum[bin] = Math.max(spectrum[bin], amplitude * falloff * 0.9);
+            continue;
+        }
+
+        // Tone: energy at fundamental frequency + harmonics
+        if (toneEnabled && frequency > 0) {
+            const baseBin = freqToBin(frequency);
+            // Fundamental
+            targets[ch][baseBin] = Math.max(targets[ch][baseBin], amplitude);
+            // Add subtle harmonics (2nd, 3rd) for richer display
+            const harm2 = Math.min(SPECTRUM_BINS - 1, baseBin + BINS_PER_OCTAVE);
+            const harm3 = Math.min(SPECTRUM_BINS - 1, baseBin + Math.floor(BINS_PER_OCTAVE * 1.58));
+            targets[ch][harm2] = Math.max(targets[ch][harm2], amplitude * 0.3);
+            targets[ch][harm3] = Math.max(targets[ch][harm3], amplitude * 0.15);
+        }
+
+        // Noise: broadband energy in upper frequencies
+        if (noiseEnabled) {
+            // Noise spreads across mid-high frequencies (bins 20-55 for 64 bins)
+            const noiseAmp = amplitude * (toneEnabled ? 0.6 : 0.9); // Less if mixed with tone
+            for (let bin = 20; bin < 56; bin++) {
+                // Noise has slight emphasis in mid-highs
+                const emphasis = 1.0 - Math.abs(bin - 38) / 36;
+                const noiseLevel = noiseAmp * emphasis * (0.5 + Math.random() * 0.5);
+                targets[ch][bin] = Math.max(targets[ch][bin], noiseLevel);
             }
-        } else if (hasOutput && amplitude > 0 && chState.frequency > 0) {
-            const bin = freqToBin(chState.frequency);
-            spectrum[bin] = Math.max(spectrum[bin], amplitude);
+        }
+
+        // Envelope (buzz/sync effects): adds harmonic richness
+        if (envEnabled && !noiseEnabled) {
+            // Envelope creates sawtooth-like harmonics
+            if (frequency > 0) {
+                const baseBin = freqToBin(frequency);
+                // Envelope adds many harmonics (buzz effect)
+                for (let h = 2; h <= 8; h++) {
+                    const harmBin = Math.min(SPECTRUM_BINS - 1, baseBin + Math.floor(BINS_PER_OCTAVE * Math.log2(h)));
+                    const harmAmp = amplitude / h * 0.7;
+                    targets[ch][harmBin] = Math.max(targets[ch][harmBin], harmAmp);
+                }
+            } else {
+                // Envelope without tone: spread low-mid frequencies
+                for (let bin = 4; bin <= 32; bin++) {
+                    const falloff = 1.0 - Math.abs(bin - 16) / 28;
+                    targets[ch][bin] = Math.max(targets[ch][bin], amplitude * falloff * 0.7);
+                }
+            }
+        }
+
+        // Fallback: amplitude but nothing specific enabled
+        if (!toneEnabled && !noiseEnabled && !envEnabled) {
+            for (let bin = 8; bin <= 28; bin++) {
+                const falloff = 1.0 - Math.abs(bin - 18) / 20;
+                targets[ch][bin] = Math.max(targets[ch][bin], amplitude * falloff * 0.8);
+            }
         }
     }
 
-    // Combined spectrum
-    for (let i = 0; i < SPECTRUM_BINS; i++) {
-        let max = 0;
-        for (let ch = 0; ch < state.channelSpectrums.length; ch++) {
-            max = Math.max(max, state.channelSpectrums[ch][i]);
+    // Apply smoothing to each channel's spectrum
+    for (let ch = 0; ch < state.channelSpectrums.length; ch++) {
+        const spectrum = state.channelSpectrums[ch];
+        const target = targets[ch];
+        if (!spectrum || !target) continue;
+
+        for (let i = 0; i < SPECTRUM_BINS; i++) {
+            spectrum[i] = smoothValue(spectrum[i], target[i]);
         }
-        state.combinedSpectrum[i] = max;
+    }
+
+    // Combined spectrum with smoothing
+    for (let i = 0; i < SPECTRUM_BINS; i++) {
+        let maxTarget = 0;
+        for (let ch = 0; ch < state.channelSpectrums.length; ch++) {
+            maxTarget = Math.max(maxTarget, state.channelSpectrums[ch][i]);
+        }
+        state.combinedSpectrum[i] = smoothValue(state.combinedSpectrum[i], maxTarget);
     }
 }
 
@@ -379,8 +445,11 @@ function updateSpectrum(states) {
 // ============================================================================
 
 export function drawAllVisualization() {
-    // Clean up old note entries
+    // Continuously scroll note entries upward and clean up old ones
     for (const history of state.noteHistories) {
+        for (const entry of history) {
+            entry.y += NOTE_SCROLL_SPEED;
+        }
         while (history.length > 0 && history[0].y > 150) {
             history.shift();
         }
@@ -400,10 +469,10 @@ export function drawAllVisualization() {
     for (let ch = 0; ch < state.channelSpectrums.length; ch++) {
         const ctx = channelContexts.spec[ch];
         const color = getChannelColor(ch);
-        drawSpectrum(ctx, state.channelSpectrums[ch], color);
+        drawSpectrum(ctx, state.channelSpectrums[ch], color, ch);
     }
     // Draw combined spectrum
-    drawSpectrum(contexts.specCombined, state.combinedSpectrum, COLORS.green);
+    drawSpectrum(contexts.specCombined, state.combinedSpectrum, COLORS.green, -1);
 }
 
 function drawOscilloscope(ctx, data, color, noteHistory = null) {
@@ -453,9 +522,58 @@ function drawOscilloscope(ctx, data, color, noteHistory = null) {
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Draw scrolling note history (tracker style) - centered with vignette, muted colors
+    if (noteHistory && noteHistory.length > 0) {
+        const rgb = hexToRgb(color);
+        // Muted color (55% brightness)
+        const dimR = Math.round(rgb.r * 0.55);
+        const dimG = Math.round(rgb.g * 0.55);
+        const dimB = Math.round(rgb.b * 0.55);
+
+        ctx.textAlign = "center";
+        ctx.font = "bold 9px monospace";
+        const centerX = w / 2;
+
+        for (const entry of noteHistory) {
+            const yPos = h - 8 - entry.y;
+            if (yPos < -10 || yPos > h + 10) continue;
+
+            // Fade based on y position
+            const age = entry.y / 120;
+            const alpha = Math.max(0.1, 0.75 - age * 0.6);
+
+            if (entry.note) {
+                // Build display: NOTE  N E  SHAPE
+                const noteText = entry.note;
+                const noiseInd = entry.noise ? "N" : "-";
+                const envInd = entry.env ? "E" : "-";
+                const shapeText = entry.env && entry.envName ? entry.envName : "";
+                const fullText = `${noteText} ${noiseInd} ${envInd}${shapeText ? " " + shapeText : ""}`;
+
+                // Subtle vignette shadow behind text
+                ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                // Draw text with muted color
+                ctx.fillStyle = `rgba(${dimR}, ${dimG}, ${dimB}, ${alpha})`;
+                ctx.fillText(fullText, centerX, yPos);
+
+                // Reset shadow
+                ctx.shadowBlur = 0;
+            }
+        }
+    }
 }
 
-function drawSpectrum(ctx, data, color) {
+// Peak hold state (managed per-call for simplicity)
+const peakHoldState = new Map();
+const PEAK_HOLD_TIME = 30; // frames to hold peak
+const PEAK_FALL_SPEED = 0.02; // how fast peaks fall
+
+function drawSpectrum(ctx, data, color, channelIndex = -1) {
     if (!ctx) return;
     const canvas = ctx.canvas;
     const dpr = window.devicePixelRatio || 1;
@@ -463,18 +581,185 @@ function drawSpectrum(ctx, data, color) {
     const h = canvas.height / dpr;
     if (w === 0 || h === 0) return;
 
-    ctx.fillStyle = "#0a0a0f";
+    // Get or create peak hold state for this canvas
+    const canvasId = canvas.id || `canvas_${channelIndex}`;
+    if (!peakHoldState.has(canvasId)) {
+        peakHoldState.set(canvasId, {
+            peaks: new Float32Array(SPECTRUM_BINS),
+            holdTimers: new Uint8Array(SPECTRUM_BINS),
+        });
+    }
+    const peakState = peakHoldState.get(canvasId);
+
+    // Background with subtle gradient
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+    bgGrad.addColorStop(0, "#0a0a0f");
+    bgGrad.addColorStop(1, "#0d0d15");
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
-    const barWidth = w / SPECTRUM_BINS - 1;
-    for (let i = 0; i < SPECTRUM_BINS; i++) {
-        const x = i * (barWidth + 1);
-        const barHeight = data[i] * h * 0.9;
-        const y = h - barHeight;
-        const gradient = ctx.createLinearGradient(x, h, x, y);
-        gradient.addColorStop(0, color + "30");
-        gradient.addColorStop(1, color);
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, y, barWidth, barHeight);
+    // Grid lines (subtle)
+    ctx.strokeStyle = "rgba(139, 92, 246, 0.06)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    // Vertical grid lines (every 8 bins = 1 octave with BINS_PER_OCTAVE=8)
+    for (let i = BINS_PER_OCTAVE; i < SPECTRUM_BINS; i += BINS_PER_OCTAVE) {
+        const x = (i / SPECTRUM_BINS) * w;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
     }
+    // Horizontal grid lines (dB levels)
+    for (let i = 1; i <= 4; i++) {
+        const y = (i / 5) * h;
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+    }
+    ctx.stroke();
+
+    // Parse color to RGB for manipulations
+    const rgb = hexToRgb(color);
+    // Noise tint: shift toward white/cyan for high frequency bins
+    const noiseRgb = { r: Math.min(255, rgb.r + 60), g: Math.min(255, rgb.g + 80), b: Math.min(255, rgb.b + 40) };
+    const barGap = Math.max(1, Math.floor(w / SPECTRUM_BINS * 0.15)); // Dynamic gap
+    const totalBarWidth = w / SPECTRUM_BINS;
+    const barWidth = Math.max(1.5, totalBarWidth - barGap);
+    const maxHeight = h * 0.85;
+    const cornerRadius = Math.min(barWidth / 2, 2);
+
+    // Draw bars with glow
+    for (let i = 0; i < SPECTRUM_BINS; i++) {
+        const value = data[i];
+        const barHeight = Math.max(0, value * maxHeight);
+        const x = i * totalBarWidth + barGap / 2;
+        const y = h - barHeight;
+
+        // Update peak hold
+        if (value >= peakState.peaks[i]) {
+            peakState.peaks[i] = value;
+            peakState.holdTimers[i] = PEAK_HOLD_TIME;
+        } else if (peakState.holdTimers[i] > 0) {
+            peakState.holdTimers[i]--;
+        } else {
+            peakState.peaks[i] = Math.max(0, peakState.peaks[i] - PEAK_FALL_SPEED);
+        }
+
+        // Blend toward noise color for high frequency bins (noise region: 20-56)
+        const noiseBlend = i < 20 ? 0 : Math.min(1, (i - 20) / 24);
+        const barR = Math.round(rgb.r + (noiseRgb.r - rgb.r) * noiseBlend);
+        const barG = Math.round(rgb.g + (noiseRgb.g - rgb.g) * noiseBlend);
+        const barB = Math.round(rgb.b + (noiseRgb.b - rgb.b) * noiseBlend);
+        const barColor = `rgb(${barR}, ${barG}, ${barB})`;
+
+        if (barHeight > 1) {
+            // Outer glow (scaled to bar width)
+            ctx.shadowColor = barColor;
+            ctx.shadowBlur = Math.min(8, barWidth * 2);
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Main bar gradient (bottom to top, dark to bright)
+            const barGrad = ctx.createLinearGradient(x, h, x, y);
+            barGrad.addColorStop(0, `rgba(${barR}, ${barG}, ${barB}, 0.2)`);
+            barGrad.addColorStop(0.4, `rgba(${barR}, ${barG}, ${barB}, 0.7)`);
+            barGrad.addColorStop(0.8, barColor);
+            barGrad.addColorStop(1, lightenColor(barColor, 40));
+
+            ctx.fillStyle = barGrad;
+
+            // Draw rounded bar
+            ctx.beginPath();
+            ctx.roundRect(x, y, barWidth, barHeight, [cornerRadius, cornerRadius, 0, 0]);
+            ctx.fill();
+
+            // Reset shadow for inner details
+            ctx.shadowBlur = 0;
+
+            // Inner highlight (left edge) - only for wider bars
+            if (barWidth > 3) {
+                const highlightGrad = ctx.createLinearGradient(x, 0, x + barWidth * 0.3, 0);
+                highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.12)");
+                highlightGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+                ctx.fillStyle = highlightGrad;
+                ctx.beginPath();
+                ctx.roundRect(x, y, barWidth * 0.4, barHeight, [cornerRadius, 0, 0, 0]);
+                ctx.fill();
+            }
+
+            // Top cap glow
+            const capGrad = ctx.createLinearGradient(x, y, x, y + 3);
+            capGrad.addColorStop(0, lightenColor(color, 60));
+            capGrad.addColorStop(1, "transparent");
+            ctx.fillStyle = capGrad;
+            ctx.beginPath();
+            ctx.roundRect(x, y, barWidth, Math.min(3, barHeight), [cornerRadius, cornerRadius, 0, 0]);
+            ctx.fill();
+        }
+
+        // Draw peak indicator
+        const peakY = h - peakState.peaks[i] * maxHeight;
+        if (peakState.peaks[i] > 0.02 && peakY < h - 3) {
+            // Peak line with glow (use blended color)
+            ctx.shadowColor = lightenColor(barColor, 40);
+            ctx.shadowBlur = Math.min(4, barWidth);
+            ctx.fillStyle = lightenColor(barColor, 70);
+            const peakHeight = Math.max(1, Math.min(2, barWidth * 0.5));
+            ctx.fillRect(x, peakY - peakHeight, barWidth, peakHeight);
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // Reflection effect at bottom
+    ctx.globalAlpha = 0.15;
+    ctx.scale(1, -1);
+    ctx.translate(0, -h * 2);
+
+    for (let i = 0; i < SPECTRUM_BINS; i++) {
+        const value = data[i];
+        const barHeight = Math.min(value * maxHeight * 0.3, h * 0.15);
+        const x = i * totalBarWidth + barGap / 2;
+
+        if (barHeight > 1) {
+            const reflGrad = ctx.createLinearGradient(x, h, x, h - barHeight);
+            reflGrad.addColorStop(0, color);
+            reflGrad.addColorStop(1, "transparent");
+            ctx.fillStyle = reflGrad;
+            ctx.fillRect(x, h - barHeight, barWidth, barHeight);
+        }
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
+
+    // Bottom line accent
+    const lineGrad = ctx.createLinearGradient(0, h - 1, w, h - 1);
+    lineGrad.addColorStop(0, "transparent");
+    lineGrad.addColorStop(0.2, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`);
+    lineGrad.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`);
+    lineGrad.addColorStop(0.8, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`);
+    lineGrad.addColorStop(1, "transparent");
+    ctx.strokeStyle = lineGrad;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, h - 0.5);
+    ctx.lineTo(w, h - 0.5);
+    ctx.stroke();
+}
+
+// Helper: Convert hex to RGB
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 139, g: 92, b: 246 }; // fallback purple
+}
+
+// Helper: Lighten a hex color
+function lightenColor(hex, percent) {
+    const rgb = hexToRgb(hex);
+    const r = Math.min(255, rgb.r + (255 - rgb.r) * percent / 100);
+    const g = Math.min(255, rgb.g + (255 - rgb.g) * percent / 100);
+    const b = Math.min(255, rgb.b + (255 - rgb.b) * percent / 100);
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
 }

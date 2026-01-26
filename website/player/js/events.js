@@ -12,6 +12,8 @@ import {
     toggleAuthor,
     updateCollapseButtonText,
     attachTrackListHandlers,
+    updateStickyAuthorHeader,
+    scrollToCurrentTrack,
 } from './ui/trackList.js';
 import {
     showToast,
@@ -33,6 +35,7 @@ import {
     stop,
     restart,
     playNext,
+    playPrev,
     playTrack,
     toggleShuffle,
     toggleAutoPlay,
@@ -76,6 +79,9 @@ export function handleKeyboardShortcuts(e) {
                 state.wasmPlayer.seek_to_percentage(Math.max(0, state.wasmPlayer.position_percentage() - seekAmount));
                 updateProgressUI();
                 updateWaveformPlayhead();
+            } else if (!e.shiftKey) {
+                playPrev();
+                setTimeout(scrollToCurrentTrack, 100);
             }
             break;
         case "arrowright":
@@ -86,6 +92,7 @@ export function handleKeyboardShortcuts(e) {
                 updateWaveformPlayhead();
             } else if (!e.shiftKey) {
                 playNext();
+                setTimeout(scrollToCurrentTrack, 100);
             }
             break;
         case "arrowup":
@@ -352,7 +359,10 @@ export function setupEventHandlers() {
 
     // Virtual scroll
     elements.trackList.addEventListener("scroll", () => {
-        requestAnimationFrame(() => updateVisibleRows());
+        requestAnimationFrame(() => {
+            updateVisibleRows();
+            updateStickyAuthorHeader();
+        });
     });
 
     // Toggle collapse all button

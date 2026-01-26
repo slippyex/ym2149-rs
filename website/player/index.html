@@ -334,11 +334,33 @@
                     rgba(139, 92, 246, 0.12) 0%,
                     rgba(6, 182, 212, 0.08) 100%
                 );
+                background-color: #0d0d15;
                 border-left: 2px solid;
                 border-image: linear-gradient(180deg, #8b5cf6, #06b6d4) 1;
                 cursor: pointer;
                 user-select: none;
                 transition: all 0.2s ease;
+            }
+            /* Sticky author header for virtual scroll */
+            .sticky-author-header {
+                position: sticky;
+                top: 0;
+                z-index: 20;
+                background: linear-gradient(
+                    90deg,
+                    rgba(139, 92, 246, 0.15) 0%,
+                    rgba(6, 182, 212, 0.1) 100%
+                );
+                background-color: #0d0d15;
+                border-left: 2px solid;
+                border-image: linear-gradient(180deg, #8b5cf6, #06b6d4) 1;
+                border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+                padding: 0.25rem 0.5rem;
+                font-size: 0.75rem;
+                font-weight: 500;
+                color: #d1d5db;
+                display: flex;
+                align-items: center;
             }
             .author-header:hover {
                 background: linear-gradient(
@@ -939,7 +961,12 @@
                 </div>
 
                 <!-- Track List -->
-                <div id="trackList" class="virtual-list flex-1 overflow-y-auto">
+                <div id="trackList" class="virtual-list flex-1 overflow-y-auto relative">
+                    <!-- Sticky Author Header -->
+                    <div id="stickyAuthorHeader" class="sticky-author-header hidden">
+                        <span id="stickyAuthorCollection" class="text-chip-purple/60 mr-2"></span>
+                        <span id="stickyAuthorName" class="truncate"></span>
+                    </div>
                     <div id="trackListInner" class="relative">
                         <!-- Tracks rendered here -->
                     </div>

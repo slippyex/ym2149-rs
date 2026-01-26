@@ -15,6 +15,9 @@ export const elements = {
     filteredCount: null,
     trackList: null,
     trackListInner: null,
+    stickyAuthorHeader: null,
+    stickyAuthorCollection: null,
+    stickyAuthorName: null,
     fileInput: null,
     songTitle: null,
     playerFavBtn: null,
@@ -122,6 +125,9 @@ export function initElements() {
     elements.filteredCount = document.getElementById("filteredCount");
     elements.trackList = document.getElementById("trackList");
     elements.trackListInner = document.getElementById("trackListInner");
+    elements.stickyAuthorHeader = document.getElementById("stickyAuthorHeader");
+    elements.stickyAuthorCollection = document.getElementById("stickyAuthorCollection");
+    elements.stickyAuthorName = document.getElementById("stickyAuthorName");
     elements.fileInput = document.getElementById("fileInput");
     elements.songTitle = document.getElementById("songTitle");
     elements.playerFavBtn = document.getElementById("playerFavBtn");

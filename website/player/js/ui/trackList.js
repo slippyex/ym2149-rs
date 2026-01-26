@@ -234,6 +234,7 @@ export function renderTrackList() {
     state.setVisibleStart(-1);
     state.setVisibleEnd(-1);
     updateVisibleRows();
+    updateStickyAuthorHeader();
 }
 
 export function updateVisibleRows(force = false) {
@@ -365,4 +366,60 @@ export function attachTrackListHandlers(callbacks) {
             onAuthorClick(header.dataset.collection, header.dataset.author);
         });
     });
+}
+
+// ============================================================================
+// Sticky Author Header
+// ============================================================================
+
+export function updateStickyAuthorHeader() {
+    if (!elements.stickyAuthorHeader) return;
+
+    const scrollTop = elements.trackList.scrollTop;
+
+    // Find the author for the first visible row
+    const firstVisibleIndex = Math.floor(scrollTop / ROW_HEIGHT);
+
+    // Search backwards from first visible to find the author
+    let currentAuthor = null;
+    let currentCollection = null;
+
+    for (let i = firstVisibleIndex; i >= 0; i--) {
+        const item = state.groupedTracks[i];
+        if (item && item.type === "author") {
+            currentAuthor = item.author;
+            currentCollection = item.collection;
+            break;
+        }
+    }
+
+    // Show/hide sticky header
+    if (currentAuthor && scrollTop > ROW_HEIGHT) {
+        elements.stickyAuthorHeader.classList.remove("hidden");
+        elements.stickyAuthorCollection.textContent = currentCollection?.toUpperCase() || "";
+        elements.stickyAuthorName.textContent = currentAuthor;
+    } else {
+        elements.stickyAuthorHeader.classList.add("hidden");
+    }
+}
+
+// ============================================================================
+// Scroll to Current Track
+// ============================================================================
+
+export function scrollToCurrentTrack() {
+    if (state.currentTrackIndex < 0) return;
+
+    // Find the track in groupedTracks
+    for (let i = 0; i < state.groupedTracks.length; i++) {
+        const item = state.groupedTracks[i];
+        if (item.type === "track" && item.index === state.currentTrackIndex) {
+            const targetScrollTop = i * ROW_HEIGHT - elements.trackList.clientHeight / 2 + ROW_HEIGHT / 2;
+            elements.trackList.scrollTo({
+                top: Math.max(0, targetScrollTop),
+                behavior: "smooth"
+            });
+            break;
+        }
+    }
 }

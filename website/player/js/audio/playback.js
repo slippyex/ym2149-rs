@@ -184,6 +184,14 @@ export function playNext() {
     }
 }
 
+export function playPrev() {
+    if (state.shuffleEnabled) {
+        playRandomTrack();
+    } else if (state.currentTrackIndex > 0) {
+        playTrack(state.currentTrackIndex - 1);
+    }
+}
+
 export function playRandomTrack() {
     if (state.filteredTracks.length <= 1) return;
     let randomIndex;

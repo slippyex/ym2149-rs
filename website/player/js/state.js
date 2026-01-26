@@ -66,6 +66,10 @@ export let audioSampleWritePos = 0;
 export let amplitudeHistory = [];
 export let sidModeDetected = [];
 
+// Peak hold for spectrum analyzer
+export let channelSpectrumPeaks = [];
+export let combinedSpectrumPeaks = null;
+
 // Note history for tracker-style display
 export let noteHistories = [];
 export let noteScrollOffset = 0;
@@ -142,6 +146,8 @@ export function setAudioSampleBuffer(buf) { audioSampleBuffer = buf; }
 export function setAudioSampleWritePos(pos) { audioSampleWritePos = pos; }
 export function setAmplitudeHistory(hist) { amplitudeHistory = hist; }
 export function setSidModeDetected(detected) { sidModeDetected = detected; }
+export function setChannelSpectrumPeaks(peaks) { channelSpectrumPeaks = peaks; }
+export function setCombinedSpectrumPeaks(peaks) { combinedSpectrumPeaks = peaks; }
 export function setNoteHistories(hist) { noteHistories = hist; }
 export function setNoteScrollOffset(offset) { noteScrollOffset = offset; }
 export function setCurrentFormat(fmt) { currentFormat = fmt; }

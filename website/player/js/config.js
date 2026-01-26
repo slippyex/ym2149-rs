@@ -5,10 +5,11 @@
 export const SAMPLE_RATE = 44100;
 export const BUFFER_SIZE = 4096;
 export const WAVEFORM_SIZE = 256;
-export const SPECTRUM_BINS = 32;
-export const SPECTRUM_DECAY = 0.85;
+export const SPECTRUM_BINS = 64;
+export const SPECTRUM_DECAY = 0.92;      // How fast bars fall (higher = slower fall)
+export const SPECTRUM_ATTACK = 0.35;     // How fast bars rise (lower = more resistance)
 export const SPECTRUM_BASE_FREQ = 32.703;
-export const BINS_PER_OCTAVE = 4;
+export const BINS_PER_OCTAVE = 8;
 export const ROW_HEIGHT = 36;
 export const BUFFER_ROWS = 10;
 
