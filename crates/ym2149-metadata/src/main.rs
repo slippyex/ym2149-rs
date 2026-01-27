@@ -425,8 +425,12 @@ fn compute_mfcc_delta(mfcc_frames: &[[f32; NUM_MFCC]]) -> [f32; NUM_MFCC] {
     // delta[t] = (c[t+1] - c[t-1]) / 2
     let mut count = 0;
     for t in 1..(mfcc_frames.len() - 1) {
-        for i in 0..NUM_MFCC {
-            delta[i] += (mfcc_frames[t + 1][i] - mfcc_frames[t - 1][i]) / 2.0;
+        for ((d, &next), &prev) in delta
+            .iter_mut()
+            .zip(mfcc_frames[t + 1].iter())
+            .zip(mfcc_frames[t - 1].iter())
+        {
+            *d += (next - prev) / 2.0;
         }
         count += 1;
     }
@@ -453,8 +457,12 @@ fn compute_mfcc_delta_delta(mfcc_frames: &[[f32; NUM_MFCC]]) -> [f32; NUM_MFCC] 
     let mut deltas: Vec<[f32; NUM_MFCC]> = Vec::with_capacity(mfcc_frames.len() - 2);
     for t in 1..(mfcc_frames.len() - 1) {
         let mut d = [0.0f32; NUM_MFCC];
-        for i in 0..NUM_MFCC {
-            d[i] = (mfcc_frames[t + 1][i] - mfcc_frames[t - 1][i]) / 2.0;
+        for ((&next, &prev), d_val) in mfcc_frames[t + 1]
+            .iter()
+            .zip(mfcc_frames[t - 1].iter())
+            .zip(d.iter_mut())
+        {
+            *d_val = (next - prev) / 2.0;
         }
         deltas.push(d);
     }
@@ -463,8 +471,12 @@ fn compute_mfcc_delta_delta(mfcc_frames: &[[f32; NUM_MFCC]]) -> [f32; NUM_MFCC] 
     if deltas.len() >= 3 {
         let mut count = 0;
         for t in 1..(deltas.len() - 1) {
-            for i in 0..NUM_MFCC {
-                delta_delta[i] += (deltas[t + 1][i] - deltas[t - 1][i]) / 2.0;
+            for ((dd, &next), &prev) in delta_delta
+                .iter_mut()
+                .zip(deltas[t + 1].iter())
+                .zip(deltas[t - 1].iter())
+            {
+                *dd += (next - prev) / 2.0;
             }
             count += 1;
         }
@@ -610,10 +622,9 @@ fn compute_rhythm_features(envelope: &[f32], duration: f32) -> (f32, f32) {
     // Rhythm strength: max autocorrelation value
     let rhythm_strength = autocorr
         .iter()
-        .cloned()
+        .copied()
         .fold(0.0f32, f32::max)
-        .max(0.0)
-        .min(1.0);
+        .clamp(0.0, 1.0);
 
     // Rhythm regularity: find peaks and measure consistency
     let mut peaks = Vec::new();

@@ -520,8 +520,7 @@ impl Lmc1992 {
 
         #[cfg(feature = "lmc1992-debug")]
         eprintln!(
-            "[LMC1992] Filter update: bass_db={}, treble_db={} (cascaded 2x{}dB/stage)",
-            bass_db, treble_db, bass_db_per_stage
+            "[LMC1992] Filter update: bass_db={bass_db}, treble_db={treble_db} (cascaded 2x{bass_db_per_stage}dB/stage)"
         );
     }
 

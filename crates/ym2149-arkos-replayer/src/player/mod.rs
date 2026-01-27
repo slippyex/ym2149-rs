@@ -94,8 +94,6 @@ pub struct ArkosPlayer {
     cached_metadata: ArkosMetadata,
     /// Reusable frame buffer to avoid per-tick allocations
     frame_buffer: Vec<ChannelFrame>,
-    /// Reusable PSG sample buffers to avoid per-frame allocations
-    psg_sample_buffers: Vec<Vec<f32>>,
 }
 
 impl ArkosPlayer {
@@ -196,10 +194,6 @@ impl ArkosPlayer {
 
         let frame_buffer = vec![ChannelFrame::default(); channel_count];
 
-        // Pre-allocate PSG sample buffers (one per PSG chip, sized for typical frame)
-        let psg_count = psg_bank.psg_count();
-        let psg_sample_buffers = (0..psg_count).map(|_| Vec::with_capacity(2048)).collect();
-
         let mut player = Self {
             song,
             effect_context,
@@ -218,7 +212,6 @@ impl ArkosPlayer {
             output_sample_rate,
             cached_metadata,
             frame_buffer,
-            psg_sample_buffers,
         };
 
         player.current_speed = determine_speed_for_location(&player.song, subsong_index, 0, 0);
@@ -424,7 +417,7 @@ impl ArkosPlayer {
         // Generate samples one at a time to properly handle drum overrides
         // AT3 replaces PSG channel output with sample output, not additive mixing
         // AT3 processes ticks at the START of each tick period, not the end
-        for sample_idx in 0..buffer.len() {
+        for sample in buffer.iter_mut() {
             // Track progress and process tick at START of period (like AT3)
             self.sample_counter += 1.0;
             if self.sample_counter >= self.samples_per_tick {
@@ -453,7 +446,7 @@ impl ArkosPlayer {
                 chip.clock();
                 mixed_sample += chip.get_sample();
             }
-            buffer[sample_idx] = mixed_sample * inv_psg_count;
+            *sample = mixed_sample * inv_psg_count;
 
             // Clear drum overrides
             for channel_idx in 0..self.sample_voices.len() {

@@ -75,11 +75,6 @@ impl SampleVoiceMixer {
         }
     }
 
-    /// Check if this voice has an active sample.
-    pub fn is_active(&self) -> bool {
-        self.active.is_some()
-    }
-
     /// Get the next sample value (scaled 0.0-6.0 for PSG mixer drum override) and advance position.
     /// Returns None if no active sample or sample ended.
     pub fn next_sample_for_override(&mut self) -> Option<f32> {

@@ -167,9 +167,9 @@ impl ArkosWasmPlayer {
 
         // Generate samples one at a time to capture channel outputs
         let mut sample_buf = [0.0f32; 1];
-        for i in 0..mono.len() {
+        for (i, mono_sample) in mono.iter_mut().enumerate() {
             ChiptunePlayerBase::generate_samples_into(&mut self.player, &mut sample_buf);
-            mono[i] = sample_buf[0];
+            *mono_sample = sample_buf[0];
             let base = i * channel_count;
             for psg_idx in 0..psg_count {
                 if let Some(chip) = self.player.chip(psg_idx) {
