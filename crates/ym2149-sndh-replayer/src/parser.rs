@@ -766,7 +766,7 @@ mod tests {
             .join("examples/sndh/Buzz_Me.sndh");
 
         if !test_file.exists() {
-            eprintln!("Test file not found: {:?}, skipping", test_file);
+            eprintln!("Test file not found: {test_file:?}, skipping");
             return;
         }
 
@@ -828,7 +828,7 @@ mod tests {
             .join("examples/sndh/Buzz_Me.sndh");
 
         if !test_file.exists() {
-            eprintln!("Test file not found: {:?}, skipping", test_file);
+            eprintln!("Test file not found: {test_file:?}, skipping");
             return;
         }
 
@@ -840,22 +840,20 @@ mod tests {
         let total_frames = player.total_frames();
         let progress = player.progress();
 
-        eprintln!("Player duration_seconds(): {:.2}", duration);
-        eprintln!("Player total_frames(): {}", total_frames);
-        eprintln!("Player progress() at start: {:.2}", progress);
+        eprintln!("Player duration_seconds(): {duration:.2}");
+        eprintln!("Player total_frames(): {total_frames}");
+        eprintln!("Player progress() at start: {progress:.2}");
 
         // Duration should be ~231 seconds (3:51)
         assert!(
             duration > 230.0 && duration < 233.0,
-            "Duration should be ~231 seconds, got {}",
-            duration
+            "Duration should be ~231 seconds, got {duration}"
         );
         assert_eq!(total_frames, 11565, "Total frames should be 11565");
         // Progress should be very close to 0 at start (init may advance a tiny bit)
         assert!(
             progress < 0.001,
-            "Progress at start should be near 0.0, got {}",
-            progress
+            "Progress at start should be near 0.0, got {progress}"
         );
     }
 
@@ -888,7 +886,7 @@ mod tests {
 
         // Try to seek to 50%
         let result = player.seek(0.5);
-        eprintln!("Seek to 50% result: {}", result);
+        eprintln!("Seek to 50% result: {result}");
 
         eprintln!("After seek:");
         eprintln!("  playback_position: {}", player.playback_position());

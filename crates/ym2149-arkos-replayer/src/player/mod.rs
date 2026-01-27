@@ -241,6 +241,10 @@ impl ArkosPlayer {
     /// Start playback.
     pub fn play(&mut self) -> Result<()> {
         self.is_playing = true;
+        // Initialize sample_counter to samples_per_tick so that the first sample
+        // triggers a tick (like AT3's playerPeriodCounter = playerPeriod + 1).
+        // This ensures tick 0 is processed at the start of audio generation.
+        self.sample_counter = self.samples_per_tick;
         Ok(())
     }
 
@@ -414,54 +418,53 @@ impl ArkosPlayer {
             return;
         }
 
-        let mut sample_pos = 0;
-        let total_samples = buffer.len();
         let psg_count = self.psg_bank.psg_count();
+        let inv_psg_count = 1.0 / psg_count as f32;
 
-        while sample_pos < total_samples {
-            let samples_until_tick = (self.samples_per_tick - self.sample_counter).ceil() as usize;
-            let samples_to_generate = samples_until_tick.min(total_samples - sample_pos);
-
-            // Reuse pre-allocated PSG sample buffers instead of allocating new ones
-            for psg_idx in 0..psg_count {
-                let psg_buffer = &mut self.psg_sample_buffers[psg_idx];
-                psg_buffer.clear();
-                psg_buffer.resize(samples_to_generate, 0.0);
-                self.psg_bank
-                    .get_chip_mut(psg_idx)
-                    .generate_samples_into(psg_buffer);
-            }
-
-            // Mix all PSG outputs
-            let inv_psg_count = 1.0 / psg_count as f32;
-            for sample_idx in 0..samples_to_generate {
-                let mut mixed_sample = 0.0;
-                for psg_buffer in &self.psg_sample_buffers {
-                    mixed_sample += psg_buffer[sample_idx];
-                }
-                buffer[sample_pos + sample_idx] = mixed_sample * inv_psg_count;
-            }
-
-            self.mix_active_samples(sample_pos, samples_to_generate, buffer);
-
-            sample_pos += samples_to_generate;
-            self.sample_counter += samples_to_generate as f32;
-
+        // Generate samples one at a time to properly handle drum overrides
+        // AT3 replaces PSG channel output with sample output, not additive mixing
+        // AT3 processes ticks at the START of each tick period, not the end
+        for sample_idx in 0..buffer.len() {
+            // Track progress and process tick at START of period (like AT3)
+            self.sample_counter += 1.0;
             if self.sample_counter >= self.samples_per_tick {
                 self.sample_counter -= self.samples_per_tick;
                 self.process_tick();
             }
-        }
-    }
 
-    fn mix_active_samples(&mut self, start: usize, len: usize, buffer: &mut [f32]) {
-        if len == 0 {
-            return;
-        }
+            // Set drum overrides for any active sample voices
+            // sample_voices[i] corresponds to channel i (0,1,2 for PSG0, 3,4,5 for PSG1, etc.)
+            for (channel_idx, voice) in self.sample_voices.iter_mut().enumerate() {
+                if let Some(sample_value) = voice.next_sample_for_override() {
+                    let psg_idx = channel_idx / 3;
+                    let channel_in_psg = channel_idx % 3;
+                    if psg_idx < psg_count {
+                        self.psg_bank
+                            .get_chip_mut(psg_idx)
+                            .set_drum_sample_override(channel_in_psg, Some(sample_value));
+                    }
+                }
+            }
 
-        let segment = &mut buffer[start..start + len];
-        for voice in &mut self.sample_voices {
-            voice.mix_into(segment);
+            // Generate 1 PSG sample from each chip and mix
+            let mut mixed_sample = 0.0;
+            for psg_idx in 0..psg_count {
+                let chip = self.psg_bank.get_chip_mut(psg_idx);
+                chip.clock();
+                mixed_sample += chip.get_sample();
+            }
+            buffer[sample_idx] = mixed_sample * inv_psg_count;
+
+            // Clear drum overrides
+            for channel_idx in 0..self.sample_voices.len() {
+                let psg_idx = channel_idx / 3;
+                let channel_in_psg = channel_idx % 3;
+                if psg_idx < psg_count {
+                    self.psg_bank
+                        .get_chip_mut(psg_idx)
+                        .set_drum_sample_override(channel_in_psg, None);
+                }
+            }
         }
     }
 

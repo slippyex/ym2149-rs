@@ -13,7 +13,9 @@ pub(super) struct SampleVoiceState {
     pub amplification: f32,
     pub pitch_hz: f32,
     pub volume_4bits: u8,
+    /// Reference frequency in Hz (tuning reference, typically 440 Hz)
     pub reference_frequency_hz: f32,
+    /// PSG sample player frequency in Hz (hardware playback rate)
     pub sample_player_frequency_hz: f32,
     pub high_priority: bool,
 }

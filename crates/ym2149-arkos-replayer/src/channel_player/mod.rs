@@ -816,6 +816,8 @@ impl ChannelPlayer {
         let signed_pitch = self.pitch_slide.get() as f32;
         pitch_hz = (pitch_hz - signed_pitch).max(0.0);
 
+        // reference_frequency_hz is the tuning reference (typically 440 Hz)
+        // Used in step calculation: step = (samplePlayerFreq / outputRate) * (pitchHz / refFreq)
         let voice = SampleVoiceState {
             data: Arc::clone(&sample.data),
             loop_start: sample.loop_start_index,
@@ -933,20 +935,22 @@ impl ChannelPlayer {
         raw.min(0x0FFF)
     }
 
+    /// Calculate sample playback frequency for a given note.
+    ///
+    /// Uses the sample frequency formula with noteReference=12, which means
+    /// C5 (note 72) plays at the reference frequency (440 Hz by default).
+    /// This matches how trackers handle sample instruments.
     fn calculate_frequency_for_note(&self, note: Note) -> f32 {
-        if note == 255 {
+        if note == 255 || self.reference_frequency <= 0.0 {
             return 0.0;
         }
 
-        const START_OCTAVE: i32 = -3;
-        const NOTES_IN_OCTAVE: i32 = 12;
-
-        let octave = (note as i32 / NOTES_IN_OCTAVE) + START_OCTAVE;
-        let note_in_octave = (note as i32 % NOTES_IN_OCTAVE) + 1;
-
-        ((self.reference_frequency as f64)
-            * 2.0_f64.powf((octave as f64) + ((note_in_octave as f64 - 10.0) / 12.0)))
-            as f32
+        // Formula: (referenceFrequency / 32.0) * 2^((note - noteReference) / 12.0)
+        // For samples, noteReference = 12 (so C5/note 72 = reference frequency)
+        const NOTE_REFERENCE: i32 = 12;
+        let freq = (self.reference_frequency as f64 / 32.0)
+            * 2.0_f64.powf((note as i32 - NOTE_REFERENCE) as f64 / 12.0);
+        freq as f32
     }
 
     /// Clamp note to Arkos Tracker range (0-127)

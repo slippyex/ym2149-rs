@@ -6512,6 +6512,7 @@ dependencies = [
  "quick-xml 0.36.2",
  "serde",
  "thiserror 1.0.69",
+ "web-sys",
  "ym2149",
  "ym2149-common",
  "ym2149-ym-replayer",

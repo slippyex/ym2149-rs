@@ -46,11 +46,11 @@ impl SndhWasmPlayer {
             flags.dma_rate
         ).into());
         let dac_used = player.was_ste_dac_used();
-        web_sys::console::log_1(&format!("SNDH was_ste_dac_used after warm-up: {}", dac_used).into());
+        web_sys::console::log_1(&format!("SNDH was_ste_dac_used after warm-up: {dac_used}").into());
 
         // Capture STE detection state BEFORE re-init (reset would clear it)
         let uses_ste = player.uses_ste_features();
-        web_sys::console::log_1(&format!("SNDH uses_ste_features(): {}", uses_ste).into());
+        web_sys::console::log_1(&format!("SNDH uses_ste_features(): {uses_ste}").into());
 
         // Re-initialize to reset position to beginning (clean state)
         let _ = player.init_subsong(default_subsong);

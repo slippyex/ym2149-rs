@@ -719,9 +719,7 @@ mod tests {
         // should not amplify the signal
         assert!(
             left <= input + 100,
-            "Treble cut should not amplify: {} > {}",
-            left,
-            input
+            "Treble cut should not amplify: {left} > {input}"
         );
     }
 }

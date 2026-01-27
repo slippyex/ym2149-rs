@@ -121,8 +121,8 @@ impl Mixer {
         let output = if state.muted {
             0
         } else if let Some(drum_sample) = state.drum_override {
-            // DigiDrum: scale 0-255 sample to YM volume range
-            ((drum_sample * 255.0 / 6.0) as u32).min(MAX_LEVEL)
+            // DigiDrum: scale 0.0-4.0 sample to YM volume range (0 to MAX_LEVEL)
+            ((drum_sample / 4.0 * MAX_LEVEL as f32) as u32).min(MAX_LEVEL)
         } else {
             let base_level = YM2149_LOG_LEVELS[level_index as usize];
             if half_amplitude {
