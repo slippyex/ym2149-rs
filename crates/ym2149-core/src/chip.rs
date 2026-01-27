@@ -3,6 +3,15 @@
 //! Cycle accurate YM2149 emulation operating at the internal clock rate of
 //! master_clock / 8 (250kHz at 2MHz). This matches the real hardware timing
 //! where internal operations run at 1/8 of the master clock.
+//!
+//! # Register Write Timing
+//!
+//! The YM2149 runs at 2 MHz while the 68000 runs at 8 MHz. Register writes
+//! are queued with CPU cycle timestamps and applied at the correct time
+//! during sample generation. This ensures accurate timing for sync-buzzer
+//! and other cycle-sensitive effects.
+
+use std::collections::VecDeque;
 
 use crate::dc_filter::DcFilter;
 use crate::generators::{EnvelopeGenerator, NUM_CHANNELS, NoiseGenerator, ToneGenerator};
@@ -18,6 +27,20 @@ const DEFAULT_SAMPLE_RATE: u32 = 44_100;
 
 /// Number of YM2149 registers
 const NUM_REGISTERS: usize = 14;
+
+/// CPU cycles per YM2149 master clock cycle (8 MHz / 2 MHz = 4)
+const CPU_CYCLES_PER_PSG_CYCLE: u64 = 4;
+
+/// A pending register write with its CPU cycle timestamp
+#[derive(Clone, Debug)]
+struct PendingWrite {
+    /// CPU cycle when the write occurred
+    cpu_cycle: u64,
+    /// Target register (0-13)
+    register: u8,
+    /// Value to write
+    value: u8,
+}
 
 /// Simple PRNG for unpredictable power-on state
 fn random_seed(seed: &mut u32) -> u16 {
@@ -82,6 +105,17 @@ pub struct Ym2149 {
 
     // Timer IRQ state (for sync-buzzer effects)
     in_timer_irq: bool,
+
+    // Write queue for hardware-accurate timing
+    write_queue: VecDeque<PendingWrite>,
+    /// Current CPU cycle (set by emulator before each write)
+    current_cpu_cycle: u64,
+    /// CPU cycle when register was last selected
+    last_select_cycle: u64,
+    /// CPU cycles per audio sample (for queue processing)
+    cpu_cycles_per_sample: u64,
+    /// CPU cycle at start of current sample
+    sample_start_cycle: u64,
 }
 
 impl Ym2149 {
@@ -101,6 +135,10 @@ impl Ym2149 {
     /// * `master_clock` - Master clock frequency in Hz (divided by 8 internally)
     /// * `sample_rate` - Audio output sample rate in Hz
     pub fn with_clocks(master_clock: u32, sample_rate: u32) -> Self {
+        // CPU runs at 4x PSG master clock (8 MHz vs 2 MHz on Atari ST)
+        let cpu_clock = master_clock * CPU_CYCLES_PER_PSG_CYCLE as u32;
+        let cpu_cycles_per_sample = cpu_clock as u64 / sample_rate as u64;
+
         let mut chip = Self {
             internal_clock: master_clock / 8,
             sample_rate,
@@ -118,6 +156,11 @@ impl Ym2149 {
             dc_filter: DcFilter::new(),
             last_sample: 0.0,
             in_timer_irq: false,
+            write_queue: VecDeque::new(),
+            current_cpu_cycle: 0,
+            last_select_cycle: 0,
+            cpu_cycles_per_sample,
+            sample_start_cycle: 0,
         };
         chip.reset();
         chip
@@ -148,20 +191,116 @@ impl Ym2149 {
         self.cycle_accumulator = 0;
         self.in_timer_irq = false;
         self.last_sample = 0.0;
+
+        // Clear write queue and timing state
+        self.write_queue.clear();
+        self.current_cpu_cycle = 0;
+        self.last_select_cycle = 0;
+        self.sample_start_cycle = 0;
+    }
+
+    /// Set the current CPU cycle for accurate write timing.
+    ///
+    /// Call this before each `write_port()` to enable hardware-accurate
+    /// register write timing. The CPU cycle is used to queue writes and
+    /// apply them at the correct time during sample generation.
+    ///
+    /// # Arguments
+    ///
+    /// * `cycle` - Current CPU cycle count (e.g., from 68000 emulator)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // In your emulator's memory write handler:
+    /// ym2149.set_cpu_cycle(cpu.total_cycles());
+    /// ym2149.write_port(port, value);
+    /// ```
+    #[inline]
+    pub fn set_cpu_cycle(&mut self, cycle: u64) {
+        self.current_cpu_cycle = cycle;
+    }
+
+    /// Returns the current CPU cycle.
+    #[inline]
+    pub fn cpu_cycle(&self) -> u64 {
+        self.current_cpu_cycle
     }
 
     /// Write to hardware port (mimics real hardware bus access)
+    ///
+    /// Register writes are queued with their CPU cycle timestamp and applied
+    /// at the correct time during sample generation. This ensures accurate
+    /// timing for sync-buzzer and other cycle-sensitive effects.
     ///
     /// # Arguments
     ///
     /// * `port` - Port number (bit 1: 0 = address, 1 = data)
     /// * `value` - Value to write
+    ///
+    /// # Timing
+    ///
+    /// - Port 0 ($FF8800): Register select - latches immediately
+    /// - Port 2 ($FF8802): Data write - queued for cycle-accurate application
+    ///
+    /// Writes that occur too quickly after a register select (< 4 CPU cycles)
+    /// are still queued but may not behave as expected on real hardware.
     pub fn write_port(&mut self, port: u8, value: u8) {
+        if (port & 2) != 0 {
+            // Data write - queue for later application
+            self.write_queue.push_back(PendingWrite {
+                cpu_cycle: self.current_cpu_cycle,
+                register: self.selected_register as u8,
+                value,
+            });
+        } else {
+            // Register select - apply immediately
+            self.selected_register = (value as usize) & 0x0F;
+            self.last_select_cycle = self.current_cpu_cycle;
+        }
+    }
+
+    /// Write to hardware port with immediate application (legacy behavior).
+    ///
+    /// This bypasses the write queue and applies the register immediately.
+    /// Use this only when cycle-accurate timing is not required.
+    pub fn write_port_immediate(&mut self, port: u8, value: u8) {
         if (port & 2) != 0 {
             self.apply_register(self.selected_register, value);
         } else {
             self.selected_register = (value as usize) & 0x0F;
         }
+    }
+
+    /// Process pending writes up to (and including) the given CPU cycle.
+    ///
+    /// Call this during sample generation to apply queued writes at the
+    /// correct time.
+    fn process_pending_writes(&mut self, up_to_cycle: u64) {
+        while let Some(write) = self.write_queue.front() {
+            if write.cpu_cycle <= up_to_cycle {
+                let w = self.write_queue.pop_front().unwrap();
+                self.apply_register(w.register as usize, w.value);
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Flush all pending writes immediately.
+    ///
+    /// Use this at frame boundaries or when resetting to ensure all
+    /// queued writes are applied.
+    pub fn flush_pending_writes(&mut self) {
+        while let Some(write) = self.write_queue.pop_front() {
+            self.apply_register(write.register as usize, write.value);
+        }
+    }
+
+    /// Returns the number of pending writes in the queue.
+    #[inline]
+    pub fn pending_write_count(&self) -> usize {
+        self.write_queue.len()
     }
 
     /// Read from hardware port
@@ -294,7 +433,23 @@ impl Ym2149 {
     ///
     /// This method runs the internal state machine at 250kHz and averages
     /// the output to produce samples at the host sample rate.
+    /// Generate the next audio sample with cycle-accurate write processing.
+    ///
+    /// This method:
+    /// 1. Processes any pending register writes that fall within this sample period
+    /// 2. Runs the internal state machine at 250kHz
+    /// 3. Averages the output to produce a sample at the host sample rate
+    ///
+    /// For accurate timing, call `set_cpu_cycle()` before each `write_port()` call,
+    /// and ensure `sample_start_cycle` is updated between samples.
     pub fn compute_next_sample(&mut self) -> i16 {
+        // Process any pending writes that should be applied before/during this sample
+        let sample_end_cycle = self.sample_start_cycle + self.cpu_cycles_per_sample;
+        self.process_pending_writes(sample_end_cycle);
+
+        // Update sample start for next call
+        self.sample_start_cycle = sample_end_cycle;
+
         // Accumulate gate mask over all internal ticks
         let mut accumulated_mask: u16 = 0;
 
@@ -329,6 +484,16 @@ impl Ym2149 {
 
         // Apply DC filter and return
         self.dc_filter.process(total_output as u16)
+    }
+
+    /// Synchronize the sample start cycle with the CPU cycle.
+    ///
+    /// Call this at the start of emulation or after a reset to align
+    /// the sample timing with the CPU.
+    #[inline]
+    pub fn sync_sample_cycle(&mut self, cpu_cycle: u64) {
+        self.sample_start_cycle = cpu_cycle;
+        self.current_cpu_cycle = cpu_cycle;
     }
 
     /// Signal entry/exit of timer IRQ handler
@@ -530,7 +695,43 @@ mod tests {
         chip.write_port(0, 5);
         // Write value to register 5
         chip.write_port(2, 0x0A);
+        // Flush queued writes
+        chip.flush_pending_writes();
 
         assert_eq!(chip.read_register(5), 0x0A);
+    }
+
+    #[test]
+    fn test_port_access_immediate() {
+        let mut chip = Ym2149::new();
+
+        // Select register 5
+        chip.write_port_immediate(0, 5);
+        // Write value to register 5 (immediate, no queue)
+        chip.write_port_immediate(2, 0x0A);
+
+        assert_eq!(chip.read_register(5), 0x0A);
+    }
+
+    #[test]
+    fn test_write_queue_timing() {
+        let mut chip = Ym2149::new();
+
+        // Set CPU cycle and write
+        chip.set_cpu_cycle(100);
+        chip.write_port(0, 8);  // Select volume register A
+        chip.write_port(2, 0x0F);  // Max volume
+
+        // Write is queued, not applied yet
+        assert_eq!(chip.pending_write_count(), 1);
+        assert_eq!(chip.read_register(8), 0x00);
+
+        // Process writes up to cycle 100
+        chip.sync_sample_cycle(0);
+        chip.compute_next_sample();  // Processes writes within sample period
+
+        // Now the write should be applied
+        assert_eq!(chip.pending_write_count(), 0);
+        assert_eq!(chip.read_register(8), 0x0F);
     }
 }

@@ -11,13 +11,19 @@ const HISTORY_SIZE: usize = 1 << HISTORY_SIZE_BITS;
 ///
 /// This filter maintains a circular buffer of recent samples and subtracts
 /// the running average to center the output around zero.
+///
+/// # Implementation Notes
+///
+/// The `running_sum` field tracks the sum of all samples in the buffer.
+/// Maximum value: `HISTORY_SIZE × u16::MAX = 2048 × 65535 = 134,209,280`
+/// which fits comfortably in a `u32` (max ~4.29 billion).
 #[derive(Clone)]
 pub struct DcFilter {
     /// Circular buffer of recent samples
     buffer: Box<[u16; HISTORY_SIZE]>,
     /// Current write position in buffer
     position: usize,
-    /// Running sum of all samples in buffer
+    /// Running sum of all samples in buffer (max: 2048 × 65535 = 134,209,280)
     running_sum: u32,
 }
 

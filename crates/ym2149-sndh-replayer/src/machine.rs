@@ -194,9 +194,9 @@ impl AtariMemory {
             return;
         }
 
-        // YM2149 PSG write
+        // YM2149 PSG write (immediate mode - cycle-accurate requires CPU integration)
         if (YM2149_START..YM2149_END).contains(&addr) {
-            self.ym2149.write_port((addr & 0xfe) as u8, value);
+            self.ym2149.write_port_immediate((addr & 0xfe) as u8, value);
             return;
         }
 
@@ -248,10 +248,10 @@ impl AtariMemory {
     pub(crate) fn write_word(&mut self, addr: u32, value: u16) {
         let addr = addr & 0x00FF_FFFF;
 
-        // YM2149 PSG word write
+        // YM2149 PSG word write (immediate mode - cycle-accurate requires CPU integration)
         if (YM2149_START..YM2149_END).contains(&addr) {
             self.ym2149
-                .write_port((addr & 0xfe) as u8, (value >> 8) as u8);
+                .write_port_immediate((addr & 0xfe) as u8, (value >> 8) as u8);
             return;
         }
 
