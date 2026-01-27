@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && mv ../player/index.dev.html ../player/index.html && cp catalog*.json* ../player/ && cp -r collections/* ../player/ && mkdir -p ../player/pkg && cp pkg/ym2149_wasm.js pkg/ym2149_wasm_bg.wasm ../player/pkg/",
+    "wasm": "cd ../../crates/ym2149-wasm && wasm-pack build --target web --release && cp pkg/ym2149_wasm.js pkg/ym2149_wasm_bg.wasm pkg/ym2149_wasm.d.ts pkg/ym2149_wasm_bg.wasm.d.ts ../../website/player-dev/pkg/",
+    "build": "npm run wasm && tsc && vite build && mv ../player/index.dev.html ../player/index.html && cp catalog*.json* ../player/ && cp -r collections/* ../player/ && mkdir -p ../player/pkg && cp pkg/ym2149_wasm.js pkg/ym2149_wasm_bg.wasm ../player/pkg/",
+    "build:quick": "tsc && vite build && mv ../player/index.dev.html ../player/index.html && cp catalog*.json* ../player/ && cp -r collections/* ../player/ && mkdir -p ../player/pkg && cp pkg/ym2149_wasm.js pkg/ym2149_wasm_bg.wasm ../player/pkg/",
     "preview": "vite preview --outDir ../player",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf ../player"

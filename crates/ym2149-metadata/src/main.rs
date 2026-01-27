@@ -172,7 +172,7 @@ fn freq_to_midi(freq: f32) -> f32 {
     if freq <= 0.0 {
         return 0.0;
     }
-    69.0 + 12.0 * (freq / 440.0).log2()
+    (freq / 440.0).log2().mul_add(12.0, 69.0)
 }
 
 /// Convert FFT bin index to frequency
@@ -348,7 +348,7 @@ fn dct_ii(input: &[f32], num_coeffs: usize) -> Vec<f32> {
     for k in 0..num_coeffs {
         let mut sum = 0.0f64;
         for (i, &x) in input.iter().enumerate() {
-            sum += x as f64 * (std::f64::consts::PI * k as f64 * (2.0 * i as f64 + 1.0) / (2.0 * n as f64)).cos();
+            sum += x as f64 * (std::f64::consts::PI * k as f64 * (i as f64).mul_add(2.0, 1.0) / (2.0 * n as f64)).cos();
         }
         output.push(sum as f32);
     }

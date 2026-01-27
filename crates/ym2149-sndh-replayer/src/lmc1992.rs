@@ -136,7 +136,7 @@ impl ShelvingFilter {
 
     /// Process a single sample through first-order IIR.
     fn process(&mut self, input: f32) -> f32 {
-        let output = self.b0 * input + self.b1 * self.x1 - self.a1 * self.y1;
+        let output = self.b0.mul_add(input, self.b1.mul_add(self.x1, -self.a1 * self.y1));
         self.x1 = input;
         self.y1 = output;
         output

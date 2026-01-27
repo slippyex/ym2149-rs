@@ -254,7 +254,7 @@ fn frequency_to_note(freq: f32) -> (Option<&'static str>, Option<u8>) {
 
     // MIDI note number: 69 = A4 = 440Hz
     // n = 12 * log2(f / 440) + 69
-    let midi_float = 12.0 * (freq / 440.0).log2() + 69.0;
+    let midi_float = (freq / 440.0).log2().mul_add(12.0, 69.0);
     let midi = midi_float.round() as i32;
 
     if !(0..=127).contains(&midi) {
