@@ -9,6 +9,9 @@ use crate::tables::{MASKS, YM2149_LOG_LEVELS};
 /// Maximum output level for normalization
 pub const MAX_LEVEL: u32 = 10922;
 
+/// Maximum amplitude for DigiDrum samples (Arkos Tracker 3 uses 0.0-4.0 range)
+const DIGIDRUM_MAX_AMPLITUDE: f32 = 4.0;
+
 /// Mixer configuration from register R7
 #[derive(Clone, Debug, Default)]
 pub struct MixerConfig {
@@ -121,8 +124,8 @@ impl Mixer {
         let output = if state.muted {
             0
         } else if let Some(drum_sample) = state.drum_override {
-            // DigiDrum: scale 0.0-4.0 sample to YM volume range (0 to MAX_LEVEL)
-            ((drum_sample / 4.0 * MAX_LEVEL as f32) as u32).min(MAX_LEVEL)
+            // DigiDrum: scale sample to YM volume range (0 to MAX_LEVEL)
+            ((drum_sample / DIGIDRUM_MAX_AMPLITUDE * MAX_LEVEL as f32) as u32).min(MAX_LEVEL)
         } else {
             let base_level = YM2149_LOG_LEVELS[level_index as usize];
             if half_amplitude {

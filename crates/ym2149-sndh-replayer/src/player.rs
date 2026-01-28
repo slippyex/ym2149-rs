@@ -56,6 +56,8 @@ pub struct SndhPlayer {
     play_cycle_budget: usize,
     /// Disable warmup/prime phase (env flag)
     warmup_enabled: bool,
+    /// Reusable stereo buffer for mono conversion (avoids allocation in hot path)
+    stereo_scratch: Vec<f32>,
 }
 
 impl SndhPlayer {
@@ -82,7 +84,13 @@ impl SndhPlayer {
             loop_frame: None,
         };
 
-        let samples_per_tick = sample_rate / sndh.metadata.player_rate;
+        // Default to 50Hz if player_rate is 0 (malformed file)
+        let player_rate = if sndh.metadata.player_rate > 0 {
+            sndh.metadata.player_rate
+        } else {
+            50
+        };
+        let samples_per_tick = sample_rate / player_rate;
 
         let play_cycle_budget = std::env::var("YM2149_PLAY_CYCLES")
             .ok()
@@ -104,6 +112,7 @@ impl SndhPlayer {
             current_subsong: 0,
             play_cycle_budget,
             warmup_enabled,
+            stereo_scratch: Vec::new(),
         })
     }
 
@@ -541,12 +550,23 @@ impl ChiptunePlayerBase for SndhPlayer {
 
     fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         // Generate stereo and mix down to mono for trait compatibility
-        let frame_count = buffer.len();
-        let mut stereo_buffer = vec![0.0f32; frame_count * 2];
-        self.render_f32_stereo(&mut stereo_buffer);
-        for (i, sample) in buffer.iter_mut().enumerate() {
-            *sample = (stereo_buffer[i * 2] + stereo_buffer[i * 2 + 1]) * 0.5;
+        // Use reusable scratch buffer to avoid allocation in hot path
+        let stereo_len = buffer.len() * 2;
+
+        // Take scratch buffer temporarily to satisfy borrow checker
+        let mut stereo_buf = std::mem::take(&mut self.stereo_scratch);
+        if stereo_buf.len() < stereo_len {
+            stereo_buf.resize(stereo_len, 0.0);
         }
+
+        self.render_f32_stereo(&mut stereo_buf[..stereo_len]);
+
+        for (i, sample) in buffer.iter_mut().enumerate() {
+            *sample = (stereo_buf[i * 2] + stereo_buf[i * 2 + 1]) * 0.5;
+        }
+
+        // Put scratch buffer back for reuse
+        self.stereo_scratch = stereo_buf;
     }
 
     fn sample_rate(&self) -> u32 {

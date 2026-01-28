@@ -223,6 +223,7 @@ impl Ym2149 {
 
     /// Returns the current CPU cycle.
     #[inline]
+    #[must_use]
     pub fn cpu_cycle(&self) -> u64 {
         self.current_cpu_cycle
     }
@@ -299,6 +300,7 @@ impl Ym2149 {
 
     /// Returns the number of pending writes in the queue.
     #[inline]
+    #[must_use]
     pub fn pending_write_count(&self) -> usize {
         self.write_queue.len()
     }
@@ -312,6 +314,7 @@ impl Ym2149 {
     /// # Returns
     ///
     /// Register value or 0xFF for invalid reads
+    #[must_use]
     pub fn read_port(&self, port: u8) -> u8 {
         if (port & 2) == 0 && self.selected_register < NUM_REGISTERS {
             self.registers[self.selected_register]
@@ -339,6 +342,7 @@ impl Ym2149 {
     /// # Returns
     ///
     /// Current register value
+    #[must_use]
     pub fn read_register(&self, register: u8) -> u8 {
         let reg = register as usize;
         if reg < NUM_REGISTERS {
@@ -507,13 +511,9 @@ impl Ym2149 {
         self.in_timer_irq = in_irq;
     }
 
-    /// Alias for set_timer_irq_state (compatibility)
+    /// Alias for set_timer_irq_state (legacy compatibility)
+    #[inline]
     pub fn inside_timer_irq(&mut self, inside: bool) {
-        self.set_timer_irq_state(inside);
-    }
-
-    /// Alias for inside_timer_irq (compatibility)
-    pub fn set_inside_timer_irq(&mut self, inside: bool) {
         self.set_timer_irq_state(inside);
     }
 }

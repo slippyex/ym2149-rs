@@ -355,6 +355,9 @@ impl ArkosPlayer {
 
     fn calculate_line_offset(&self) -> usize {
         let subsong = &self.song.subsongs[self.subsong_index];
+        if subsong.positions.is_empty() {
+            return 0;
+        }
         let mut total_lines = 0usize;
         for pos_idx in 0..self.current_position.min(subsong.positions.len()) {
             total_lines += subsong.positions[pos_idx].height;

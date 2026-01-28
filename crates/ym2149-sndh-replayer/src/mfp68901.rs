@@ -236,7 +236,8 @@ impl Timer {
         // Timer counts down from data_register_init to 0, then fires
         // CPU cycles = data_register_init * cycles_per_prescaler_tick
         // Using FP16 for precision, then shift down
-        let total_fp16 = self.data_register_init as u64 * cycles_per_tick_fp16;
+        // Use saturating_mul to prevent overflow on future refactors
+        let total_fp16 = (self.data_register_init as u64).saturating_mul(cycles_per_tick_fp16);
         Some(total_fp16 >> 16)
     }
 
@@ -361,6 +362,9 @@ impl Timer {
             if self.is_event_mode() {
                 // Event mode - count on external events
                 if self.external_event {
+                    // wrapping_sub: when counter reaches 0, it wraps to 255
+                    // If data_register_init is 0, hardware treats it as period 256
+                    // (counter cycles through all 256 values before firing again)
                     self.legacy_counter = self.legacy_counter.wrapping_sub(1);
                     if self.legacy_counter == 0 {
                         self.legacy_counter = self.data_register_init;
@@ -374,6 +378,8 @@ impl Timer {
 
                 // Most of the time this while will never loop
                 while self.inner_clock >= host_replay_rate {
+                    // wrapping_sub: when counter reaches 0, it wraps to 255
+                    // If data_register_init is 0, hardware treats it as period 256
                     self.legacy_counter = self.legacy_counter.wrapping_sub(1);
                     if self.legacy_counter == 0 {
                         self.legacy_counter = self.data_register_init;

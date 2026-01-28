@@ -32,32 +32,20 @@ impl SndhWasmPlayer {
         // Warm-up: Generate audio to detect STE hardware usage at runtime.
         // Some drivers don't enable DMA until actual playback starts.
         // We generate ~500ms of audio and discard the output.
-        // Buffer size: 44100 samples = 22050 stereo frames = 500ms at 44.1kHz
+        // Buffer size: 44100 floats = 22050 stereo frames = 500ms at 44.1kHz
+        // Use heap allocation to avoid stack overflow in WASM.
         {
-            let mut discard_buffer = [0.0f32; 44100];
+            let mut discard_buffer = vec![0.0f32; 44100];
             player.render_f32_stereo(&mut discard_buffer);
         }
 
-        // Debug: Check what flags are in the metadata
-        let flags = player.sndh_flags();
-        web_sys::console::log_1(&format!("SNDH metadata flags - ste: {}, lmc: {}, stereo: {}, dma_rate: {:?}",
-            flags.ste,
-            flags.lmc,
-            flags.stereo,
-            flags.dma_rate
-        ).into());
-        let dac_used = player.was_ste_dac_used();
-        web_sys::console::log_1(&format!("SNDH was_ste_dac_used after warm-up: {dac_used}").into());
-
         // Capture STE detection state BEFORE re-init (reset would clear it)
         let uses_ste = player.uses_ste_features();
-        web_sys::console::log_1(&format!("SNDH uses_ste_features(): {uses_ste}").into());
 
         // Re-initialize to reset position to beginning (clean state)
         let _ = player.init_subsong(default_subsong);
 
         let metadata = metadata_from_player(&player);
-        web_sys::console::log_1(&format!("SNDH channel_count: {}", if uses_ste { 5 } else { 3 }).into());
         Ok((Self { player, uses_ste }, metadata))
     }
 
@@ -280,7 +268,12 @@ impl SndhWasmPlayer {
     }
 
     /// Set subsong (1-based). Returns true on success.
+    ///
+    /// Valid range: 1 to `subsong_count()`.
     pub fn set_subsong(&mut self, index: usize) -> bool {
+        if index < 1 || index > self.subsong_count() {
+            return false;
+        }
         self.player.init_subsong(index).is_ok()
     }
 

@@ -37,9 +37,8 @@ impl ToneGenerator {
         self.period = period;
     }
 
-    /// Get current period
-    #[inline]
-    #[allow(dead_code)]
+    /// Get current period (test-only)
+    #[cfg(test)]
     pub fn period(&self) -> u32 {
         self.period
     }
@@ -74,13 +73,6 @@ impl ToneGenerator {
             self.edge_bits ^= 0x1f << channel_shift;
             self.counter = 0;
         }
-        self.edge_bits
-    }
-
-    /// Get the current edge bits
-    #[inline]
-    #[allow(dead_code)]
-    pub fn edge_bits(&self) -> u32 {
         self.edge_bits
     }
 
@@ -162,9 +154,8 @@ impl NoiseGenerator {
         self.output_mask
     }
 
-    /// Get current output mask
-    #[inline]
-    #[allow(dead_code)]
+    /// Get current output mask (test-only)
+    #[cfg(test)]
     pub fn output_mask(&self) -> u32 {
         self.output_mask
     }
@@ -258,9 +249,9 @@ impl EnvelopeGenerator {
     #[inline]
     pub fn level(&self) -> u32 {
         let index = self.data_offset + (self.position + 64) as usize;
-        debug_assert!(index < ENV_DATA.len(), "envelope index {index} out of bounds");
         // SAFETY: index is bounded by data_offset (0..=1152) + position+64 (0..=127) = 0..=1279 < 1280
-        ENV_DATA[index] as u32
+        // Use checked access for defense-in-depth in release mode
+        ENV_DATA.get(index).copied().unwrap_or(0) as u32
     }
 
     /// Reset to initial state

@@ -13,6 +13,15 @@ use sndh::SndhWasmPlayer;
 use ym2149::Ym2149Backend;
 use ym2149_common::{ChiptunePlayerBase, PlaybackState};
 
+/// Convert mono samples to interleaved stereo (duplicate L/R).
+#[inline]
+fn mono_to_stereo(mono: &[f32], stereo: &mut [f32]) {
+    for (i, &sample) in mono.iter().enumerate() {
+        stereo[i * 2] = sample;
+        stereo[i * 2 + 1] = sample;
+    }
+}
+
 /// Unified player enum for all supported formats.
 pub enum BrowserSongPlayer {
     /// YM format player (YM2-YM6).
@@ -180,13 +189,9 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Sndh(player) => player.generate_samples_stereo(frame_count),
             _ => {
-                // Convert mono to stereo for non-SNDH players
                 let mono = self.generate_samples(frame_count);
-                let mut stereo = Vec::with_capacity(frame_count * 2);
-                for sample in mono {
-                    stereo.push(sample); // Left
-                    stereo.push(sample); // Right
-                }
+                let mut stereo = vec![0.0; frame_count * 2];
+                mono_to_stereo(&mono, &mut stereo);
                 stereo
             }
         }
@@ -200,13 +205,9 @@ impl BrowserSongPlayer {
         match self {
             BrowserSongPlayer::Sndh(player) => player.generate_samples_into_stereo(buffer),
             _ => {
-                // Convert mono to stereo for non-SNDH players
                 let frame_count = buffer.len() / 2;
                 let mono = self.generate_samples(frame_count);
-                for (i, sample) in mono.iter().enumerate() {
-                    buffer[i * 2] = *sample; // Left
-                    buffer[i * 2 + 1] = *sample; // Right
-                }
+                mono_to_stereo(&mono, buffer);
             }
         }
     }

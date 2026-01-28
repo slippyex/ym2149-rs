@@ -18,8 +18,6 @@ pub struct ArkosWasmPlayer {
 impl ArkosWasmPlayer {
     /// Create a new Arkos WASM player wrapper.
     pub fn new(player: ArkosPlayer) -> (Self, YmMetadata) {
-        let channel_count = player.channel_count();
-        web_sys::console::log_1(&format!("ArkosWasmPlayer::new - channel_count: {channel_count}").into());
 
         let samples_per_frame = (YM_SAMPLE_RATE_F32 / player.replay_frequency_hz())
             .round()
@@ -136,8 +134,7 @@ impl ArkosWasmPlayer {
 
     /// Dump registers for all PSG chips.
     pub fn dump_all_registers(&self) -> Vec<[u8; 16]> {
-        let psg_count = self.player.channel_count().div_ceil(3);
-        (0..psg_count)
+        (0..self.player.psg_count())
             .filter_map(|i| self.player.chip(i).map(|c| c.dump_registers()))
             .collect()
     }
@@ -146,8 +143,7 @@ impl ArkosWasmPlayer {
     ///
     /// Returns a vector of [A, B, C] arrays, one per PSG chip.
     pub fn get_channel_outputs(&self) -> Vec<[f32; 3]> {
-        let psg_count = self.player.channel_count().div_ceil(3);
-        (0..psg_count)
+        (0..self.player.psg_count())
             .filter_map(|i| {
                 self.player.chip(i).map(|c| {
                     let (a, b, c) = c.get_channel_outputs();
@@ -163,7 +159,7 @@ impl ArkosWasmPlayer {
     /// per-sample channel outputs for all PSG chips: [A0, B0, C0, A1, B1, C1, ...] per sample.
     pub fn generate_samples_with_channels_into(&mut self, mono: &mut [f32], channels: &mut [f32]) {
         let channel_count = self.player.channel_count();
-        let psg_count = channel_count.div_ceil(3);
+        let psg_count = self.player.psg_count();
 
         // Generate samples one at a time to capture channel outputs
         let mut sample_buf = [0.0f32; 1];

@@ -68,6 +68,22 @@ macro_rules! console_log {
     }
 }
 
+/// Apply volume scaling to audio samples.
+#[inline]
+fn apply_volume(samples: &mut [f32], volume: f32) {
+    if volume != 1.0 {
+        for sample in samples.iter_mut() {
+            *sample *= volume;
+        }
+    }
+}
+
+/// Set a property on a JavaScript object (ignores errors).
+#[inline]
+fn set_js_prop(obj: &js_sys::Object, key: &str, value: impl Into<JsValue>) {
+    let _ = js_sys::Reflect::set(obj, &key.into(), &value.into());
+}
+
 /// Main YM2149 player for WebAssembly.
 ///
 /// This player handles YM/AKS/AY file playback in the browser, generating audio samples
@@ -230,11 +246,7 @@ impl Ym2149Player {
     #[wasm_bindgen(js_name = generateSamples)]
     pub fn generate_samples(&mut self, count: usize) -> Vec<f32> {
         let mut samples = self.player.generate_samples(count);
-        if self.volume != 1.0 {
-            for sample in &mut samples {
-                *sample *= self.volume;
-            }
-        }
+        apply_volume(&mut samples, self.volume);
         samples
     }
 
@@ -244,11 +256,7 @@ impl Ym2149Player {
     #[wasm_bindgen(js_name = generateSamplesInto)]
     pub fn generate_samples_into(&mut self, buffer: &mut [f32]) {
         self.player.generate_samples_into(buffer);
-        if self.volume != 1.0 {
-            for sample in buffer.iter_mut() {
-                *sample *= self.volume;
-            }
-        }
+        apply_volume(buffer, self.volume);
     }
 
     /// Generate stereo audio samples (interleaved L/R).
@@ -258,11 +266,7 @@ impl Ym2149Player {
     #[wasm_bindgen(js_name = generateSamplesStereo)]
     pub fn generate_samples_stereo(&mut self, frame_count: usize) -> Vec<f32> {
         let mut samples = self.player.generate_samples_stereo(frame_count);
-        if self.volume != 1.0 {
-            for sample in &mut samples {
-                *sample *= self.volume;
-            }
-        }
+        apply_volume(&mut samples, self.volume);
         samples
     }
 
@@ -273,11 +277,7 @@ impl Ym2149Player {
     #[wasm_bindgen(js_name = generateSamplesIntoStereo)]
     pub fn generate_samples_into_stereo(&mut self, buffer: &mut [f32]) {
         self.player.generate_samples_into_stereo(buffer);
-        if self.volume != 1.0 {
-            for sample in buffer.iter_mut() {
-                *sample *= self.volume;
-            }
-        }
+        apply_volume(buffer, self.volume);
     }
 
     /// Get the current register values (for visualization).
@@ -319,45 +319,20 @@ impl Ym2149Player {
 
             for ch in &states.channels {
                 let ch_obj = js_sys::Object::new();
-                js_sys::Reflect::set(
-                    &ch_obj,
-                    &"frequency".into(),
-                    &ch.frequency_hz.unwrap_or(0.0).into(),
-                )
-                .ok();
-                js_sys::Reflect::set(
-                    &ch_obj,
-                    &"note".into(),
-                    &ch.note_name.unwrap_or("--").into(),
-                )
-                .ok();
-                js_sys::Reflect::set(
-                    &ch_obj,
-                    &"amplitude".into(),
-                    &ch.amplitude_normalized.into(),
-                )
-                .ok();
-                js_sys::Reflect::set(&ch_obj, &"toneEnabled".into(), &ch.tone_enabled.into()).ok();
-                js_sys::Reflect::set(&ch_obj, &"noiseEnabled".into(), &ch.noise_enabled.into()).ok();
-                js_sys::Reflect::set(
-                    &ch_obj,
-                    &"envelopeEnabled".into(),
-                    &ch.envelope_enabled.into(),
-                )
-                .ok();
+                set_js_prop(&ch_obj, "frequency", ch.frequency_hz.unwrap_or(0.0));
+                set_js_prop(&ch_obj, "note", ch.note_name.unwrap_or("--"));
+                set_js_prop(&ch_obj, "amplitude", ch.amplitude_normalized);
+                set_js_prop(&ch_obj, "toneEnabled", ch.tone_enabled);
+                set_js_prop(&ch_obj, "noiseEnabled", ch.noise_enabled);
+                set_js_prop(&ch_obj, "envelopeEnabled", ch.envelope_enabled);
                 channels.push(&ch_obj);
             }
 
             // Envelope info for this PSG
             let env_obj = js_sys::Object::new();
-            js_sys::Reflect::set(&env_obj, &"period".into(), &states.envelope.period.into()).ok();
-            js_sys::Reflect::set(&env_obj, &"shape".into(), &states.envelope.shape.into()).ok();
-            js_sys::Reflect::set(
-                &env_obj,
-                &"shapeName".into(),
-                &states.envelope.shape_name.into(),
-            )
-            .ok();
+            set_js_prop(&env_obj, "period", states.envelope.period);
+            set_js_prop(&env_obj, "shape", states.envelope.shape);
+            set_js_prop(&env_obj, "shapeName", states.envelope.shape_name);
             envelopes.push(&env_obj);
         }
 
@@ -368,46 +343,39 @@ impl Ym2149Player {
 
                 // DAC Left channel
                 let dac_l_obj = js_sys::Object::new();
-                js_sys::Reflect::set(&dac_l_obj, &"frequency".into(), &0.0f64.into()).ok();
-                js_sys::Reflect::set(&dac_l_obj, &"note".into(), &"DAC".into()).ok();
-                js_sys::Reflect::set(&dac_l_obj, &"amplitude".into(), &(dac_left as f64).into())
-                    .ok();
-                js_sys::Reflect::set(&dac_l_obj, &"toneEnabled".into(), &false.into()).ok();
-                js_sys::Reflect::set(&dac_l_obj, &"noiseEnabled".into(), &false.into()).ok();
-                js_sys::Reflect::set(&dac_l_obj, &"envelopeEnabled".into(), &false.into()).ok();
-                js_sys::Reflect::set(&dac_l_obj, &"isDac".into(), &true.into()).ok();
+                set_js_prop(&dac_l_obj, "frequency", 0.0f64);
+                set_js_prop(&dac_l_obj, "note", "DAC");
+                set_js_prop(&dac_l_obj, "amplitude", dac_left as f64);
+                set_js_prop(&dac_l_obj, "toneEnabled", false);
+                set_js_prop(&dac_l_obj, "noiseEnabled", false);
+                set_js_prop(&dac_l_obj, "envelopeEnabled", false);
+                set_js_prop(&dac_l_obj, "isDac", true);
                 channels.push(&dac_l_obj);
 
                 // DAC Right channel
                 let dac_r_obj = js_sys::Object::new();
-                js_sys::Reflect::set(&dac_r_obj, &"frequency".into(), &0.0f64.into()).ok();
-                js_sys::Reflect::set(&dac_r_obj, &"note".into(), &"DAC".into()).ok();
-                js_sys::Reflect::set(&dac_r_obj, &"amplitude".into(), &(dac_right as f64).into())
-                    .ok();
-                js_sys::Reflect::set(&dac_r_obj, &"toneEnabled".into(), &false.into()).ok();
-                js_sys::Reflect::set(&dac_r_obj, &"noiseEnabled".into(), &false.into()).ok();
-                js_sys::Reflect::set(&dac_r_obj, &"envelopeEnabled".into(), &false.into()).ok();
-                js_sys::Reflect::set(&dac_r_obj, &"isDac".into(), &true.into()).ok();
+                set_js_prop(&dac_r_obj, "frequency", 0.0f64);
+                set_js_prop(&dac_r_obj, "note", "DAC");
+                set_js_prop(&dac_r_obj, "amplitude", dac_right as f64);
+                set_js_prop(&dac_r_obj, "toneEnabled", false);
+                set_js_prop(&dac_r_obj, "noiseEnabled", false);
+                set_js_prop(&dac_r_obj, "envelopeEnabled", false);
+                set_js_prop(&dac_r_obj, "isDac", true);
                 channels.push(&dac_r_obj);
             }
         }
 
-        js_sys::Reflect::set(&obj, &"channels".into(), &channels).ok();
-        js_sys::Reflect::set(&obj, &"envelopes".into(), &envelopes).ok();
+        set_js_prop(&obj, "channels", &channels);
+        set_js_prop(&obj, "envelopes", &envelopes);
 
         // For backwards compatibility, also include first envelope as "envelope"
         if let Some(first_env) = all_regs.first() {
             let states = ChannelStates::from_registers(first_env);
             let env_obj = js_sys::Object::new();
-            js_sys::Reflect::set(&env_obj, &"period".into(), &states.envelope.period.into()).ok();
-            js_sys::Reflect::set(&env_obj, &"shape".into(), &states.envelope.shape.into()).ok();
-            js_sys::Reflect::set(
-                &env_obj,
-                &"shapeName".into(),
-                &states.envelope.shape_name.into(),
-            )
-            .ok();
-            js_sys::Reflect::set(&obj, &"envelope".into(), &env_obj).ok();
+            set_js_prop(&env_obj, "period", states.envelope.period);
+            set_js_prop(&env_obj, "shape", states.envelope.shape);
+            set_js_prop(&env_obj, "shapeName", states.envelope.shape_name);
+            set_js_prop(&obj, "envelope", &env_obj);
         }
 
         obj.into()
@@ -432,67 +400,17 @@ impl Ym2149Player {
         if let BrowserSongPlayer::Sndh(sndh_player) = &self.player {
             let obj = js_sys::Object::new();
             // dB values
-            js_sys::Reflect::set(
-                &obj,
-                &"masterVolume".into(),
-                &(sndh_player.lmc1992_master_volume_db() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"leftVolume".into(),
-                &(sndh_player.lmc1992_left_volume_db() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"rightVolume".into(),
-                &(sndh_player.lmc1992_right_volume_db() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"bass".into(),
-                &(sndh_player.lmc1992_bass_db() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"treble".into(),
-                &(sndh_player.lmc1992_treble_db() as i32).into(),
-            )
-            .ok();
+            set_js_prop(&obj, "masterVolume", sndh_player.lmc1992_master_volume_db() as i32);
+            set_js_prop(&obj, "leftVolume", sndh_player.lmc1992_left_volume_db() as i32);
+            set_js_prop(&obj, "rightVolume", sndh_player.lmc1992_right_volume_db() as i32);
+            set_js_prop(&obj, "bass", sndh_player.lmc1992_bass_db() as i32);
+            set_js_prop(&obj, "treble", sndh_player.lmc1992_treble_db() as i32);
             // Raw register values
-            js_sys::Reflect::set(
-                &obj,
-                &"masterVolumeRaw".into(),
-                &(sndh_player.lmc1992_master_volume_raw() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"leftVolumeRaw".into(),
-                &(sndh_player.lmc1992_left_volume_raw() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"rightVolumeRaw".into(),
-                &(sndh_player.lmc1992_right_volume_raw() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"bassRaw".into(),
-                &(sndh_player.lmc1992_bass_raw() as i32).into(),
-            )
-            .ok();
-            js_sys::Reflect::set(
-                &obj,
-                &"trebleRaw".into(),
-                &(sndh_player.lmc1992_treble_raw() as i32).into(),
-            )
-            .ok();
+            set_js_prop(&obj, "masterVolumeRaw", sndh_player.lmc1992_master_volume_raw() as i32);
+            set_js_prop(&obj, "leftVolumeRaw", sndh_player.lmc1992_left_volume_raw() as i32);
+            set_js_prop(&obj, "rightVolumeRaw", sndh_player.lmc1992_right_volume_raw() as i32);
+            set_js_prop(&obj, "bassRaw", sndh_player.lmc1992_bass_raw() as i32);
+            set_js_prop(&obj, "trebleRaw", sndh_player.lmc1992_treble_raw() as i32);
             obj.into()
         } else {
             JsValue::NULL
