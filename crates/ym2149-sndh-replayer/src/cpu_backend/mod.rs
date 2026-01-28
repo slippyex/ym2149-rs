@@ -65,6 +65,14 @@ pub trait Cpu68k {
     /// Get the status register.
     fn sr(&self) -> u16;
 
+    /// Get the interrupt priority level (IPL) from SR bits 8-10.
+    /// Range: 0-7 (0 = all interrupts enabled, 7 = only NMI)
+    fn ipl(&self) -> u8;
+
+    /// Set the interrupt priority level (IPL) in SR bits 8-10.
+    /// Used when entering/exiting interrupt handlers.
+    fn set_ipl(&mut self, level: u8);
+
     /// Get the total number of CPU cycles executed since reset.
     fn total_cycles(&self) -> u64;
 }

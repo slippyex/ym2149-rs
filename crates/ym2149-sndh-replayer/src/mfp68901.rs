@@ -117,12 +117,23 @@ pub enum TimerId {
     Gpi7 = 4,
 }
 
-/// CPU cycles per MFP clock tick (8 MHz CPU / 2.4576 MHz MFP ≈ 3.255)
-/// We use fixed-point math: multiply by 256 for precision
-const CPU_CYCLES_PER_MFP_TICK_FP8: u64 = (8_000_000 * 256) / ATARI_MFP_CLOCK_HZ as u64;
-
-/// MFP prescaler divisors (index by control register bits 0-2)
-const PRESCALER_DIV: [u32; 8] = [0, 4, 10, 16, 50, 64, 100, 200];
+/// CPU cycles per prescaler tick (FP16 precision for accuracy).
+///
+/// Formula: prescaler_div * (CPU_CLOCK / MFP_CLOCK) * 65536
+/// CPU = 8.000.000 Hz, MFP = 2.457.600 Hz
+/// Ratio = 8.000.000 / 2.457.600 = 3125 / 960 (exact fraction)
+///
+/// This avoids cumulative rounding errors from integer division.
+const CPU_CYCLES_PER_PRESCALER_TICK_FP16: [u64; 8] = [
+    0,                                      // 0: stopped
+    (4 * 3125 * 65536) / 960,               // 1: /4   = 13.0208... * 65536 = 853333
+    (10 * 3125 * 65536) / 960,              // 2: /10  = 32.5520... * 65536 = 2133333
+    (16 * 3125 * 65536) / 960,              // 3: /16  = 52.0833... * 65536 = 3413333
+    (50 * 3125 * 65536) / 960,              // 4: /50  = 162.760... * 65536 = 10666666
+    (64 * 3125 * 65536) / 960,              // 5: /64  = 208.333... * 65536 = 13653333
+    (100 * 3125 * 65536) / 960,             // 6: /100 = 325.520... * 65536 = 21333333
+    (200 * 3125 * 65536) / 960,             // 7: /200 = 651.041... * 65536 = 42666666
+];
 
 #[derive(Default)]
 struct Timer {
@@ -195,18 +206,17 @@ impl Timer {
             return None;
         }
 
-        let prescaler = PRESCALER_DIV[(self.control_register & 7) as usize];
-        if prescaler == 0 {
+        let prescaler_idx = (self.control_register & 7) as usize;
+        let cycles_per_tick_fp16 = CPU_CYCLES_PER_PRESCALER_TICK_FP16[prescaler_idx];
+        if cycles_per_tick_fp16 == 0 {
             return None;
         }
 
         // Timer counts down from data_register_init to 0, then fires
-        // Number of MFP ticks for one period = data_register_init * prescaler
-        let mfp_ticks = self.data_register_init as u64 * prescaler as u64;
-
-        // Convert MFP ticks to CPU cycles using fixed-point math
-        // cpu_cycles = mfp_ticks * (8MHz / 2.4576MHz) = mfp_ticks * 3.255...
-        Some((mfp_ticks * CPU_CYCLES_PER_MFP_TICK_FP8) >> 8)
+        // CPU cycles = data_register_init * cycles_per_prescaler_tick
+        // Using FP16 for precision, then shift down
+        let total_fp16 = self.data_register_init as u64 * cycles_per_tick_fp16;
+        Some(total_fp16 >> 16)
     }
 
     /// Reset cycle-accurate timer state after seek.
