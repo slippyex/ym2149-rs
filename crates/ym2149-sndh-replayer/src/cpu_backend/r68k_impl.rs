@@ -1,4 +1,29 @@
 //! r68k emulator backend implementation.
+//!
+//! # Safety Architecture
+//!
+//! This module uses thread-local storage to pass memory context to the r68k CPU emulator.
+//! The r68k crate requires an `AddressBus` implementation that is stored inside the CPU
+//! struct, but we need to access external memory that changes per-step. To solve this,
+//! we use a `ProxyBus` that delegates to a thread-local `CpuMemoryDyn` pointer.
+//!
+//! ## Safety Invariants
+//!
+//! 1. **Single-threaded execution**: The `MEMORY_CONTEXT` is thread-local, so each thread
+//!    has its own context. However, a single `R68kBackend` instance must not be used from
+//!    multiple threads simultaneously (it is `!Send` and `!Sync` by design via the raw pointer).
+//!
+//! 2. **Scoped lifetime**: The memory pointer is only valid during a single `step()` call.
+//!    It is set before `execute1()` and cleared immediately after. No references escape.
+//!
+//! 3. **No re-entrancy**: `step()` must not be called recursively. The context is cleared
+//!    after each step, so nested calls would see `None` and panic.
+//!
+//! ## Why Unsafe?
+//!
+//! The r68k crate's `AddressBus` trait is designed for the bus to be owned by the CPU.
+//! Since we need external memory that varies per-step, we use a raw pointer in thread-local
+//! storage. The alternative would be to fork r68k or use a different 68k emulator.
 
 use super::{Cpu68k, CpuMemory};
 use r68k::cpu::{ConfiguredCore, ProcessingState};
@@ -8,6 +33,10 @@ use std::cell::UnsafeCell;
 
 // Thread-local storage for the current memory context.
 // This allows the ProxyBus to access the CpuMemory during CPU execution.
+//
+// SAFETY: The pointer is only valid during a single `step()` call and is cleared
+// immediately after. The UnsafeCell is needed because we modify the pointer from
+// within the AddressBus methods which only have `&self`.
 thread_local! {
     static MEMORY_CONTEXT: UnsafeCell<Option<*mut dyn CpuMemoryDyn>> = const { UnsafeCell::new(None) };
 }
@@ -49,9 +78,16 @@ impl ProxyBus {
     }
 
     fn with_memory<R, F: FnOnce(&mut dyn CpuMemoryDyn) -> R>(&self, f: F) -> R {
-        MEMORY_CONTEXT.with(|ctx| unsafe {
-            let ptr = (*ctx.get()).expect("Memory context not set during CPU execution");
-            f(&mut *ptr)
+        MEMORY_CONTEXT.with(|ctx| {
+            // SAFETY: The pointer is valid because:
+            // 1. It was set by `step()` before calling `execute1()`
+            // 2. It points to the `memory` parameter which is borrowed for the duration of `step()`
+            // 3. No other code can modify MEMORY_CONTEXT on this thread during execution
+            // The expect() is a programming error if triggered (step() not called correctly).
+            unsafe {
+                let ptr = (*ctx.get()).expect("Memory context not set during CPU execution");
+                f(&mut *ptr)
+            }
         })
     }
 }
@@ -76,16 +112,22 @@ impl AddressBus for ProxyBus {
     }
 
     fn write_byte(&mut self, _address_space: r68k::ram::AddressSpace, address: u32, value: u32) {
-        MEMORY_CONTEXT.with(|ctx| unsafe {
-            let ptr = (*ctx.get()).expect("Memory context not set during CPU execution");
-            (*ptr).set_byte(address, value as u8);
+        MEMORY_CONTEXT.with(|ctx| {
+            // SAFETY: See with_memory() - same invariants apply
+            unsafe {
+                let ptr = (*ctx.get()).expect("Memory context not set during CPU execution");
+                (*ptr).set_byte(address, value as u8);
+            }
         });
     }
 
     fn write_word(&mut self, _address_space: r68k::ram::AddressSpace, address: u32, value: u32) {
-        MEMORY_CONTEXT.with(|ctx| unsafe {
-            let ptr = (*ctx.get()).expect("Memory context not set during CPU execution");
-            (*ptr).set_word(address, value as u16);
+        MEMORY_CONTEXT.with(|ctx| {
+            // SAFETY: See with_memory() - same invariants apply
+            unsafe {
+                let ptr = (*ctx.get()).expect("Memory context not set during CPU execution");
+                (*ptr).set_word(address, value as u16);
+            }
         });
     }
 
@@ -95,9 +137,13 @@ impl AddressBus for ProxyBus {
     }
 
     fn reset_instruction(&mut self) {
-        MEMORY_CONTEXT.with(|ctx| unsafe {
-            if let Some(ptr) = *ctx.get() {
-                (*ptr).reset_instruction();
+        MEMORY_CONTEXT.with(|ctx| {
+            // SAFETY: See with_memory() - same invariants apply.
+            // We check for Some because reset_instruction may be called during error recovery.
+            unsafe {
+                if let Some(ptr) = *ctx.get() {
+                    (*ptr).reset_instruction();
+                }
             }
         });
     }
@@ -106,6 +152,8 @@ impl AddressBus for ProxyBus {
 /// r68k CPU backend.
 pub struct R68kBackend {
     cpu: ConfiguredCore<AutoInterruptController, ProxyBus>,
+    /// Total cycles executed since reset
+    total_cycles: u64,
 }
 
 impl Cpu68k for R68kBackend {
@@ -120,25 +168,34 @@ impl Cpu68k for R68kBackend {
         // Atari ST bus timing: 4-cycle boundary alignment due to GLUE/MMU wait states
         // (r68k's Musashi tables provide base cycles, granularity models ST bus)
         cpu.set_cycle_granularity(4);
-        Self { cpu }
+        Self { cpu, total_cycles: 0 }
     }
 
     fn step<M: CpuMemory>(&mut self, memory: &mut M) -> usize {
-        // Set memory context for this execution
+        // SAFETY: We create a raw pointer to `memory` which is borrowed mutably for
+        // the duration of this function. The pointer is stored in thread-local storage
+        // and is only accessed by the ProxyBus during `execute1()`. We clear it before
+        // returning, ensuring the pointer never outlives the borrow.
         let ptr = memory as *mut M as *mut dyn CpuMemoryDyn;
-        MEMORY_CONTEXT.with(|ctx| unsafe {
-            *ctx.get() = Some(ptr);
+
+        MEMORY_CONTEXT.with(|ctx| {
+            // SAFETY: We have exclusive access to the thread-local cell.
+            // Setting the pointer before execute1() ensures ProxyBus can access memory.
+            unsafe { *ctx.get() = Some(ptr) };
         });
 
-        // Execute one instruction
+        // Execute one instruction - ProxyBus will access memory via MEMORY_CONTEXT
         let cycles = self.cpu.execute1();
+        let cycle_count = cycles.0 as usize;
+        self.total_cycles += cycle_count as u64;
 
-        // Clear memory context
-        MEMORY_CONTEXT.with(|ctx| unsafe {
-            *ctx.get() = None;
+        MEMORY_CONTEXT.with(|ctx| {
+            // SAFETY: Clearing the pointer ensures it cannot be used after `memory` is dropped.
+            // This is the critical step that maintains memory safety.
+            unsafe { *ctx.get() = None };
         });
 
-        cycles.0 as usize
+        cycle_count
     }
 
     fn is_stopped(&self) -> bool {
@@ -181,5 +238,13 @@ impl Cpu68k for R68kBackend {
 
     fn sr(&self) -> u16 {
         self.cpu.status_register()
+    }
+
+    fn total_cycles(&self) -> u64 {
+        self.total_cycles
+    }
+
+    fn add_cycles(&mut self, cycles: u64) {
+        self.total_cycles += cycles;
     }
 }

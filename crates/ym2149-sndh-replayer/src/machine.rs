@@ -66,6 +66,29 @@ const INIT_TIMEOUT_FRAMES: u32 = 500;
 /// Interrupt vector addresses for MFP timers
 const IVECTOR: [u32; 5] = [0x134, 0x120, 0x114, 0x110, 0x13C];
 
+/// MFP interrupt priorities (directly from MFP register bit positions).
+/// Higher value = higher priority. Used for nested interrupt decisions.
+/// GPI7=15, TimerA=13, TimerB=8, TimerC=5, TimerD=4
+const MFP_PRIORITY: [u8; 5] = [13, 8, 5, 4, 15];
+
+/// Maximum interrupt nesting depth to prevent stack overflow.
+const MAX_INTERRUPT_NESTING: u8 = 4;
+
+/// MC68000 Exception Processing Cycles (from MC68000 User Manual, Table 8-14)
+/// These are the cycles consumed by exception entry before the handler runs.
+const CYCLES_INTERRUPT: u64 = 44;  // Interrupt acknowledgment + stack frame
+const CYCLES_TRAP: u64 = 34;       // TRAP instruction exception processing
+
+/// MFP-internal interrupt latency (timer fire to IPL assertion).
+/// This is the delay inside the MFP chip before the interrupt signal
+/// reaches the CPU's IPL lines. The additional CPU-side latency
+/// (completing current instruction) is implicitly modeled by only
+/// checking for interrupts after each instruction completes.
+///
+/// MFP internal: ~8-12 cycles for synchronization and priority encoding.
+/// We use 10 as a typical value.
+const MFP_INTERRUPT_LATENCY_CYCLES: u64 = 10;
+
 struct XbiosTimerConfig {
     ctrl_port: u8,
     data_port: u8,
@@ -94,6 +117,8 @@ pub(crate) struct AtariMemory {
     pub(crate) reset_triggered: bool,
     /// Host sample rate
     host_rate: u32,
+    /// Current CPU cycle count (for cycle-accurate YM2149 timing)
+    pub(crate) cpu_cycles: u64,
 }
 
 impl AtariMemory {
@@ -107,6 +132,7 @@ impl AtariMemory {
             next_malloc_addr: GEMDOS_MALLOC_START,
             reset_triggered: false,
             host_rate: sample_rate,
+            cpu_cycles: 0,
         }
     }
 
@@ -118,6 +144,11 @@ impl AtariMemory {
         self.lmc1992.reset(self.host_rate);
         self.next_malloc_addr = GEMDOS_MALLOC_START;
         self.reset_triggered = false;
+        self.cpu_cycles = 0;
+        // Sync YM2149 sample timing with CPU cycle counter
+        self.ym2149.sync_sample_cycle(0);
+        // Initialize cycle-accurate MFP timers
+        self.mfp.sync_cpu_cycle(0);
 
         // Setup RTE and RESET instructions in low memory
         self.write_word(RTE_INSTRUCTION_ADDR, 0x4E73); // RTE
@@ -170,6 +201,8 @@ impl AtariMemory {
 
         // MFP 68901
         if (MFP_START..MFP_END).contains(&addr) {
+            // Set CPU cycle for cycle-accurate timer counter reads
+            self.mfp.set_cpu_cycle(self.cpu_cycles);
             return self.mfp.read8((addr - MFP_START) as u8);
         }
 
@@ -194,8 +227,9 @@ impl AtariMemory {
             return;
         }
 
-        // YM2149 PSG write
+        // YM2149 PSG write (cycle-accurate timing)
         if (YM2149_START..YM2149_END).contains(&addr) {
+            self.ym2149.set_cpu_cycle(self.cpu_cycles);
             self.ym2149.write_port((addr & 0xfe) as u8, value);
             return;
         }
@@ -223,6 +257,8 @@ impl AtariMemory {
 
         // MFP word read
         if (MFP_START..MFP_END).contains(&addr) {
+            // Set CPU cycle for cycle-accurate timer counter reads
+            self.mfp.set_cpu_cycle(self.cpu_cycles);
             return self.mfp.read16((addr - MFP_START) as u8);
         }
 
@@ -248,10 +284,10 @@ impl AtariMemory {
     pub(crate) fn write_word(&mut self, addr: u32, value: u16) {
         let addr = addr & 0x00FF_FFFF;
 
-        // YM2149 PSG word write
+        // YM2149 PSG word write (cycle-accurate timing)
         if (YM2149_START..YM2149_END).contains(&addr) {
-            self.ym2149
-                .write_port((addr & 0xfe) as u8, (value >> 8) as u8);
+            self.ym2149.set_cpu_cycle(self.cpu_cycles);
+            self.ym2149.write_port((addr & 0xfe) as u8, (value >> 8) as u8);
             return;
         }
 
@@ -319,10 +355,14 @@ pub struct AtariMachine {
     cpu: DefaultCpu,
     /// Memory and peripherals
     memory: AtariMemory,
-    /// Prevent nested interrupt execution
-    in_interrupt: bool,
+    /// Current interrupt nesting depth (0 = not in interrupt)
+    interrupt_nesting_depth: u8,
+    /// Priority of the currently executing interrupt (if any)
+    current_interrupt_priority: u8,
     /// Incremental GEMDOS malloc pointer
     next_gemdos_malloc: u32,
+    /// Enable cycle-accurate timer interrupts (disable during seek for performance)
+    cycle_accurate_timers: bool,
 }
 
 impl AtariMachine {
@@ -331,8 +371,11 @@ impl AtariMachine {
         let mut machine = Self {
             cpu: DefaultCpu::new(),
             memory: AtariMemory::new(sample_rate),
-            in_interrupt: false,
+            interrupt_nesting_depth: 0,
+            current_interrupt_priority: 0,
             next_gemdos_malloc: GEMDOS_MALLOC_START,
+            // MFP cycle-accurate timers enabled (seek-compatible implementation)
+            cycle_accurate_timers: true,
         };
         machine.reset();
         machine
@@ -342,7 +385,8 @@ impl AtariMachine {
     pub fn reset(&mut self) {
         self.memory.reset();
         self.cpu = DefaultCpu::new();
-        self.in_interrupt = false;
+        self.interrupt_nesting_depth = 0;
+        self.current_interrupt_priority = 0;
         self.next_gemdos_malloc = GEMDOS_MALLOC_START;
     }
 
@@ -386,44 +430,81 @@ impl AtariMachine {
 
         let mut executed = 0;
         while executed < max_cycles && !self.memory.reset_triggered && !self.cpu.is_stopped() {
+            // Update memory's cycle counter for cycle-accurate YM2149 writes
+            self.memory.cpu_cycles = self.cpu.total_cycles();
             executed += self.cpu.step(&mut self.memory);
+
+            // Note: jsr_limited is used for seek/fast-forward, so we DON'T check
+            // cycle-accurate timers here. Timer interrupts are handled by tick_timers()
+            // which is called via compute_sample_stereo() after each frame during seek.
         }
 
         Ok(self.memory.reset_triggered)
     }
 
-    /// Tick all MFP timers and dispatch their interrupts.
+    /// Tick all MFP timers and dispatch their interrupts (legacy sample-based mode).
     fn tick_timers(&mut self) {
         let fired = self.memory.mfp.tick();
         for (timer_idx, active) in fired.into_iter().enumerate() {
             if !active {
                 continue;
             }
-            let vector_addr = IVECTOR[timer_idx];
-            let pc = self.memory.read_long(vector_addr);
-            let pc24 = pc & 0x00FF_FFFF;
-
-            if pc != 0 && pc != RTE_INSTRUCTION_ADDR && (pc24 as usize) < RAM_SIZE {
-                if self.in_interrupt {
-                    continue;
-                }
-                self.in_interrupt = true;
-
-                // Acknowledge interrupt (sets in-service, clears pending)
-                let timer_id = TIMER_ID_MAP[timer_idx];
-                self.memory.mfp.acknowledge_timer(timer_id);
-
-                self.configure_return_by_rte();
-                self.memory.ym2149.inside_timer_irq(true);
-                let _ = self.jmp_binary(pc, 1);
-                self.memory.ym2149.inside_timer_irq(false);
-
-                // End of interrupt (clears in-service for automatic EOI mode)
-                self.memory.mfp.end_of_interrupt_timer(timer_id);
-
-                self.in_interrupt = false;
-            }
+            self.dispatch_timer_interrupt(TIMER_ID_MAP[timer_idx]);
         }
+    }
+
+    /// Dispatch a timer interrupt with nested interrupt support.
+    ///
+    /// Nested interrupts are allowed if:
+    /// - We're not at max nesting depth
+    /// - The new interrupt has higher MFP priority than the current one
+    fn dispatch_timer_interrupt(&mut self, timer_id: TimerId) {
+        let timer_idx = timer_id as usize;
+        let new_priority = MFP_PRIORITY[timer_idx];
+        let vector_addr = IVECTOR[timer_idx];
+        let pc = self.memory.read_long(vector_addr);
+        let pc24 = pc & 0x00FF_FFFF;
+
+        if pc == 0 || pc == RTE_INSTRUCTION_ADDR || (pc24 as usize) >= RAM_SIZE {
+            return;
+        }
+
+        // Check if we can dispatch this interrupt
+        if self.interrupt_nesting_depth > 0 {
+            // Already in an interrupt - check if nesting is allowed
+            if self.interrupt_nesting_depth >= MAX_INTERRUPT_NESTING {
+                // Max nesting reached - leave pending for later
+                return;
+            }
+            if new_priority <= self.current_interrupt_priority {
+                // Lower or equal priority - leave pending for later
+                return;
+            }
+            // Higher priority - allow nesting
+        }
+
+        // Save previous priority and increment nesting
+        let saved_priority = self.current_interrupt_priority;
+        self.current_interrupt_priority = new_priority;
+        self.interrupt_nesting_depth += 1;
+
+        // Add interrupt exception processing cycles (44 cycles per MC68000 manual)
+        self.cpu.add_cycles(CYCLES_INTERRUPT);
+
+        // Acknowledge interrupt (sets in-service, clears pending)
+        self.memory.mfp.acknowledge_timer(timer_id);
+
+        self.configure_return_by_rte();
+        self.memory.ym2149.inside_timer_irq(true);
+        let _ = self.jmp_binary_no_timer_check(pc, 1);
+        self.memory.ym2149.inside_timer_irq(false);
+
+        // End of interrupt (clears in-service for automatic EOI mode)
+        self.memory.mfp.end_of_interrupt_timer(timer_id);
+
+        // Restore previous state
+        self.interrupt_nesting_depth -= 1;
+        self.current_interrupt_priority = saved_priority;
     }
 
     fn xbios_timer_set(&mut self, config: XbiosTimerConfig) {
@@ -442,6 +523,8 @@ impl AtariMachine {
             config.enable_port + 12,
             self.memory.mfp.read8(config.enable_port + 12) | (1 << config.bit),
         );
+        // Update cycle-accurate timer scheduling
+        self.memory.mfp.sync_cpu_cycle(self.cpu.total_cycles());
     }
 
     fn handle_gemdos(&mut self, func: u16, sp: u32) {
@@ -601,6 +684,30 @@ impl AtariMachine {
         (out_left, out_right)
     }
 
+    /// Synchronize timing systems after a seek or time discontinuity.
+    ///
+    /// Call this after fast-forwarding to ensure MFP timers and YM2149
+    /// are aligned with the current CPU cycle count.
+    pub fn sync_timing(&mut self) {
+        let cpu_cycle = self.cpu.total_cycles();
+
+        // Reset MFP timer states (clears pending/in-service, resets counters)
+        self.memory.mfp.sync_cpu_cycle(cpu_cycle);
+
+        // Clear interrupt state in case we were mid-interrupt during seek
+        self.interrupt_nesting_depth = 0;
+        self.current_interrupt_priority = 0;
+
+        // Flush any pending YM2149 writes before syncing cycle
+        self.memory.ym2149.flush_pending_writes();
+        self.memory.ym2149.sync_sample_cycle(cpu_cycle);
+
+        // Sync STE DAC bus contention tracking
+        self.memory.ste_dac.sync_contention(cpu_cycle);
+
+        self.memory.cpu_cycles = cpu_cycle;
+    }
+
     /// Get reference to YM2149.
     pub fn ym2149(&self) -> &Ym2149 {
         &self.memory.ym2149
@@ -609,6 +716,95 @@ impl AtariMachine {
     /// Get mutable reference to YM2149 (for channel muting).
     pub fn ym2149_mut(&mut self) -> &mut Ym2149 {
         &mut self.memory.ym2149
+    }
+
+    /// Check if YM2149 output is being mixed (via LMC1992 setting).
+    ///
+    /// Returns false when the SNDH driver has set the mixer to DMA-only mode.
+    pub fn is_ym_mixed(&self) -> bool {
+        self.memory.lmc1992.should_mix_ym()
+    }
+
+    /// Mute or unmute the STE DAC left channel.
+    pub fn set_dac_mute_left(&mut self, mute: bool) {
+        self.memory.ste_dac.set_mute_left(mute);
+    }
+
+    /// Mute or unmute the STE DAC right channel.
+    pub fn set_dac_mute_right(&mut self, mute: bool) {
+        self.memory.ste_dac.set_mute_right(mute);
+    }
+
+    /// Check if DAC left channel is muted.
+    pub fn is_dac_left_muted(&self) -> bool {
+        self.memory.ste_dac.is_left_muted()
+    }
+
+    /// Check if DAC right channel is muted.
+    pub fn is_dac_right_muted(&self) -> bool {
+        self.memory.ste_dac.is_right_muted()
+    }
+
+    /// Get current DAC levels for visualization (normalized 0.0 to 1.0).
+    pub fn get_dac_levels(&self) -> (f32, f32) {
+        self.memory.ste_dac.get_levels()
+    }
+
+    /// Check if STE DAC has been used (DMA playback was activated).
+    ///
+    /// Runtime detection of STE features, independent of FLAG tag.
+    pub fn was_ste_dac_used(&self) -> bool {
+        self.memory.ste_dac.was_used()
+    }
+
+    /// Get LMC1992 master volume in dB (-80 to 0).
+    pub fn lmc1992_master_volume_db(&self) -> i8 {
+        self.memory.lmc1992.master_volume_db()
+    }
+
+    /// Get LMC1992 left volume in dB (-40 to 0).
+    pub fn lmc1992_left_volume_db(&self) -> i8 {
+        self.memory.lmc1992.left_volume_db()
+    }
+
+    /// Get LMC1992 right volume in dB (-40 to 0).
+    pub fn lmc1992_right_volume_db(&self) -> i8 {
+        self.memory.lmc1992.right_volume_db()
+    }
+
+    /// Get LMC1992 bass in dB (-12 to +12).
+    pub fn lmc1992_bass_db(&self) -> i8 {
+        self.memory.lmc1992.bass_db()
+    }
+
+    /// Get LMC1992 treble in dB (-12 to +12).
+    pub fn lmc1992_treble_db(&self) -> i8 {
+        self.memory.lmc1992.treble_db()
+    }
+
+    /// Get LMC1992 master volume raw value (0-40).
+    pub fn lmc1992_master_volume_raw(&self) -> u8 {
+        self.memory.lmc1992.master_volume()
+    }
+
+    /// Get LMC1992 left volume raw value (0-20).
+    pub fn lmc1992_left_volume_raw(&self) -> u8 {
+        self.memory.lmc1992.left_volume()
+    }
+
+    /// Get LMC1992 right volume raw value (0-20).
+    pub fn lmc1992_right_volume_raw(&self) -> u8 {
+        self.memory.lmc1992.right_volume()
+    }
+
+    /// Get LMC1992 bass raw value (0-12).
+    pub fn lmc1992_bass_raw(&self) -> u8 {
+        self.memory.lmc1992.bass()
+    }
+
+    /// Get LMC1992 treble raw value (0-12).
+    pub fn lmc1992_treble_raw(&self) -> u8 {
+        self.memory.lmc1992.treble()
     }
 
     fn configure_return_by_rts(&mut self) {
@@ -625,6 +821,15 @@ impl AtariMachine {
     }
 
     fn jmp_binary(&mut self, pc: u32, timeout_frames: u32) -> Result<bool> {
+        self.jmp_binary_internal(pc, timeout_frames, true)
+    }
+
+    /// Execute without checking for timer interrupts (used during IRQ handlers).
+    fn jmp_binary_no_timer_check(&mut self, pc: u32, timeout_frames: u32) -> Result<bool> {
+        self.jmp_binary_internal(pc, timeout_frames, false)
+    }
+
+    fn jmp_binary_internal(&mut self, pc: u32, timeout_frames: u32, check_timers: bool) -> Result<bool> {
         self.memory.write_long(0x14, RTE_INSTRUCTION_ADDR);
         self.memory.write_long(4, pc);
 
@@ -646,7 +851,9 @@ impl AtariMachine {
             if opcode & 0xFFF0 == 0x4E40 {
                 let vector = (opcode & 0x000F) as u8;
                 if self.handle_trap(vector) {
-                    executed += 40;
+                    // Add TRAP exception processing cycles to CPU counter
+                    self.cpu.add_cycles(CYCLES_TRAP);
+                    executed += CYCLES_TRAP as usize;
                     continue;
                 }
             }
@@ -657,8 +864,34 @@ impl AtariMachine {
                 break;
             }
 
+            // Update memory's cycle counter for cycle-accurate YM2149 writes
+            self.memory.cpu_cycles = self.cpu.total_cycles();
             let step_cycles = self.cpu.step(&mut self.memory);
             executed += step_cycles;
+
+            // Add DMA bus contention cycles (STE DMA steals bus cycles from CPU)
+            let contention = self.memory.ste_dac.get_bus_contention_cycles(self.cpu.total_cycles());
+            if contention > 0 {
+                self.cpu.add_cycles(contention);
+                executed += contention as usize;
+            }
+
+            // Check for cycle-accurate timer interrupts (if enabled).
+            // Nested interrupt logic is handled in dispatch_timer_interrupt.
+            if check_timers && self.cycle_accurate_timers {
+                let cpu_cycle = self.cpu.total_cycles();
+                if let Some(next_fire) = self.memory.mfp.next_timer_fire_cycle() {
+                    // Add MFP-internal latency before dispatch.
+                    // The CPU-side latency (instruction completion) is implicit -
+                    // we only check after each instruction, so longer instructions
+                    // naturally delay interrupt recognition.
+                    if cpu_cycle >= next_fire + MFP_INTERRUPT_LATENCY_CYCLES {
+                        if let Some(timer_id) = self.memory.mfp.check_timers_at_cycle(cpu_cycle) {
+                            self.dispatch_timer_interrupt(timer_id);
+                        }
+                    }
+                }
+            }
         }
 
         if !self.memory.reset_triggered && !self.cpu.is_stopped() {

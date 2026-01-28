@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use super::psg_output::write_frames_to_psg;
-use super::sample_voice::{HardwareEnvelopeState, SampleVoiceMixer, note_frequency};
+use super::sample_voice::{HardwareEnvelopeState, SampleVoiceMixer, sample_note_frequency};
 use crate::channel_player::{ChannelFrame, ChannelPlayer, SampleCommand, SamplePlaybackParams};
 use crate::effect_context::EffectContext;
 use crate::format::{AksSong, InstrumentType, Subsong};
@@ -63,9 +63,12 @@ impl TickContext<'_> {
         self.apply_frame_samples();
         observer(self.frame_buffer);
 
+        // Event track: trigger digidrum if there's an event at this line
+        // AT3 checks !eventCell.isEmpty() and then validates instrument exists
+        // We check >= 0 since instrument 0 could be valid (trigger_event_sample validates)
         if is_first_tick
             && let Some(event_value) = self.read_special_track_value(false)
-            && event_value > 0
+            && event_value >= 0
         {
             self.trigger_event_sample(event_value as usize);
         }
@@ -217,16 +220,21 @@ impl TickContext<'_> {
             return;
         };
 
-        let pitch_hz = note_frequency(psg.reference_frequency, sample.digidrum_note);
+        // For digidrums, pitch comes from digidrum_note
+        // Formula: step = (samplePlayerFreq / outputRate) * (pitchHz / referenceFreq)
+        // For default digidrum_note=72 and ref=440, pitch_hz = 440, so ratio = 1.0
+        let pitch_hz = sample_note_frequency(psg.reference_frequency, sample.digidrum_note);
         if pitch_hz <= 0.0 {
             return;
         }
 
+        // Digidrums NEVER loop - AT3 forces looping=false regardless of sample settings
+        // This is the key difference from channel samples which may loop
         let params = SamplePlaybackParams {
             data: Arc::clone(&sample.data),
             loop_start: sample.loop_start_index,
             loop_end: sample.end_index,
-            looping: sample.is_looping,
+            looping: false, // CRITICAL: digidrums are one-shot, never loop!
             pitch_hz,
             amplification: sample.amplification_ratio,
             volume: 15,
@@ -333,5 +341,12 @@ fn read_special_track_value_internal(
     };
 
     let track = tracks.get(&track_index)?;
-    track.latest_value(line)
+
+    // Speed tracks use latest_value (value persists until changed)
+    // Event tracks use value_at (each event triggers once at its exact line)
+    if speed {
+        track.latest_value(line)
+    } else {
+        track.value_at(line)
+    }
 }

@@ -47,9 +47,10 @@ impl BiquadLP {
     }
 
     fn process(&mut self, x: f32) -> f32 {
-        let y = self.b0 * x + self.b1 * self.z1 + self.b2 * self.z2
-            - self.a1 * self.z1
-            - self.a2 * self.z2;
+        let y = self.b0.mul_add(
+            x,
+            self.b1.mul_add(self.z1, self.b2.mul_add(self.z2, (-self.a1).mul_add(self.z1, -self.a2 * self.z2))),
+        );
         self.z2 = self.z1;
         self.z1 = y;
         y
@@ -155,8 +156,9 @@ impl SoftVoice {
         };
 
         // Modulate PWM and filter cutoff with env for synthy movement
-        self.pwm_width = (0.5 + 0.3 * (env - 0.5)).clamp(0.1, 0.9);
-        self.filt_cut = (300.0 + env * 7000.0).clamp(100.0, 10_000.0);
+        // 0.5 + 0.3 * (env - 0.5) = 0.35 + 0.3*env
+        self.pwm_width = env.mul_add(0.3, 0.35).clamp(0.1, 0.9);
+        self.filt_cut = env.mul_add(7000.0, 300.0).clamp(100.0, 10_000.0);
         self.biq.set_lowpass(self.filt_cut, self.filt_q);
 
         // Oscillator: saw + pulse mixture
@@ -170,7 +172,7 @@ impl SoftVoice {
         } else {
             -1.0
         };
-        let mut osc = 0.7 * saw + 0.3 * pulse;
+        let mut osc = saw.mul_add(0.7, pulse * 0.3);
 
         // Filter
         osc = self.biq.process(osc);
@@ -178,9 +180,9 @@ impl SoftVoice {
         let drive = 1.6;
         let sat = (osc * drive).tanh() / (drive.tanh());
         // Blend some pre-filter to retain presence
-        let blended = 0.7 * sat + 0.3 * ((0.7 * saw + 0.3 * pulse) * 0.8);
+        let blended = sat.mul_add(0.7, saw.mul_add(0.7, pulse * 0.3) * 0.24);
         // Apply amplitude and a floor so tones remain audible even at low env
-        let env_amp = 0.35 + 0.65 * env;
+        let env_amp = env.mul_add(0.65, 0.35);
         blended * self.amp * env_amp
     }
 }
@@ -377,7 +379,7 @@ impl SoftSynth {
                 } else {
                     1.0
                 };
-                let noise_gain = (0.5 + 0.5 * env_amt) + 0.6 * burst_env;
+                let noise_gain = env_amt.mul_add(0.5, burst_env.mul_add(0.6, 0.5));
                 v += (noise_hp * noise_gain * fixed_amp * 0.8).clamp(-1.2, 1.2);
             } else {
                 self.noise_gate_prev[i] = false;
@@ -396,7 +398,7 @@ impl SoftSynth {
         let mut out = combined - self.filter_memory;
         // Optional color filter
         if self.color_filter {
-            let filtered = (self.lp_mem0 * 0.25) + (self.lp_mem1 * 0.5) + (out * 0.25);
+            let filtered = self.lp_mem0.mul_add(0.25, self.lp_mem1.mul_add(0.5, out * 0.25));
             self.lp_mem0 = self.lp_mem1;
             self.lp_mem1 = out;
             out = filtered;

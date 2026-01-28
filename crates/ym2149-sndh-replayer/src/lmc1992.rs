@@ -136,7 +136,7 @@ impl ShelvingFilter {
 
     /// Process a single sample through first-order IIR.
     fn process(&mut self, input: f32) -> f32 {
-        let output = self.b0 * input + self.b1 * self.x1 - self.a1 * self.y1;
+        let output = self.b0.mul_add(input, self.b1.mul_add(self.x1, -self.a1 * self.y1));
         self.x1 = input;
         self.y1 = output;
         output
@@ -520,8 +520,7 @@ impl Lmc1992 {
 
         #[cfg(feature = "lmc1992-debug")]
         eprintln!(
-            "[LMC1992] Filter update: bass_db={}, treble_db={} (cascaded 2x{}dB/stage)",
-            bass_db, treble_db, bass_db_per_stage
+            "[LMC1992] Filter update: bass_db={bass_db}, treble_db={treble_db} (cascaded 2x{bass_db_per_stage}dB/stage)"
         );
     }
 
@@ -541,6 +540,56 @@ impl Lmc1992 {
     /// Check if YM2149 should be mixed.
     pub fn should_mix_ym(&self) -> bool {
         self.mix_ym
+    }
+
+    /// Get master volume (0-40, where 40 = 0dB, 0 = -80dB).
+    pub fn master_volume(&self) -> u8 {
+        self.master_volume
+    }
+
+    /// Get left channel volume (0-20, where 20 = 0dB, 0 = -40dB).
+    pub fn left_volume(&self) -> u8 {
+        self.left_volume
+    }
+
+    /// Get right channel volume (0-20, where 20 = 0dB, 0 = -40dB).
+    pub fn right_volume(&self) -> u8 {
+        self.right_volume
+    }
+
+    /// Get bass setting (0-12, where 6 = flat, 0 = -12dB, 12 = +12dB).
+    pub fn bass(&self) -> u8 {
+        self.bass
+    }
+
+    /// Get treble setting (0-12, where 6 = flat, 0 = -12dB, 12 = +12dB).
+    pub fn treble(&self) -> u8 {
+        self.treble
+    }
+
+    /// Get master volume in dB (-80 to 0).
+    pub fn master_volume_db(&self) -> i8 {
+        (self.master_volume as i8 - 40) * 2
+    }
+
+    /// Get left volume in dB (-40 to 0).
+    pub fn left_volume_db(&self) -> i8 {
+        (self.left_volume as i8 - 20) * 2
+    }
+
+    /// Get right volume in dB (-40 to 0).
+    pub fn right_volume_db(&self) -> i8 {
+        (self.right_volume as i8 - 20) * 2
+    }
+
+    /// Get bass in dB (-12 to +12).
+    pub fn bass_db(&self) -> i8 {
+        (self.bass as i8 - 6) * 2
+    }
+
+    /// Get treble in dB (-12 to +12).
+    pub fn treble_db(&self) -> i8 {
+        (self.treble as i8 - 6) * 2
     }
 
     /// Process stereo audio through the LMC1992.
@@ -669,9 +718,7 @@ mod tests {
         // should not amplify the signal
         assert!(
             left <= input + 100,
-            "Treble cut should not amplify: {} > {}",
-            left,
-            input
+            "Treble cut should not amplify: {left} > {input}"
         );
     }
 }

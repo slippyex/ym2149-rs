@@ -1,7 +1,15 @@
 //! YM2149 lookup tables
+//!
+//! Pre-computed tables for efficient YM2149 emulation.
 
-/// Envelope data: 10 shapes × 32 steps × 4 phases = 1280 bytes
-/// Accessed as: ENV_DATA[shape * 32 * 4 + pos + 64]
+/// Envelope data: 10 unique shapes × 128 entries each = 1280 bytes
+///
+/// Each envelope shape consists of 4 phases of 32 steps each (128 entries total).
+/// The `EnvelopeGenerator` accesses this as: `ENV_DATA[data_offset + (position + 64)]`
+/// where:
+/// - `data_offset = SHAPE_TO_ENV[shape] * 128` (0, 128, 256, ..., 1152)
+/// - `position` ranges from -64 to 63, so `position + 64` ranges 0..128
+/// - Maximum index: 1152 + 127 = 1279 (within bounds)
 #[rustfmt::skip]
 pub static ENV_DATA: [u8; 10 * 32 * 4] = [
     // Env00xx (shape 0: \_____)

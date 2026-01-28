@@ -254,25 +254,25 @@ impl WaveformSynthesizer {
             // Decay shapes: start high, go low
             0x00..=0x03 | 0x09 => {
                 // Single decay: high to low
-                1.0 - phase * 2.0
+                phase.mul_add(-2.0, 1.0)
             }
             // Attack shapes: start low, go high
             0x04..=0x07 | 0x0F => {
                 // Single attack: low to high
-                phase * 2.0 - 1.0
+                phase.mul_add(2.0, -1.0)
             }
             // Sawtooth down: continuous decay
             0x08 => {
                 // Repeating sawtooth down
-                1.0 - phase * 2.0
+                phase.mul_add(-2.0, 1.0)
             }
             // Triangle: /\/\/\
             0x0A => {
                 // Triangle wave
                 if phase < 0.5 {
-                    phase * 4.0 - 1.0 // Rising: -1 to 1
+                    phase.mul_add(4.0, -1.0) // Rising: -1 to 1
                 } else {
-                    3.0 - phase * 4.0 // Falling: 1 to -1
+                    phase.mul_add(-4.0, 3.0) // Falling: 1 to -1
                 }
             }
             // Decay + hold high
@@ -283,7 +283,7 @@ impl WaveformSynthesizer {
             // Sawtooth up: continuous attack
             0x0C => {
                 // Repeating sawtooth up
-                phase * 2.0 - 1.0
+                phase.mul_add(2.0, -1.0)
             }
             // Attack + hold high
             0x0D => {

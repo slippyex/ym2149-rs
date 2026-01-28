@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>YM2149 Web Player</title>
+        <meta
+            name="description"
+            content="Play YM2149 chiptunes directly in your browser. Browse 8000+ tracks from SNDH, YM, AY, and Arkos collections."
+        />
+        <meta property="og:title" content="YM2149 Web Player" />
+        <meta
+            property="og:description"
+            content="Play YM2149 chiptunes directly in your browser with real-time visualization."
+        />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://ym2149-rs.org/demo/" />
+        <link rel="canonical" href="https://ym2149-rs.org/demo/" />
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+      <script type="module" crossorigin src="./index.dev.YN7oODjz.js"></script>
+      <link rel="stylesheet" crossorigin href="./index.ToOF9r2H.css">
+    </head>
+    <body
+        class="font-display text-gray-100 h-screen flex flex-col overflow-hidden"
+    >
+        <!-- Drop overlay for drag & drop -->
+        <div id="dropOverlay">Drop audio files here</div>
+
+        <!-- Header -->
+        <header
+            class="bg-chip-darker/90 backdrop-blur-lg border-b border-purple-900/20 px-3 py-2 shrink-0"
+        >
+            <div class="flex items-center justify-between">
+                <!-- Mobile menu button -->
+                <button
+                    id="mobileMenuBtn"
+                    class="flex lg:hidden items-center justify-center w-10 h-10 -ml-1 mr-2 text-chip-cyan bg-chip-dark rounded-lg border border-gray-700 active:bg-gray-700"
+                    title="Browse tracks"
+                >
+                    <svg
+                        class="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M4 6h16M4 12h16M4 18h16"
+                        />
+                    </svg>
+                </button>
+                <a href="../" class="flex items-center space-x-2">
+                    <div
+                        class="w-8 h-8 rounded-lg bg-gradient-to-br from-chip-purple to-chip-cyan flex items-center justify-center"
+                    >
+                        <span class="font-mono font-bold text-xs">YM</span>
+                    </div>
+                    <span
+                        class="font-mono font-semibold text-sm hidden sm:inline"
+                        >YM2149 Web Player</span
+                    >
+                </a>
+
+                <!-- Search -->
+                <div class="flex-1 max-w-xs mx-3">
+                    <div class="relative">
+                        <input
+                            type="text"
+                            id="searchInput"
+                            placeholder="Search..."
+                            class="w-full bg-chip-dark border border-gray-800 rounded px-3 py-1.5 pl-8 pr-14 text-sm focus:outline-none focus:border-chip-purple/50"
+                        />
+                        <svg
+                            class="absolute left-2.5 top-2 w-3.5 h-3.5 text-gray-500"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                        </svg>
+                        <span
+                            id="searchCount"
+                            class="absolute right-6 top-1.5 text-xs text-gray-500 hidden"
+                        ></span>
+                        <button
+                            id="searchClear"
+                            class="absolute right-1.5 top-1 p-1 text-gray-500 hover:text-white rounded hidden"
+                            title="Clear search"
+                        >
+                            <svg
+                                class="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <label
+                        class="cursor-pointer text-xs text-chip-purple hover:text-chip-cyan transition-colors"
+                    >
+                        <input
+                            type="file"
+                            id="fileInput"
+                            accept=".ym,.aks,.sndh,.ay"
+                            class="hidden"
+                        />
+                        + Load
+                    </label>
+                    <button
+                        id="helpBtn"
+                        class="w-6 h-6 rounded-full border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 text-xs font-bold transition-colors"
+                        title="Keyboard shortcuts (?)"
+                    >?</button>
+                    <a
+                        href="../"
+                        class="text-gray-400 hover:text-white text-xs hidden md:block"
+                        >Back</a
+                    >
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex overflow-hidden relative">
+            <!-- Mobile sidebar backdrop -->
+            <div
+                id="sidebarBackdrop"
+                class="fixed inset-0 bg-black/60 z-20 hidden lg:hidden"
+                aria-hidden="true"
+            ></div>
+
+            <!-- Left: Collection Browser -->
+            <aside
+                id="sidebar"
+                class="w-72 lg:w-80 bg-chip-darker border-r border-gray-800 flex flex-col shrink-0 transition-all duration-300 z-30"
+            >
+                <!-- Sidebar Toggle (visible when collapsed on mobile) -->
+                <button
+                    id="sidebarToggle"
+                    class="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-chip-darker border border-gray-800 border-l-0 rounded-r-lg p-2 hidden"
+                    title="Toggle Browser"
+                >
+                    <svg
+                        class="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 5l7 7-7 7"
+                        />
+                    </svg>
+                </button>
+                <!-- Collection Tabs -->
+                <div
+                    id="collectionTabs"
+                    class="flex flex-wrap gap-1 p-2 border-b border-gray-800 text-xs"
+                >
+                    <!-- Populated by JS -->
+                </div>
+
+                <!-- Track List -->
+                <div id="trackList" class="virtual-list flex-1 overflow-y-auto relative">
+                    <!-- Sticky Author Header -->
+                    <div id="stickyAuthorHeader" class="sticky-author-header hidden">
+                        <span id="stickyAuthorCollection" class="text-chip-purple/60 mr-2"></span>
+                        <span id="stickyAuthorName" class="truncate"></span>
+                    </div>
+                    <div id="trackListInner" class="relative">
+                        <!-- Tracks rendered here -->
+                    </div>
+                </div>
+
+                <div
+                    class="p-2 border-t border-gray-800 text-xs text-gray-500 flex justify-between items-center"
+                >
+                    <span><span id="totalTracks">0</span> tracks</span>
+                    <button
+                        id="sortModeBtn"
+                        class="text-chip-purple hover:text-chip-cyan text-xs"
+                        title="Sort authors by: A-Z / track count"
+                    >
+                        A-Z
+                    </button>
+                    <button
+                        id="toggleCollapseBtn"
+                        class="text-chip-purple hover:text-chip-cyan text-xs"
+                    >
+                        Expand All
+                    </button>
+                    <span id="filteredCount"></span>
+                    <button
+                        id="hideSidebarBtn"
+                        class="text-gray-500 hover:text-white p-1"
+                        title="Hide Browser"
+                    >
+                        <svg
+                            class="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                            />
+                        </svg>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Right: Player & Visualization -->
+            <section
+                id="playerSection"
+                class="flex-1 flex flex-col overflow-y-auto lg:overflow-hidden bg-chip-dark"
+            >
+                <!-- Now Playing -->
+                <div class="p-4 border-b border-gray-800">
+                    <div class="flex items-start justify-between gap-4 mb-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <h1
+                                    id="songTitle"
+                                    class="text-xl font-bold truncate"
+                                >
+                                    Select a track
+                                </h1>
+                                <button
+                                    id="playerFavBtn"
+                                    class="text-gray-600 hover:text-red-400 transition-colors hidden"
+                                    title="Add to favorites"
+                                >
+                                    <svg
+                                        class="w-5 h-5"
+                                        id="playerFavIcon"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                            <p
+                                id="songAuthor"
+                                class="text-gray-400 text-sm truncate"
+                            >
+                                -
+                            </p>
+                            <div
+                                class="flex items-center gap-3 mt-1 text-xs text-gray-500"
+                            >
+                                <span
+                                    id="songFormat"
+                                    class="px-1.5 py-0.5 rounded bg-chip-purple/20 text-chip-purple"
+                                    >-</span
+                                >
+                                <span id="songFrames">-</span>
+                                <span
+                                    id="songChannels"
+                                    class="px-1.5 py-0.5 rounded bg-chip-cyan/20 text-chip-cyan hidden"
+                                    >-</span
+                                >
+                                <select
+                                    id="subsongSelect"
+                                    class="hidden bg-gray-800 text-gray-300 text-xs rounded px-2 py-0.5 border border-gray-700 cursor-pointer hover:border-chip-purple/50 focus:outline-none focus:border-chip-purple"
+                                >
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                        <div
+                            id="envelopeShape"
+                            class="font-mono text-xl text-chip-cyan"
+                            title="Envelope Shape"
+                        >
+                            -
+                        </div>
+                    </div>
+
+                    <!-- LMC1992 State (SNDH only) -->
+                    <div
+                        id="lmc1992Panel"
+                        class="hidden mb-2 p-2 bg-gray-800/50 rounded text-xs"
+                    >
+                        <div class="flex items-center gap-4 flex-wrap">
+                            <span class="text-gray-500 font-semibold"
+                                >LMC1992</span
+                            >
+                            <span class="text-gray-400"
+                                >Vol:
+                                <span
+                                    id="lmcMasterVol"
+                                    class="text-white font-mono"
+                                    >0</span
+                                >dB</span
+                            >
+                            <span class="text-gray-400"
+                                >L:
+                                <span
+                                    id="lmcLeftVol"
+                                    class="text-white font-mono"
+                                    >0</span
+                                >dB</span
+                            >
+                            <span class="text-gray-400"
+                                >R:
+                                <span
+                                    id="lmcRightVol"
+                                    class="text-white font-mono"
+                                    >0</span
+                                >dB</span
+                            >
+                            <span class="text-gray-400"
+                                >Bass:
+                                <span
+                                    id="lmcBass"
+                                    class="text-chip-cyan font-mono"
+                                    >0</span
+                                >dB</span
+                            >
+                            <span class="text-gray-400"
+                                >Treble:
+                                <span
+                                    id="lmcTreble"
+                                    class="text-chip-purple font-mono"
+                                    >0</span
+                                >dB</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Similar Tracks -->
+                    <div id="similarPanel" class="hidden mb-2">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs text-gray-500"
+                                >Similar tracks by</span
+                            >
+                            <span
+                                id="similarAuthor"
+                                class="text-xs text-gray-400"
+                                >-</span
+                            >
+                        </div>
+                        <div
+                            id="similarTracks"
+                            class="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-gray-700"
+                        >
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Waveform Overview + Progress -->
+                    <div class="mb-3">
+                        <!-- Waveform scrubber (replaces progress bar when available) -->
+                        <div
+                            id="waveformScrubber"
+                            class="relative h-16 rounded cursor-pointer hidden"
+                            style="background: #1a1a2e"
+                        >
+                            <canvas
+                                id="waveformOverview"
+                                class="absolute inset-0 w-full h-full rounded"
+                            ></canvas>
+                            <!-- Time overlay -->
+                            <div
+                                class="absolute bottom-1 left-2 text-xs font-mono text-white/70 pointer-events-none z-10"
+                                id="waveformCurrentTime"
+                            >
+                                0:00
+                            </div>
+                            <div
+                                class="absolute bottom-1 right-2 text-xs font-mono text-white/70 pointer-events-none z-10"
+                                id="waveformTotalTime"
+                            >
+                                0:00
+                            </div>
+                            <!-- Playhead -->
+                            <div
+                                id="waveformPlayhead"
+                                class="absolute top-0 bottom-0 w-0.5 bg-white pointer-events-none z-20"
+                                style="left: 0%"
+                            ></div>
+                            <!-- Loop markers -->
+                            <div
+                                id="waveformLoopA"
+                                class="absolute top-0 bottom-0 w-0.5 bg-chip-cyan hidden pointer-events-none z-10"
+                                style="left: 0%"
+                            ></div>
+                            <div
+                                id="waveformLoopB"
+                                class="absolute top-0 bottom-0 w-0.5 bg-chip-cyan hidden pointer-events-none z-10"
+                                style="left: 100%"
+                            ></div>
+                            <div
+                                id="waveformLoopRegion"
+                                class="absolute top-0 bottom-0 bg-chip-cyan/20 hidden pointer-events-none"
+                                style="left: 0%; width: 0%"
+                            ></div>
+                        </div>
+                        <!-- Fallback progress bar (shown before waveform is ready) -->
+                        <div
+                            id="progressContainer"
+                            class="flex items-center gap-2"
+                        >
+                            <span
+                                id="currentTime"
+                                class="text-xs font-mono text-gray-400 w-10 text-right"
+                                >0:00</span
+                            >
+                            <div class="flex-1 relative">
+                                <input
+                                    type="range"
+                                    id="progressBar"
+                                    class="w-full"
+                                    min="0"
+                                    max="100"
+                                    value="0"
+                                    disabled
+                                />
+                                <!-- Loop markers overlay -->
+                                <div
+                                    id="loopMarkerA"
+                                    class="absolute top-0 bottom-0 w-0.5 bg-chip-cyan hidden pointer-events-none"
+                                    style="left: 0%"
+                                ></div>
+                                <div
+                                    id="loopMarkerB"
+                                    class="absolute top-0 bottom-0 w-0.5 bg-chip-cyan hidden pointer-events-none"
+                                    style="left: 100%"
+                                ></div>
+                                <div
+                                    id="loopRegion"
+                                    class="absolute top-0 bottom-0 bg-chip-cyan/20 hidden pointer-events-none"
+                                    style="left: 0%; width: 0%"
+                                ></div>
+                            </div>
+                            <span
+                                id="totalTime"
+                                class="text-xs font-mono text-gray-400 w-10"
+                                >0:00</span
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div
+                        class="controls-row flex items-center justify-between flex-wrap gap-2"
+                    >
+                        <div class="flex items-center gap-2">
+                            <button
+                                id="restartBtn"
+                                class="control-btn w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center"
+                                disabled
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                                </svg>
+                            </button>
+                            <button
+                                id="playBtn"
+                                class="w-12 h-12 rounded-full bg-gradient-to-br from-chip-purple to-chip-cyan hover:opacity-90 disabled:opacity-30 flex items-center justify-center"
+                                disabled
+                            >
+                                <svg
+                                    id="playIcon"
+                                    class="w-5 h-5 ml-0.5"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M8 5v14l11-7z" />
+                                </svg>
+                                <svg
+                                    id="pauseIcon"
+                                    class="w-5 h-5 hidden"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                </svg>
+                            </button>
+                            <button
+                                id="stopBtn"
+                                class="control-btn w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center"
+                                disabled
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path d="M6 6h12v12H6z" />
+                                </svg>
+                            </button>
+                            <button
+                                id="nextBtn"
+                                class="control-btn w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center"
+                                disabled
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                id="shuffleBtn"
+                                class="toggle-btn w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center"
+                                title="Shuffle (S)"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                id="autoPlayBtn"
+                                class="toggle-btn w-9 h-9 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center"
+                                title="Auto-Play Next (N)"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- A-B Loop -->
+                        <div class="flex items-center gap-1">
+                            <button
+                                id="loopABtn"
+                                class="px-2 py-1 rounded text-xs bg-gray-800 hover:bg-gray-700 disabled:opacity-30"
+                                disabled
+                                title="Set Loop Start (A)"
+                            >
+                                A
+                            </button>
+                            <button
+                                id="loopBBtn"
+                                class="px-2 py-1 rounded text-xs bg-gray-800 hover:bg-gray-700 disabled:opacity-30"
+                                disabled
+                                title="Set Loop End (B)"
+                            >
+                                B
+                            </button>
+                            <button
+                                id="loopClearBtn"
+                                class="px-1.5 py-1 rounded text-xs bg-gray-800 hover:bg-gray-700 disabled:opacity-30 hidden"
+                                title="Clear Loop"
+                            >
+                                ✕
+                            </button>
+                            <span
+                                id="loopIndicator"
+                                class="text-xs text-chip-cyan hidden ml-1"
+                            ></span>
+                        </div>
+
+                        <!-- Channel Mutes (dynamically populated) -->
+                        <div
+                            id="channelMutes"
+                            class="flex items-center gap-1 flex-wrap"
+                        >
+                            <span class="text-xs text-gray-500 mr-1">CH:</span>
+                            <!-- Channel buttons added by JS -->
+                        </div>
+
+                        <!-- Speed, Volume & Export -->
+                        <div class="flex items-center gap-2">
+                            <select
+                                id="speedSelect"
+                                class="bg-gray-800 text-xs rounded px-1 py-1 border-none outline-none cursor-pointer"
+                                title="Playback Speed"
+                            >
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                            </select>
+                            <svg
+                                class="w-3.5 h-3.5 text-gray-500"
+                                fill="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"
+                                />
+                            </svg>
+                            <input
+                                type="range"
+                                id="volumeSlider"
+                                class="w-20"
+                                min="0"
+                                max="100"
+                                value="100"
+                            />
+                            <button
+                                id="shareBtn"
+                                class="p-1.5 rounded hover:bg-gray-800"
+                                title="Share Link"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                id="exportBtn"
+                                class="p-1.5 rounded hover:bg-gray-800"
+                                title="Export WAV"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                id="downloadBtn"
+                                class="p-1.5 rounded hover:bg-gray-800"
+                                title="Download Original File"
+                            >
+                                <svg
+                                    class="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visualization -->
+                <div class="flex-1 p-4 overflow-auto">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-sm font-semibold text-gray-400">
+                            Visualization
+                        </h2>
+                        <div class="flex gap-1">
+                            <button
+                                id="vizModeOsc"
+                                class="px-2 py-1 rounded text-xs bg-chip-purple/20 text-chip-purple active"
+                            >
+                                Oscilloscope
+                            </button>
+                            <button
+                                id="vizModeSpec"
+                                class="px-2 py-1 rounded text-xs bg-gray-800 text-gray-400 hover:bg-gray-700"
+                            >
+                                Spectrum
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Oscilloscope View (dynamically populated) -->
+                    <div id="oscView">
+                        <div id="oscChannels" class="grid gap-3 mb-3">
+                            <!-- Channel oscilloscopes added by JS -->
+                        </div>
+                        <div class="relative">
+                            <div
+                                class="absolute top-1 left-2 text-xs font-mono text-gray-400 z-10"
+                            >
+                                MONO OUTPUT
+                            </div>
+                            <canvas
+                                id="oscMono"
+                                class="viz-canvas w-full h-28 bg-chip-darker rounded-lg"
+                            ></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Spectrum View (dynamically populated) -->
+                    <div id="specView" class="hidden">
+                        <div id="specChannels" class="grid gap-3 mb-3">
+                            <!-- Channel spectrums added by JS -->
+                        </div>
+                        <div class="relative">
+                            <div
+                                class="absolute top-1 left-2 text-xs font-mono text-gray-400 z-10"
+                            >
+                                COMBINED
+                            </div>
+                            <canvas
+                                id="specCombined"
+                                class="viz-canvas w-full h-28 bg-chip-darker rounded-lg"
+                            ></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Toast Notification -->
+        <div
+            id="toast"
+            class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg transform transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-50"
+        >
+            <span id="toastMessage">Message</span>
+        </div>
+
+        <!-- Export Modal -->
+        <div
+            id="exportModal"
+            class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4"
+        >
+            <div
+                class="bg-chip-dark border border-gray-800 rounded-xl p-5 max-w-md w-full"
+            >
+                <h3 class="text-lg font-bold mb-4">Export to WAV</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1"
+                            >Duration (seconds)</label
+                        >
+                        <input
+                            type="number"
+                            id="exportDuration"
+                            value="180"
+                            min="1"
+                            max="600"
+                            class="w-full bg-chip-darker border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-chip-purple/50"
+                        />
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1"
+                            >Export Mode</label
+                        >
+                        <select
+                            id="exportMode"
+                            class="w-full bg-chip-darker border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-chip-purple/50"
+                        >
+                            <option value="mixed">Mixed (all channels)</option>
+                            <option value="stems">
+                                Individual Stems (per channel)
+                            </option>
+                        </select>
+                    </div>
+                    <div id="exportStemOptions" class="hidden">
+                        <label class="block text-sm text-gray-400 mb-1"
+                            >Channels to export</label
+                        >
+                        <div
+                            id="exportChannelCheckboxes"
+                            class="flex flex-wrap gap-2"
+                        >
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        Sample rate: 44100 Hz
+                    </div>
+                    <div id="exportProgress" class="hidden">
+                        <div class="text-sm text-gray-400 mb-1">
+                            Exporting...
+                        </div>
+                        <div
+                            class="h-2 bg-gray-800 rounded-full overflow-hidden"
+                        >
+                            <div
+                                id="exportProgressBar"
+                                class="h-full bg-chip-purple transition-all"
+                                style="width: 0%"
+                            ></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button
+                            id="exportCancel"
+                            class="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-sm"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            id="exportStart"
+                            class="px-3 py-1.5 rounded bg-chip-purple hover:bg-chip-purple/80 text-sm"
+                        >
+                            Export
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drop Zone -->
+        <div
+            id="dropZone"
+            class="fixed inset-0 bg-chip-purple/20 backdrop-blur-sm z-50 hidden flex items-center justify-center"
+        >
+            <div class="text-center">
+                <div class="text-5xl mb-3">📁</div>
+                <div class="text-lg font-bold">Drop file to play</div>
+                <div class="text-gray-400 text-sm">YM, SNDH, AY, AKS</div>
+            </div>
+        </div>
+
+
+
+
+        <!-- Help Modal -->
+        <div id="helpModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-chip-darker border border-gray-700 rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold gradient-text">YM2149 Web Player</h2>
+                    <button id="helpCloseBtn" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-chip-cyan font-semibold mb-2">Features</h3>
+                    <ul class="text-sm text-gray-300 space-y-1">
+                        <li>Play YM, SNDH, AY, and Arkos chiptune files</li>
+                        <li>Real-time oscilloscope and spectrum visualization</li>
+                        <li>Waveform scrubber for precise navigation</li>
+                        <li>A-B loop for practicing or enjoying sections</li>
+                        <li>Variable playback speed (0.5x - 2x)</li>
+                        <li>Multi-subsong support for SNDH files</li>
+                        <li>Similar tracks discovery (audio fingerprinting)</li>
+                        <li>Favorites, recently played, and pinned authors</li>
+                        <li>Drag & drop your own audio files</li>
+                        <li>WAV export with channel selection</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 class="text-chip-cyan font-semibold mb-2">Keyboard Shortcuts</h3>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="flex justify-between"><span class="text-gray-400">Space</span><span>Play / Pause</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">R</span><span>Restart</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Arrow Right</span><span>Next track</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Shift + Arrows</span><span>Seek +/- 5s</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Arrow Up/Down</span><span>Volume</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">M</span><span>Mute/Unmute</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">S</span><span>Shuffle toggle</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">N</span><span>Auto-play toggle</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">F</span><span>Toggle favorite</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">A / B</span><span>Set loop points</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Shift + C</span><span>Clear loop</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">[ / ]</span><span>Prev/Next subsong</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">Tab</span><span>Toggle sidebar</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">?</span><span>Show this help</span></div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-gray-700 text-xs text-gray-500 text-center">
+                    Drag & drop YM, SNDH, AY files anywhere to add them to your library
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

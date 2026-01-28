@@ -38,9 +38,9 @@ pub struct SamplePlaybackParams {
     pub amplification: f32,
     /// Volume (0-15)
     pub volume: u8,
-    /// PSG sample player frequency
+    /// PSG sample player frequency in Hz (hardware playback rate)
     pub sample_player_frequency_hz: f32,
-    /// Reference frequency in Hz
+    /// Reference frequency in Hz (tuning reference, typically 440 Hz)
     pub reference_frequency_hz: f32,
     /// Start from beginning
     pub play_from_start: bool,

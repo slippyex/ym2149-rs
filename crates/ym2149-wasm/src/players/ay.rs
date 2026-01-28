@@ -111,9 +111,48 @@ impl AyWasmPlayer {
         self.player.chip().dump_registers()
     }
 
+    /// Get current per-channel audio outputs.
+    ///
+    /// Returns the actual audio output values (A, B, C) updated at sample rate.
+    pub fn get_channel_outputs(&self) -> (f32, f32, f32) {
+        self.player.chip().get_channel_outputs()
+    }
+
     /// Enable or disable the color filter.
     pub fn set_color_filter(&mut self, enabled: bool) {
         self.player.set_color_filter(enabled);
+    }
+
+    /// Generate samples with per-sample channel outputs for visualization.
+    ///
+    /// Fills the mono buffer with mixed samples and channels buffer with
+    /// per-sample channel outputs: [A, B, C, A, B, C, ...].
+    ///
+    /// Note: AY player generates samples in frame-sized batches internally,
+    /// so channel outputs are captured after each sample but may reflect
+    /// the frame-end state for cached samples.
+    pub fn generate_samples_with_channels_into(&mut self, mono: &mut [f32], channels: &mut [f32]) {
+        if self.unsupported {
+            mono.fill(0.0);
+            channels.fill(0.0);
+            return;
+        }
+
+        // Generate samples one at a time to capture channel outputs
+        let mut sample_buf = [0.0f32; 1];
+        for i in 0..mono.len() {
+            self.player.generate_samples_into(&mut sample_buf);
+            mono[i] = sample_buf[0];
+            let (a, b, c) = self.player.chip().get_channel_outputs();
+            channels[i * 3] = a;
+            channels[i * 3 + 1] = b;
+            channels[i * 3 + 2] = c;
+        }
+
+        if self.check_support().is_err() {
+            mono.fill(0.0);
+            channels.fill(0.0);
+        }
     }
 
     fn check_support(&mut self) -> Result<(), String> {

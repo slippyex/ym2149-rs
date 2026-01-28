@@ -252,22 +252,32 @@ impl PsgBank {
     /// bank.generate_samples_interleaved(&mut buffer);
     /// ```
     pub fn generate_samples_interleaved(&mut self, buffer: &mut [f32]) {
-        buffer.fill(0.0);
-        if self.scratch.len() < buffer.len() {
-            self.scratch.resize(buffer.len(), 0.0);
+        let psg_count = self.chips.len();
+        if psg_count == 0 {
+            buffer.fill(0.0);
+            return;
         }
-        let scratch = &mut self.scratch[..buffer.len()];
 
-        // Mix all PSGs into the buffer
-        for chip in &mut self.chips {
-            chip.generate_samples_into(scratch);
-            for (out, sample) in buffer.iter_mut().zip(scratch.iter()) {
-                *out += *sample;
+        // First chip: generate directly into buffer (avoids initial fill)
+        self.chips[0].generate_samples_into(buffer);
+
+        // Remaining chips: generate to scratch, then add to buffer
+        if psg_count > 1 {
+            if self.scratch.len() < buffer.len() {
+                self.scratch.resize(buffer.len(), 0.0);
+            }
+            let scratch = &mut self.scratch[..buffer.len()];
+
+            for chip in &mut self.chips[1..] {
+                chip.generate_samples_into(scratch);
+                for (out, sample) in buffer.iter_mut().zip(scratch.iter()) {
+                    *out += *sample;
+                }
             }
         }
 
-        // Normalize by PSG count to prevent clipping
-        let scale = 1.0 / self.psg_count() as f32;
+        // Normalize by PSG count to prevent clipping (single pass)
+        let scale = 1.0 / psg_count as f32;
         for sample in buffer.iter_mut() {
             *sample *= scale;
         }

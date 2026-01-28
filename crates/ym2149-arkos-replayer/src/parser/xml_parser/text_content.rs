@@ -521,7 +521,7 @@ pub fn handle_text_content(
         (ParseState::SubsongPsg, "samplePlayerFrequencyHz")
         | (ParseState::SubsongPsg, "samplePlayerFrequency") => {
             if let Some(psg) = current_psg {
-                psg.sample_player_frequency = current_text.parse().unwrap_or(11025);
+                psg.sample_player_frequency = current_text.parse().unwrap_or(8000);
             }
         }
         (ParseState::SubsongPsg, "mixingOutput") => {

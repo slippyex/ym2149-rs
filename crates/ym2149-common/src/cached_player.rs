@@ -102,6 +102,7 @@ impl SampleCache {
     /// Get the next sample from the cache.
     ///
     /// Returns 0.0 if the cache is empty.
+    #[inline]
     pub fn next_sample(&mut self) -> f32 {
         if self.len == 0 {
             return 0.0;

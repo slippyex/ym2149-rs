@@ -12,6 +12,8 @@ use crate::metadata::YmMetadata;
 /// SNDH player wrapper for WebAssembly.
 pub struct SndhWasmPlayer {
     player: SndhPlayer,
+    /// Cached STE detection (preserved across subsong changes)
+    uses_ste: bool,
 }
 
 impl SndhWasmPlayer {
@@ -27,8 +29,24 @@ impl SndhWasmPlayer {
             .init_subsong(default_subsong)
             .map_err(|e| format!("Failed to init SNDH subsong: {e}"))?;
 
+        // Warm-up: Generate audio to detect STE hardware usage at runtime.
+        // Some drivers don't enable DMA until actual playback starts.
+        // We generate ~500ms of audio and discard the output.
+        // Buffer size: 44100 floats = 22050 stereo frames = 500ms at 44.1kHz
+        // Use heap allocation to avoid stack overflow in WASM.
+        {
+            let mut discard_buffer = vec![0.0f32; 44100];
+            player.render_f32_stereo(&mut discard_buffer);
+        }
+
+        // Capture STE detection state BEFORE re-init (reset would clear it)
+        let uses_ste = player.uses_ste_features();
+
+        // Re-initialize to reset position to beginning (clean state)
+        let _ = player.init_subsong(default_subsong);
+
         let metadata = metadata_from_player(&player);
-        Ok((Self { player }, metadata))
+        Ok((Self { player, uses_ste }, metadata))
     }
 
     /// Start playback.
@@ -66,6 +84,11 @@ impl SndhWasmPlayer {
     /// Get playback position as percentage (0.0 to 1.0).
     pub fn playback_position(&self) -> f32 {
         self.player.progress()
+    }
+
+    /// Get the number of times the song has looped.
+    pub fn loop_count(&self) -> u32 {
+        self.player.loop_count()
     }
 
     /// Seek to a specific frame.
@@ -123,18 +146,110 @@ impl SndhWasmPlayer {
     }
 
     /// Mute or unmute a channel.
+    ///
+    /// SNDH has 5 logical channels:
+    /// - 0, 1, 2: YM2149 channels A, B, C
+    /// - 3: STE DAC Left
+    /// - 4: STE DAC Right
     pub fn set_channel_mute(&mut self, channel: usize, mute: bool) {
-        ChiptunePlayerBase::set_channel_mute(&mut self.player, channel, mute);
+        match channel {
+            0..=2 => {
+                // YM2149 channels
+                ChiptunePlayerBase::set_channel_mute(&mut self.player, channel, mute);
+            }
+            3 => {
+                // DAC Left
+                self.player.set_dac_mute_left(mute);
+            }
+            4 => {
+                // DAC Right
+                self.player.set_dac_mute_right(mute);
+            }
+            _ => {}
+        }
     }
 
     /// Check if a channel is muted.
+    ///
+    /// SNDH has 5 logical channels:
+    /// - 0, 1, 2: YM2149 channels A, B, C
+    /// - 3: STE DAC Left
+    /// - 4: STE DAC Right
     pub fn is_channel_muted(&self, channel: usize) -> bool {
-        ChiptunePlayerBase::is_channel_muted(&self.player, channel)
+        match channel {
+            0..=2 => ChiptunePlayerBase::is_channel_muted(&self.player, channel),
+            3 => self.player.is_dac_left_muted(),
+            4 => self.player.is_dac_right_muted(),
+            _ => false,
+        }
+    }
+
+    /// Get the number of channels.
+    ///
+    /// Always returns 5 for SNDH (3 YM2149 + 2 DAC).
+    /// DAC channels will show zero activity for non-STE songs.
+    pub fn channel_count(&self) -> usize {
+        5 // Always show all channels: 3 YM + 2 DAC (L/R)
+    }
+
+    /// Check if this SNDH uses STE hardware features.
+    pub fn uses_ste_features(&self) -> bool {
+        self.uses_ste
+    }
+
+    /// Get current DAC levels for visualization (normalized 0.0 to 1.0).
+    ///
+    /// Returns (left, right) amplitude values.
+    pub fn get_dac_levels(&self) -> (f32, f32) {
+        self.player.get_dac_levels()
     }
 
     /// Dump current PSG register values.
     pub fn dump_registers(&self) -> [u8; 16] {
         self.player.ym2149().dump_registers()
+    }
+
+    /// Get current per-channel audio outputs.
+    ///
+    /// Returns the actual audio output values (A, B, C) updated at sample rate.
+    pub fn get_channel_outputs(&self) -> (f32, f32, f32) {
+        self.player.ym2149().get_channel_outputs()
+    }
+
+    /// Generate samples with per-sample channel outputs for visualization.
+    ///
+    /// Fills the mono buffer with mixed samples and channels buffer with
+    /// per-sample channel outputs. For SNDH, we capture YM2149 channels
+    /// and STE DAC levels.
+    ///
+    /// Channel layout: [A, B, C, DAC_L, DAC_R] (always 5 channels for SNDH).
+    pub fn generate_samples_with_channels_into(&mut self, mono: &mut [f32], channels: &mut [f32]) {
+        let channel_count = self.channel_count();
+
+        // Generate samples in small batches and capture channel state after each
+        // Using batch size of 1 stereo frame (2 samples) for best accuracy
+        let mut stereo_buf = [0.0f32; 2];
+        let mut idx = 0;
+
+        while idx < mono.len() {
+            // Render one stereo frame
+            self.player.render_f32_stereo(&mut stereo_buf);
+            mono[idx] = (stereo_buf[0] + stereo_buf[1]) * 0.5;
+
+            // Capture YM2149 channel outputs
+            let (a, b, c) = self.player.ym2149().get_channel_outputs();
+            let base = idx * channel_count;
+            channels[base] = a;
+            channels[base + 1] = b;
+            channels[base + 2] = c;
+
+            // Capture DAC levels
+            let (dac_l, dac_r) = self.player.get_dac_levels();
+            channels[base + 3] = dac_l;
+            channels[base + 4] = dac_r;
+
+            idx += 1;
+        }
     }
 
     /// Enable or disable the color filter.
@@ -153,8 +268,63 @@ impl SndhWasmPlayer {
     }
 
     /// Set subsong (1-based). Returns true on success.
+    ///
+    /// Valid range: 1 to `subsong_count()`.
     pub fn set_subsong(&mut self, index: usize) -> bool {
+        if index < 1 || index > self.subsong_count() {
+            return false;
+        }
         self.player.init_subsong(index).is_ok()
+    }
+
+    /// Get LMC1992 master volume in dB (-80 to 0).
+    pub fn lmc1992_master_volume_db(&self) -> i8 {
+        self.player.lmc1992_master_volume_db()
+    }
+
+    /// Get LMC1992 left volume in dB (-40 to 0).
+    pub fn lmc1992_left_volume_db(&self) -> i8 {
+        self.player.lmc1992_left_volume_db()
+    }
+
+    /// Get LMC1992 right volume in dB (-40 to 0).
+    pub fn lmc1992_right_volume_db(&self) -> i8 {
+        self.player.lmc1992_right_volume_db()
+    }
+
+    /// Get LMC1992 bass in dB (-12 to +12).
+    pub fn lmc1992_bass_db(&self) -> i8 {
+        self.player.lmc1992_bass_db()
+    }
+
+    /// Get LMC1992 treble in dB (-12 to +12).
+    pub fn lmc1992_treble_db(&self) -> i8 {
+        self.player.lmc1992_treble_db()
+    }
+
+    /// Get LMC1992 master volume raw value (0-40).
+    pub fn lmc1992_master_volume_raw(&self) -> u8 {
+        self.player.lmc1992_master_volume_raw()
+    }
+
+    /// Get LMC1992 left volume raw value (0-20).
+    pub fn lmc1992_left_volume_raw(&self) -> u8 {
+        self.player.lmc1992_left_volume_raw()
+    }
+
+    /// Get LMC1992 right volume raw value (0-20).
+    pub fn lmc1992_right_volume_raw(&self) -> u8 {
+        self.player.lmc1992_right_volume_raw()
+    }
+
+    /// Get LMC1992 bass raw value (0-12).
+    pub fn lmc1992_bass_raw(&self) -> u8 {
+        self.player.lmc1992_bass_raw()
+    }
+
+    /// Get LMC1992 treble raw value (0-12).
+    pub fn lmc1992_treble_raw(&self) -> u8 {
+        self.player.lmc1992_treble_raw()
     }
 }
 

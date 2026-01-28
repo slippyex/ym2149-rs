@@ -37,9 +37,8 @@ impl ToneGenerator {
         self.period = period;
     }
 
-    /// Get current period
-    #[inline]
-    #[allow(dead_code)]
+    /// Get current period (test-only)
+    #[cfg(test)]
     pub fn period(&self) -> u32 {
         self.period
     }
@@ -74,13 +73,6 @@ impl ToneGenerator {
             self.edge_bits ^= 0x1f << channel_shift;
             self.counter = 0;
         }
-        self.edge_bits
-    }
-
-    /// Get the current edge bits
-    #[inline]
-    #[allow(dead_code)]
-    pub fn edge_bits(&self) -> u32 {
         self.edge_bits
     }
 
@@ -162,9 +154,8 @@ impl NoiseGenerator {
         self.output_mask
     }
 
-    /// Get current output mask
-    #[inline]
-    #[allow(dead_code)]
+    /// Get current output mask (test-only)
+    #[cfg(test)]
     pub fn output_mask(&self) -> u32 {
         self.output_mask
     }
@@ -215,10 +206,21 @@ impl EnvelopeGenerator {
     /// Set the envelope shape from register R13
     ///
     /// This triggers an envelope restart.
+    ///
+    /// # Envelope Data Layout
+    ///
+    /// The `ENV_DATA` table contains 10 unique envelope shapes, each with 128 entries
+    /// (32 steps × 4 phases). Shape register values 0-15 map to these 10 shapes via
+    /// `SHAPE_TO_ENV`. Access pattern: `ENV_DATA[data_offset + (position + 64)]`
+    ///
+    /// - `data_offset`: 0..=1152 (shape 0-9 × 128)
+    /// - `position + 64`: 0..=127 (position range -64..=63)
+    /// - Max index: 1152 + 127 = 1279 < 1280 (array size)
     #[inline]
     pub fn set_shape(&mut self, shape: u8) {
         let shape_index = (shape & 0x0f) as usize;
         self.data_offset = SHAPE_TO_ENV[shape_index] as usize * 32 * 4;
+        debug_assert!(self.data_offset <= 9 * 32 * 4, "data_offset out of range");
         self.position = -64;
         self.counter = 0;
     }
@@ -246,7 +248,10 @@ impl EnvelopeGenerator {
     /// Get the current envelope level (0-31)
     #[inline]
     pub fn level(&self) -> u32 {
-        ENV_DATA[self.data_offset + (self.position + 64) as usize] as u32
+        let index = self.data_offset + (self.position + 64) as usize;
+        // SAFETY: index is bounded by data_offset (0..=1152) + position+64 (0..=127) = 0..=1279 < 1280
+        // Use checked access for defense-in-depth in release mode
+        ENV_DATA.get(index).copied().unwrap_or(0) as u32
     }
 
     /// Reset to initial state

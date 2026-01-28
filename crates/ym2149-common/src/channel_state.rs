@@ -184,13 +184,20 @@ impl ChannelStates {
         // Convert to musical note
         let (note_name, midi_note) = frequency_hz.map(frequency_to_note).unwrap_or((None, None));
 
+        // For envelope mode, use max amplitude for visualization since envelope controls volume
+        let amplitude_normalized = if envelope_enabled {
+            1.0
+        } else {
+            amplitude as f32 / 15.0
+        };
+
         ChannelState {
             tone_period,
             frequency_hz,
             note_name,
             midi_note,
             amplitude,
-            amplitude_normalized: amplitude as f32 / 15.0,
+            amplitude_normalized,
             tone_enabled,
             noise_enabled,
             envelope_enabled,
@@ -247,7 +254,7 @@ fn frequency_to_note(freq: f32) -> (Option<&'static str>, Option<u8>) {
 
     // MIDI note number: 69 = A4 = 440Hz
     // n = 12 * log2(f / 440) + 69
-    let midi_float = 12.0 * (freq / 440.0).log2() + 69.0;
+    let midi_float = (freq / 440.0).log2().mul_add(12.0, 69.0);
     let midi = midi_float.round() as i32;
 
     if !(0..=127).contains(&midi) {

@@ -1,0 +1,29 @@
+[package]
+name = "ym2149-metadata"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Metadata extraction tool for YM2149 chiptune files"
+
+[[bin]]
+name = "ym-metadata"
+path = "src/main.rs"
+
+[dependencies]
+ym2149_ym_replayer = { package = "ym2149-ym-replayer", path = "../ym2149-ym-replayer", version = "0.9" }
+ym2149_arkos_replayer = { package = "ym2149-arkos-replayer", path = "../ym2149-arkos-replayer", version = "0.9" }
+ym2149_ay_replayer = { package = "ym2149-ay-replayer", path = "../ym2149-ay-replayer", version = "0.9" }
+ym2149_sndh_replayer = { package = "ym2149-sndh-replayer", path = "../ym2149-sndh-replayer", version = "0.9" }
+ym2149_common = { package = "ym2149-common", path = "../ym2149-common", version = "0.9" }
+
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+walkdir = "2"
+clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
+indicatif = "0.17"
+chrono = "0.4"
+base64 = "0.22"
+rustfft = "6.2"

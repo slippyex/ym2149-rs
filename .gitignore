@@ -22,3 +22,8 @@ Cargo.lock
 /releases/
 /docs/medium/
 /npm-package/
+
+# Website build output
+/website/player/
+/website/player-dev/node_modules/
+/website/player-dev/dist/

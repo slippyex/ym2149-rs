@@ -129,19 +129,12 @@ pub struct ChargeWarning;
 
 /// Boss HP phase tracking (triggers at 75%, 50%, 25%).
 #[derive(Component)]
+#[derive(Default)]
 pub struct BossPhase {
     pub current: u8, // 0=full, 1=75%, 2=50%, 3=25%
     pub transition_timer: Option<Timer>,
 }
 
-impl Default for BossPhase {
-    fn default() -> Self {
-        Self {
-            current: 0,
-            transition_timer: None,
-        }
-    }
-}
 
 /// Boss shield - temporarily invulnerable.
 #[derive(Component)]

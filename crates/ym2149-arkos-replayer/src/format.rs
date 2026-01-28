@@ -341,7 +341,8 @@ pub struct SpecialTrack {
 }
 
 impl SpecialTrack {
-    /// Return the last cell at or before the requested line
+    /// Return the last cell at or before the requested line.
+    /// Used for speed tracks where the value persists until changed.
     pub fn latest_value(&self, line: usize) -> Option<i32> {
         let mut best: Option<&SpecialCell> = None;
         for cell in &self.cells {
@@ -354,6 +355,15 @@ impl SpecialTrack {
         }
 
         best.map(|cell| cell.value)
+    }
+
+    /// Return the value only if there's a cell at the exact line.
+    /// Used for event tracks where each event triggers once.
+    pub fn value_at(&self, line: usize) -> Option<i32> {
+        self.cells
+            .iter()
+            .find(|cell| cell.index == line)
+            .map(|cell| cell.value)
     }
 }
 
@@ -428,11 +438,13 @@ impl Default for SongMetadata {
 impl Default for PsgConfig {
     fn default() -> Self {
         // Default to Atari ST configuration
+        // Note: sample_player_frequency defaults to 8000 Hz as per Arkos Tracker 3 reference
+        // (plays samples at ~8 kHz, typically every 2 scanlines on hardware)
         Self {
             psg_type: PsgType::YM,
             psg_frequency: 2_000_000,
             reference_frequency: 440.0,
-            sample_player_frequency: 11025,
+            sample_player_frequency: 8000,
             mixing_output: MixingOutput::ABC,
         }
     }

@@ -18,6 +18,7 @@ pub struct ArkosWasmPlayer {
 impl ArkosWasmPlayer {
     /// Create a new Arkos WASM player wrapper.
     pub fn new(player: ArkosPlayer) -> (Self, YmMetadata) {
+
         let samples_per_frame = (YM_SAMPLE_RATE_F32 / player.replay_frequency_hz())
             .round()
             .max(1.0) as u32;
@@ -123,6 +124,58 @@ impl ArkosWasmPlayer {
     pub fn set_color_filter(&mut self, enabled: bool) {
         if let Some(chip) = self.player.chip_mut(0) {
             chip.set_color_filter(enabled);
+        }
+    }
+
+    /// Get number of channels (3 per PSG chip).
+    pub fn channel_count(&self) -> usize {
+        self.player.channel_count()
+    }
+
+    /// Dump registers for all PSG chips.
+    pub fn dump_all_registers(&self) -> Vec<[u8; 16]> {
+        (0..self.player.psg_count())
+            .filter_map(|i| self.player.chip(i).map(|c| c.dump_registers()))
+            .collect()
+    }
+
+    /// Get current per-channel audio outputs for all PSG chips.
+    ///
+    /// Returns a vector of [A, B, C] arrays, one per PSG chip.
+    pub fn get_channel_outputs(&self) -> Vec<[f32; 3]> {
+        (0..self.player.psg_count())
+            .filter_map(|i| {
+                self.player.chip(i).map(|c| {
+                    let (a, b, c) = c.get_channel_outputs();
+                    [a, b, c]
+                })
+            })
+            .collect()
+    }
+
+    /// Generate samples with per-sample channel outputs for visualization.
+    ///
+    /// Fills the mono buffer with mixed samples and channels buffer with
+    /// per-sample channel outputs for all PSG chips: [A0, B0, C0, A1, B1, C1, ...] per sample.
+    pub fn generate_samples_with_channels_into(&mut self, mono: &mut [f32], channels: &mut [f32]) {
+        let channel_count = self.player.channel_count();
+        let psg_count = self.player.psg_count();
+
+        // Generate samples one at a time to capture channel outputs
+        let mut sample_buf = [0.0f32; 1];
+        for (i, mono_sample) in mono.iter_mut().enumerate() {
+            ChiptunePlayerBase::generate_samples_into(&mut self.player, &mut sample_buf);
+            *mono_sample = sample_buf[0];
+            let base = i * channel_count;
+            for psg_idx in 0..psg_count {
+                if let Some(chip) = self.player.chip(psg_idx) {
+                    let (a, b, c) = chip.get_channel_outputs();
+                    let offset = base + psg_idx * 3;
+                    channels[offset] = a;
+                    channels[offset + 1] = b;
+                    channels[offset + 2] = c;
+                }
+            }
         }
     }
 }
