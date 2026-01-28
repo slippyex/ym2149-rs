@@ -71,6 +71,16 @@ const IVECTOR: [u32; 5] = [0x134, 0x120, 0x114, 0x110, 0x13C];
 const CYCLES_INTERRUPT: u64 = 44;  // Interrupt acknowledgment + stack frame
 const CYCLES_TRAP: u64 = 34;       // TRAP instruction exception processing
 
+/// MFP-internal interrupt latency (timer fire to IPL assertion).
+/// This is the delay inside the MFP chip before the interrupt signal
+/// reaches the CPU's IPL lines. The additional CPU-side latency
+/// (completing current instruction) is implicitly modeled by only
+/// checking for interrupts after each instruction completes.
+///
+/// MFP internal: ~8-12 cycles for synchronization and priority encoding.
+/// We use 10 as a typical value.
+const MFP_INTERRUPT_LATENCY_CYCLES: u64 = 10;
+
 struct XbiosTimerConfig {
     ctrl_port: u8,
     data_port: u8,
@@ -819,7 +829,11 @@ impl AtariMachine {
             if check_timers && self.cycle_accurate_timers && !self.in_interrupt {
                 let cpu_cycle = self.cpu.total_cycles();
                 if let Some(next_fire) = self.memory.mfp.next_timer_fire_cycle() {
-                    if cpu_cycle >= next_fire {
+                    // Add MFP-internal latency before dispatch.
+                    // The CPU-side latency (instruction completion) is implicit -
+                    // we only check after each instruction, so longer instructions
+                    // naturally delay interrupt recognition.
+                    if cpu_cycle >= next_fire + MFP_INTERRUPT_LATENCY_CYCLES {
                         if let Some(timer_id) = self.memory.mfp.check_timers_at_cycle(cpu_cycle) {
                             self.dispatch_timer_interrupt(timer_id);
                         }
