@@ -196,7 +196,7 @@ impl AtariMemory {
 
         // LMC1992 Microwire registers
         if (LMC1992_START..LMC1992_END).contains(&addr) {
-            return self.lmc1992.read8((addr - STE_DAC_START) as u8);
+            return self.lmc1992.read8((addr - LMC1992_START) as u8);
         }
 
         // MFP 68901
@@ -242,7 +242,7 @@ impl AtariMemory {
 
         // LMC1992 Microwire registers
         if (LMC1992_START..LMC1992_END).contains(&addr) {
-            self.lmc1992.write8((addr - STE_DAC_START) as u8, value);
+            self.lmc1992.write8((addr - LMC1992_START) as u8, value);
             return;
         }
 
@@ -269,7 +269,7 @@ impl AtariMemory {
 
         // LMC1992 Microwire word read
         if (LMC1992_START..LMC1992_END).contains(&addr) && (addr & 1) == 0 {
-            return self.lmc1992.read16((addr - STE_DAC_START) as u8);
+            return self.lmc1992.read16((addr - LMC1992_START) as u8);
         }
 
         // YM2149
@@ -299,7 +299,7 @@ impl AtariMemory {
 
         // LMC1992 Microwire word write
         if (LMC1992_START..LMC1992_END).contains(&addr) {
-            self.lmc1992.write16((addr - STE_DAC_START) as u8, value);
+            self.lmc1992.write16((addr - LMC1992_START) as u8, value);
             return;
         }
 

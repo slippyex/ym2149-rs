@@ -32,8 +32,9 @@ impl SndhWasmPlayer {
         // Warm-up: Generate audio to detect STE hardware usage at runtime.
         // Some drivers don't enable DMA until actual playback starts.
         // We generate ~500ms of audio and discard the output.
+        // Buffer size: 44100 samples = 22050 stereo frames = 500ms at 44.1kHz
         {
-            let mut discard_buffer = [0.0f32; 22050]; // ~500ms at 44100Hz (stereo = 11025 frames)
+            let mut discard_buffer = [0.0f32; 44100];
             player.render_f32_stereo(&mut discard_buffer);
         }
 

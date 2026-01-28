@@ -295,25 +295,29 @@ impl Timer {
         // Handle prescale switch while timer is running
         // Per MC68901 manual: if prescaler changes while enabled, first timeout
         // is indeterminate (1-200 timer clocks). We model as ~100 clocks.
-        if self.enable && self.is_counter_mode() && old_prescaler != 0 && new_prescaler != 0 {
-            if old_prescaler != new_prescaler && self.previous_prescaler != 0 {
-                // Prescaler changed while running - add indeterminate delay
-                // Convert 100 MFP timer clocks to CPU cycles using new prescaler
-                let cycles_per_tick_fp16 = CPU_CYCLES_PER_PRESCALER_TICK_FP16[new_prescaler as usize];
-                if cycles_per_tick_fp16 > 0 {
-                    let delay_fp16 = PRESCALE_SWITCH_DELAY_CYCLES * cycles_per_tick_fp16;
-                    let delay_cycles = delay_fp16 >> 16;
+        if self.enable
+            && self.is_counter_mode()
+            && old_prescaler != 0
+            && new_prescaler != 0
+            && old_prescaler != new_prescaler
+            && self.previous_prescaler != 0
+        {
+            // Prescaler changed while running - add indeterminate delay
+            // Convert 100 MFP timer clocks to CPU cycles using new prescaler
+            let cycles_per_tick_fp16 = CPU_CYCLES_PER_PRESCALER_TICK_FP16[new_prescaler as usize];
+            if cycles_per_tick_fp16 > 0 {
+                let delay_fp16 = PRESCALE_SWITCH_DELAY_CYCLES * cycles_per_tick_fp16;
+                let delay_cycles = delay_fp16 >> 16;
 
-                    // Add delay to current cycles_until_fire, or set new timeout
-                    if let Some(remaining) = self.cycles_until_fire {
-                        // Recalculate remaining time with new prescaler + indeterminate delay
-                        // The counter value stays the same, but cycle timing changes
-                        self.cycles_until_fire = Some(remaining.saturating_add(delay_cycles));
-                    } else {
-                        // Timer wasn't active, start with delay
-                        self.cycles_until_fire = self.calc_cycles_for_period()
-                            .map(|p| p.saturating_add(delay_cycles));
-                    }
+                // Add delay to current cycles_until_fire, or set new timeout
+                if let Some(remaining) = self.cycles_until_fire {
+                    // Recalculate remaining time with new prescaler + indeterminate delay
+                    // The counter value stays the same, but cycle timing changes
+                    self.cycles_until_fire = Some(remaining.saturating_add(delay_cycles));
+                } else {
+                    // Timer wasn't active, start with delay
+                    self.cycles_until_fire = self.calc_cycles_for_period()
+                        .map(|p| p.saturating_add(delay_cycles));
                 }
             }
         }
