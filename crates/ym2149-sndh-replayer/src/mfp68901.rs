@@ -135,6 +135,12 @@ const CPU_CYCLES_PER_PRESCALER_TICK_FP16: [u64; 8] = [
     (200 * 3125 * 65536) / 960,             // 7: /200 = 651.041... * 65536 = 42666666
 ];
 
+/// Prescale switch delay in MFP timer clock cycles.
+/// Per MC68901 manual: "the first timeout pulse will occur at an indeterminate
+/// time no less than one or more than 200 timer clock cycles."
+/// We model this as 100 cycles (midpoint of valid range 1-200).
+const PRESCALE_SWITCH_DELAY_CYCLES: u64 = 100;
+
 #[derive(Default)]
 struct Timer {
     // === CONFIGURATION (stable, only changed by register writes) ===
@@ -152,6 +158,8 @@ struct Timer {
     // === CYCLE-ACCURATE RUNTIME (independent from legacy) ===
     cycles_until_fire: Option<u64>, // RELATIVE, not absolute!
     last_check_cycle: u64,          // Last CPU cycle at check
+    /// Previous prescaler index for detecting prescale changes
+    previous_prescaler: u8,
 
     // === PHASE PRESERVATION (for seek) ===
     /// Virtual CPU cycles accumulated during legacy tick() for phase preservation.
@@ -181,6 +189,7 @@ impl Timer {
         // Cycle-accurate runtime
         self.cycles_until_fire = None;
         self.last_check_cycle = 0;
+        self.previous_prescaler = 0;
 
         // Phase preservation
         self.virtual_cycles_accumulated = 0;
@@ -278,7 +287,38 @@ impl Timer {
     }
 
     fn set_cr(&mut self, data: u8) {
+        let old_prescaler = self.control_register & 7;
+        let new_prescaler = data & 7;
+
         self.control_register = data;
+
+        // Handle prescale switch while timer is running
+        // Per MC68901 manual: if prescaler changes while enabled, first timeout
+        // is indeterminate (1-200 timer clocks). We model as ~100 clocks.
+        if self.enable && self.is_counter_mode() && old_prescaler != 0 && new_prescaler != 0 {
+            if old_prescaler != new_prescaler && self.previous_prescaler != 0 {
+                // Prescaler changed while running - add indeterminate delay
+                // Convert 100 MFP timer clocks to CPU cycles using new prescaler
+                let cycles_per_tick_fp16 = CPU_CYCLES_PER_PRESCALER_TICK_FP16[new_prescaler as usize];
+                if cycles_per_tick_fp16 > 0 {
+                    let delay_fp16 = PRESCALE_SWITCH_DELAY_CYCLES * cycles_per_tick_fp16;
+                    let delay_cycles = delay_fp16 >> 16;
+
+                    // Add delay to current cycles_until_fire, or set new timeout
+                    if let Some(remaining) = self.cycles_until_fire {
+                        // Recalculate remaining time with new prescaler + indeterminate delay
+                        // The counter value stays the same, but cycle timing changes
+                        self.cycles_until_fire = Some(remaining.saturating_add(delay_cycles));
+                    } else {
+                        // Timer wasn't active, start with delay
+                        self.cycles_until_fire = self.calc_cycles_for_period()
+                            .map(|p| p.saturating_add(delay_cycles));
+                    }
+                }
+            }
+        }
+
+        self.previous_prescaler = new_prescaler;
     }
 
     fn set_mr(&mut self, mask: bool) {
@@ -375,6 +415,55 @@ impl Timer {
         false
     }
 
+    /// Calculate cycle-accurate counter value at the given CPU cycle.
+    /// Returns the current countdown value as if read from TxDR.
+    fn counter_at_cycle(&self, cpu_cycle: u64) -> u8 {
+        // If timer is stopped or in event mode, return the data register
+        if !self.enable || !self.is_counter_mode() {
+            return self.data_register_init;
+        }
+
+        // If no cycle-accurate state, fall back to legacy counter
+        let Some(remaining) = self.cycles_until_fire else {
+            return self.legacy_counter;
+        };
+
+        let prescaler_idx = (self.control_register & 7) as usize;
+        let cycles_per_tick_fp16 = CPU_CYCLES_PER_PRESCALER_TICK_FP16[prescaler_idx];
+        if cycles_per_tick_fp16 == 0 {
+            return self.legacy_counter;
+        }
+
+        // Calculate elapsed cycles since last check
+        let elapsed = cpu_cycle.saturating_sub(self.last_check_cycle);
+
+        // Calculate actual remaining cycles
+        let actual_remaining = if elapsed >= remaining {
+            // Timer would have fired - calculate position in new period
+            let period = self.calc_cycles_for_period().unwrap_or(1);
+            if period > 0 {
+                let overflow = elapsed - remaining;
+                period - (overflow % period)
+            } else {
+                remaining
+            }
+        } else {
+            remaining - elapsed
+        };
+
+        // Convert remaining CPU cycles to counter ticks
+        // counter = remaining_cycles / cycles_per_tick
+        // Using FP16: counter = (remaining << 16) / cycles_per_tick_fp16
+        let counter = ((actual_remaining << 16) / cycles_per_tick_fp16) as u8;
+
+        // Counter is 1-based (0 means "256" or just fired), clamp to valid range
+        if counter == 0 {
+            self.data_register_init
+        } else {
+            counter.min(self.data_register_init)
+        }
+    }
+
     /// Acknowledge interrupt - sets in_service, clears pending.
     fn acknowledge(&mut self) {
         if self.pending {
@@ -402,6 +491,8 @@ pub struct Mfp68901 {
     ddr: u8,
     /// VR - Vector Register (bit 3 = S bit for software EOI)
     vr: u8,
+    /// Current CPU cycle for cycle-accurate timer counter reads
+    current_cpu_cycle: u64,
 }
 
 impl Mfp68901 {
@@ -414,6 +505,7 @@ impl Mfp68901 {
             aer: 0,
             ddr: 0,
             vr: 0,
+            current_cpu_cycle: 0,
         };
         mfp.reset();
         mfp
@@ -442,6 +534,14 @@ impl Mfp68901 {
         self.timers[TimerId::Gpi7 as usize].control_register = 1 << 3; // simulate event mode
         self.timers[TimerId::Gpi7 as usize].data_register_init = 1; // event count always 1
         self.timers[TimerId::Gpi7 as usize].legacy_counter = 1;
+
+        self.current_cpu_cycle = 0;
+    }
+
+    /// Set the current CPU cycle for cycle-accurate timer counter reads.
+    /// Call this before reading MFP registers to get accurate TxDR values.
+    pub fn set_cpu_cycle(&mut self, cycle: u64) {
+        self.current_cpu_cycle = cycle;
     }
 
     /// Check if software end-of-interrupt mode is enabled (S bit in VR).
@@ -667,9 +767,9 @@ impl Mfp68901 {
                 }
                 REG_TADR | REG_TBDR | REG_TCDR | REG_TDDR => {
                     let timer_id = (port - REG_TADR) >> 1;
-                    // Return legacy_counter for hardware compatibility
-                    // (some SNDH drivers read TxDR back to check current count)
-                    data = self.timers[timer_id].legacy_counter;
+                    // Return cycle-accurate counter value based on current CPU cycle
+                    // This allows SNDH drivers to read TxDR and get the actual countdown
+                    data = self.timers[timer_id].counter_at_cycle(self.current_cpu_cycle);
                 }
                 _ => {}
             }

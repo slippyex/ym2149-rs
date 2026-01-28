@@ -120,7 +120,7 @@ Timer interrupts (used by SID voice effects) are handled by executing the interr
 
 ## Hardware Accuracy
 
-This emulator aims for high accuracy to correctly replay even the most demanding SNDH files. The following optimizations bring the emulation to approximately **95-97% hardware accuracy**.
+This emulator aims for high accuracy to correctly replay even the most demanding SNDH files. The following optimizations bring the emulation to approximately **98-99% hardware accuracy** for SNDH audio output.
 
 ### CPU Emulation (r68k)
 
@@ -143,6 +143,8 @@ The MFP timer system provides cycle-accurate interrupt generation:
 | **Dual-Mode Architecture** | Separate legacy (sample-based) and cycle-accurate timer states for seek compatibility |
 | **Relative Cycle Tracking** | `cycles_until_fire` uses delta-based tracking instead of absolute cycles |
 | **Phase Preservation** | Virtual cycle accumulation during seek preserves timer phase relationships. Multi-timer effects (SID voice, digidrum) maintain correct phase after seeking |
+| **Prescale Switch Delay** | Per MC68901 manual: changing prescaler while running causes indeterminate 1-200 timer clock delay. Modeled as ~100 clocks |
+| **Cycle-Accurate Counter Read** | TxDR reads return the actual countdown value based on CPU cycle, not just the last sampled value |
 | **State Consistency** | Clean reset of all timer states after seek (counters, pending flags, in-service flags) |
 | **Interrupt Latency** | Models MFP-internal propagation delay (~10 cycles). CPU-side latency is implicit through instruction-boundary checking |
 
@@ -193,6 +195,8 @@ Complete STE sound DMA emulation with bus contention modeling:
 |-----------|-----------------|---------------------|
 | YM2149 Writes | Sample-rate | Cycle-accurate queue |
 | MFP Timers | Integer math | FP16 precision LUT |
+| MFP Prescale Switch | Instant | ~100 clock delay modeled |
+| MFP Counter Read | Last sample | Cycle-accurate value |
 | Interrupts | Single-level | Nested with priorities |
 | Exception Cycles | Ignored | 44/34/20 cycles modeled |
 | Interrupt Latency | Instant | 10+ cycles (variable) |
@@ -207,7 +211,6 @@ For reference, these features are **not** emulated but rarely affect SNDH playba
 - Cycle-exact bus arbitration (sub-instruction timing)
 - Blitter interaction (not used in audio code)
 - GLUE/MMU exact wait state patterns
-- Variable interrupt latency (currently fixed ~10 MFP cycles)
 
 ## Related Crates
 

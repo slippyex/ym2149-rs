@@ -201,6 +201,8 @@ impl AtariMemory {
 
         // MFP 68901
         if (MFP_START..MFP_END).contains(&addr) {
+            // Set CPU cycle for cycle-accurate timer counter reads
+            self.mfp.set_cpu_cycle(self.cpu_cycles);
             return self.mfp.read8((addr - MFP_START) as u8);
         }
 
@@ -255,6 +257,8 @@ impl AtariMemory {
 
         // MFP word read
         if (MFP_START..MFP_END).contains(&addr) {
+            // Set CPU cycle for cycle-accurate timer counter reads
+            self.mfp.set_cpu_cycle(self.cpu_cycles);
             return self.mfp.read16((addr - MFP_START) as u8);
         }
 
