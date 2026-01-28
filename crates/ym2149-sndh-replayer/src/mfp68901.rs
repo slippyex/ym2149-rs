@@ -153,6 +153,12 @@ struct Timer {
     cycles_until_fire: Option<u64>, // RELATIVE, not absolute!
     last_check_cycle: u64,          // Last CPU cycle at check
 
+    // === PHASE PRESERVATION (for seek) ===
+    /// Virtual CPU cycles accumulated during legacy tick() for phase preservation.
+    /// Each tick() call adds approximately CPU_CLOCK / sample_rate cycles.
+    /// Used by reset_for_sync() to calculate correct phase after seek.
+    virtual_cycles_accumulated: u64,
+
     // === INTERRUPT STATE ===
     pending: bool,
     in_service: bool,
@@ -176,6 +182,9 @@ impl Timer {
         self.cycles_until_fire = None;
         self.last_check_cycle = 0;
 
+        // Phase preservation
+        self.virtual_cycles_accumulated = 0;
+
         // Interrupt state
         self.pending = false;
         self.in_service = false;
@@ -188,6 +197,9 @@ impl Timer {
 
         // Reset cycle-accurate state
         self.cycles_until_fire = self.calc_cycles_for_period();
+
+        // Reset phase accumulator (timer reconfigured, phase tracking starts fresh)
+        self.virtual_cycles_accumulated = 0;
     }
 
     fn is_counter_mode(&self) -> bool {
@@ -220,11 +232,27 @@ impl Timer {
     }
 
     /// Reset timer state after seek for consistent playback.
-    /// Resets both cycle-accurate and legacy states to ensure clean continuation.
+    /// Preserves timer phase using accumulated virtual cycles from tick().
     fn reset_for_sync(&mut self, current_cpu_cycle: u64) {
-        // Reset cycle-accurate state
-        self.cycles_until_fire = self.calc_cycles_for_period();
+        // Calculate cycle-accurate state with phase preservation
+        if let Some(period) = self.calc_cycles_for_period() {
+            if period > 0 && self.virtual_cycles_accumulated > 0 {
+                // Preserve phase: calculate where we are within the period
+                let phase = self.virtual_cycles_accumulated % period;
+                // Time remaining until next fire (if phase is 0, we're at start of period)
+                self.cycles_until_fire = Some(if phase == 0 { period } else { period - phase });
+            } else {
+                // No accumulated cycles (fresh start) - use full period
+                self.cycles_until_fire = Some(period);
+            }
+        } else {
+            self.cycles_until_fire = None;
+        }
+
         self.last_check_cycle = current_cpu_cycle;
+
+        // Reset virtual cycles accumulator for next seek
+        self.virtual_cycles_accumulated = 0;
 
         // Reset legacy state for consistent timing after seek
         self.inner_clock = 0;
@@ -281,6 +309,7 @@ impl Timer {
 
     /// Tick timer (legacy sample-based mode).
     /// Only modifies legacy_counter and inner_clock - does NOT touch cycles_until_fire.
+    /// Also accumulates virtual_cycles for phase preservation during seek.
     fn tick(&mut self, host_replay_rate: u32) -> bool {
         let mut fired = false;
 
@@ -308,6 +337,11 @@ impl Timer {
                     }
                     self.inner_clock -= host_replay_rate;
                 }
+
+                // Accumulate virtual CPU cycles for phase preservation during seek.
+                // Each tick() call represents one audio sample.
+                // CPU = 8 MHz, so cycles per sample = 8_000_000 / host_replay_rate
+                self.virtual_cycles_accumulated += 8_000_000u64 / host_replay_rate as u64;
             }
         }
 

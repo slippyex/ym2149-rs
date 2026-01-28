@@ -142,6 +142,7 @@ The MFP timer system provides cycle-accurate interrupt generation:
 | **FP16 Clock Precision** | High-precision lookup table using 16-bit fixed-point math eliminates cumulative rounding errors. Uses exact ratio 3125/960 for CPU-to-MFP clock conversion |
 | **Dual-Mode Architecture** | Separate legacy (sample-based) and cycle-accurate timer states for seek compatibility |
 | **Relative Cycle Tracking** | `cycles_until_fire` uses delta-based tracking instead of absolute cycles |
+| **Phase Preservation** | Virtual cycle accumulation during seek preserves timer phase relationships. Multi-timer effects (SID voice, digidrum) maintain correct phase after seeking |
 | **State Consistency** | Clean reset of all timer states after seek (counters, pending flags, in-service flags) |
 | **Interrupt Latency** | Models MFP-internal propagation delay (~10 cycles). CPU-side latency is implicit through instruction-boundary checking |
 
@@ -196,7 +197,7 @@ Complete STE sound DMA emulation with bus contention modeling:
 | Exception Cycles | Ignored | 44/34/20 cycles modeled |
 | Interrupt Latency | Instant | 10+ cycles (variable) |
 | DMA Contention | None | ~8 cycles per transfer |
-| Seek Support | State corruption | Clean state separation |
+| Seek Support | State corruption | Phase-preserving sync |
 
 ### Remaining Gaps (for 100%)
 
@@ -206,6 +207,7 @@ For reference, these features are **not** emulated but rarely affect SNDH playba
 - Cycle-exact bus arbitration (sub-instruction timing)
 - Blitter interaction (not used in audio code)
 - GLUE/MMU exact wait state patterns
+- Variable interrupt latency (currently fixed ~10 MFP cycles)
 
 ## Related Crates
 
