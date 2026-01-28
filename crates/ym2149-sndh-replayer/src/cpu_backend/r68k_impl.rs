@@ -240,16 +240,6 @@ impl Cpu68k for R68kBackend {
         self.cpu.status_register()
     }
 
-    fn ipl(&self) -> u8 {
-        // int_mask holds SR bits 8-10 in their natural position
-        ((self.cpu.int_mask >> 8) & 7) as u8
-    }
-
-    fn set_ipl(&mut self, level: u8) {
-        // Set int_mask to new IPL level (bits 8-10 of SR)
-        self.cpu.int_mask = ((level & 7) as u32) << 8;
-    }
-
     fn total_cycles(&self) -> u64 {
         self.total_cycles
     }
