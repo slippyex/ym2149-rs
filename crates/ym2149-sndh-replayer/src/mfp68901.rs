@@ -126,44 +126,57 @@ const PRESCALER_DIV: [u32; 8] = [0, 4, 10, 16, 50, 64, 100, 200];
 
 #[derive(Default)]
 struct Timer {
+    // === CONFIGURATION (stable, only changed by register writes) ===
     enable: bool,
     mask: bool,
+    control_register: u8,
+    data_register_init: u8, // Configured value (TxDR at CR write)
+
+    // === LEGACY RUNTIME (only modified by tick()) ===
+    inner_clock: u32,    // Sample accumulator
+    legacy_counter: u8,  // Countdown counter for legacy mode (renamed from data_register)
+    external_event: bool,
+    last_input_state: bool, // Last input pin state for edge detection
+
+    // === CYCLE-ACCURATE RUNTIME (independent from legacy) ===
+    cycles_until_fire: Option<u64>, // RELATIVE, not absolute!
+    last_check_cycle: u64,          // Last CPU cycle at check
+
+    // === INTERRUPT STATE ===
     pending: bool,
     in_service: bool,
-    control_register: u8,
-    data_register: u8,
-    data_register_init: u8,
-    /// Cycle accumulator for sample-based ticking (legacy)
-    inner_clock: u32,
-    external_event: bool,
-    /// Last input pin state for edge detection
-    last_input_state: bool,
-    /// CPU cycle when this timer will next fire (cycle-accurate mode)
-    next_fire_cycle: Option<u64>,
-    /// MFP clock accumulator (fixed-point 24.8 format for precision)
-    mfp_clock_accum_fp8: u64,
 }
 
 impl Timer {
     fn reset(&mut self) {
+        // Configuration
         self.control_register = 0;
-        self.data_register = 0;
+        self.data_register_init = 0;
         self.enable = false;
         self.mask = false;
-        self.pending = false;
-        self.in_service = false;
+
+        // Legacy runtime
         self.inner_clock = 0;
+        self.legacy_counter = 0;
         self.external_event = false;
         self.last_input_state = false;
-        self.next_fire_cycle = None;
-        self.mfp_clock_accum_fp8 = 0;
+
+        // Cycle-accurate runtime
+        self.cycles_until_fire = None;
+        self.last_check_cycle = 0;
+
+        // Interrupt state
+        self.pending = false;
+        self.in_service = false;
     }
 
     fn restart(&mut self) {
+        // Reset legacy state
         self.inner_clock = 0;
-        self.data_register = self.data_register_init;
-        self.mfp_clock_accum_fp8 = 0;
-        // next_fire_cycle will be recalculated by update_next_fire_cycle()
+        self.legacy_counter = self.data_register_init;
+
+        // Reset cycle-accurate state
+        self.cycles_until_fire = self.calc_cycles_for_period();
     }
 
     fn is_counter_mode(&self) -> bool {
@@ -174,9 +187,10 @@ impl Timer {
         (self.control_register & 8) != 0
     }
 
-    /// Calculate the number of CPU cycles until this timer fires.
+    /// Calculate the number of CPU cycles for one full timer period.
     /// Returns None if timer is disabled or in event mode.
-    fn calc_cycles_until_fire(&self) -> Option<u64> {
+    /// Uses data_register_init (configuration), not legacy_counter.
+    fn calc_cycles_for_period(&self) -> Option<u64> {
         if !self.enable || !self.is_counter_mode() {
             return None;
         }
@@ -186,27 +200,23 @@ impl Timer {
             return None;
         }
 
-        // Timer counts down from data_register to 0, then fires
-        // Number of MFP ticks until fire = data_register * prescaler
-        let mfp_ticks = self.data_register as u64 * prescaler as u64;
+        // Timer counts down from data_register_init to 0, then fires
+        // Number of MFP ticks for one period = data_register_init * prescaler
+        let mfp_ticks = self.data_register_init as u64 * prescaler as u64;
 
         // Convert MFP ticks to CPU cycles using fixed-point math
         // cpu_cycles = mfp_ticks * (8MHz / 2.4576MHz) = mfp_ticks * 3.255...
         Some((mfp_ticks * CPU_CYCLES_PER_MFP_TICK_FP8) >> 8)
     }
 
-    /// Update the next_fire_cycle based on current state and CPU cycle.
-    fn update_next_fire_cycle(&mut self, current_cpu_cycle: u64) {
-        self.next_fire_cycle = self.calc_cycles_until_fire().map(|delta| current_cpu_cycle + delta);
-    }
-
-    /// Reset timer state for cycle-accurate mode after seek.
-    /// Restores data_register to init value and clears accumulator.
+    /// Reset cycle-accurate timer state after seek.
+    /// Only resets cycle-accurate state from configuration (data_register_init).
+    /// Legacy state (legacy_counter, inner_clock) remains untouched.
     fn reset_for_sync(&mut self, current_cpu_cycle: u64) {
-        self.data_register = self.data_register_init;
-        self.inner_clock = 0;
-        self.mfp_clock_accum_fp8 = 0;
-        self.update_next_fire_cycle(current_cpu_cycle);
+        // Calculate cycles_until_fire from configuration (data_register_init)
+        self.cycles_until_fire = self.calc_cycles_for_period();
+        self.last_check_cycle = current_cpu_cycle;
+        // Legacy state (legacy_counter, inner_clock) is NOT modified!
     }
 
     fn set_er(&mut self, enable: bool) {
@@ -253,6 +263,8 @@ impl Timer {
         edge_detected
     }
 
+    /// Tick timer (legacy sample-based mode).
+    /// Only modifies legacy_counter and inner_clock - does NOT touch cycles_until_fire.
     fn tick(&mut self, host_replay_rate: u32) -> bool {
         let mut fired = false;
 
@@ -260,9 +272,9 @@ impl Timer {
             if self.is_event_mode() {
                 // Event mode - count on external events
                 if self.external_event {
-                    self.data_register = self.data_register.wrapping_sub(1);
-                    if self.data_register == 0 {
-                        self.data_register = self.data_register_init;
+                    self.legacy_counter = self.legacy_counter.wrapping_sub(1);
+                    if self.legacy_counter == 0 {
+                        self.legacy_counter = self.data_register_init;
                         fired = true;
                     }
                     self.external_event = false;
@@ -273,9 +285,9 @@ impl Timer {
 
                 // Most of the time this while will never loop
                 while self.inner_clock >= host_replay_rate {
-                    self.data_register = self.data_register.wrapping_sub(1);
-                    if self.data_register == 0 {
-                        self.data_register = self.data_register_init;
+                    self.legacy_counter = self.legacy_counter.wrapping_sub(1);
+                    if self.legacy_counter == 0 {
+                        self.legacy_counter = self.data_register_init;
                         fired = true;
                     }
                     self.inner_clock -= host_replay_rate;
@@ -293,20 +305,21 @@ impl Timer {
     }
 
     /// Check if this timer should fire at the given CPU cycle (cycle-accurate mode).
-    /// Returns true if the timer fired and sets pending bit.
+    /// Uses delta-based tracking with last_check_cycle - independent from legacy state.
+    /// Returns true if the timer fired and interrupt should be dispatched.
     fn check_fire_at_cycle(&mut self, cpu_cycle: u64) -> bool {
-        if let Some(fire_cycle) = self.next_fire_cycle {
-            if cpu_cycle >= fire_cycle && self.enable && self.is_counter_mode() {
+        let elapsed = cpu_cycle.saturating_sub(self.last_check_cycle);
+        self.last_check_cycle = cpu_cycle;
+
+        if let Some(remaining) = self.cycles_until_fire {
+            if elapsed >= remaining {
                 // Timer fires
                 self.pending = true;
-                // Reload counter and schedule next fire
-                self.data_register = self.data_register_init;
-                if let Some(delta) = self.calc_cycles_until_fire() {
-                    self.next_fire_cycle = Some(fire_cycle + delta);
-                } else {
-                    self.next_fire_cycle = None;
-                }
+                // Reload from configuration (not legacy state!)
+                self.cycles_until_fire = self.calc_cycles_for_period();
                 return self.mask; // Return true only if masked (interrupt enabled)
+            } else {
+                self.cycles_until_fire = Some(remaining - elapsed);
             }
         }
         false
@@ -378,7 +391,7 @@ impl Mfp68901 {
         // gpi7 is not really a timer, "simulate" an event type timer with count=1 to make the code simpler
         self.timers[TimerId::Gpi7 as usize].control_register = 1 << 3; // simulate event mode
         self.timers[TimerId::Gpi7 as usize].data_register_init = 1; // event count always 1
-        self.timers[TimerId::Gpi7 as usize].data_register = 1;
+        self.timers[TimerId::Gpi7 as usize].legacy_counter = 1;
     }
 
     /// Check if software end-of-interrupt mode is enabled (S bit in VR).
@@ -604,7 +617,9 @@ impl Mfp68901 {
                 }
                 REG_TADR | REG_TBDR | REG_TCDR | REG_TDDR => {
                     let timer_id = (port - REG_TADR) >> 1;
-                    data = self.timers[timer_id].data_register;
+                    // Return legacy_counter for hardware compatibility
+                    // (some SNDH drivers read TxDR back to check current count)
+                    data = self.timers[timer_id].legacy_counter;
                 }
                 _ => {}
             }
@@ -666,7 +681,10 @@ impl Mfp68901 {
     pub fn next_timer_fire_cycle(&self) -> Option<u64> {
         self.timers[0..4]
             .iter()
-            .filter_map(|t| t.next_fire_cycle)
+            .filter_map(|t| {
+                // Convert relative cycles_until_fire to absolute cycle
+                t.cycles_until_fire.map(|remaining| t.last_check_cycle + remaining)
+            })
             .min()
     }
 

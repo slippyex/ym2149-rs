@@ -344,8 +344,8 @@ impl AtariMachine {
             memory: AtariMemory::new(sample_rate),
             in_interrupt: false,
             next_gemdos_malloc: GEMDOS_MALLOC_START,
-            // MFP cycle-accurate timers disabled - needs more work
-            cycle_accurate_timers: false,
+            // MFP cycle-accurate timers enabled (seek-compatible implementation)
+            cycle_accurate_timers: true,
         };
         machine.reset();
         machine
@@ -646,14 +646,6 @@ impl AtariMachine {
         self.memory.ym2149.flush_pending_writes();
         self.memory.ym2149.sync_sample_cycle(cpu_cycle);
         self.memory.cpu_cycles = cpu_cycle;
-    }
-
-    /// Enable or disable cycle-accurate timer interrupts.
-    ///
-    /// Disable during seek/fast-forward for performance and correctness.
-    /// Enable during normal playback for accurate timing.
-    pub fn set_cycle_accurate_timers(&mut self, enabled: bool) {
-        self.cycle_accurate_timers = enabled;
     }
 
     /// Get reference to YM2149.
