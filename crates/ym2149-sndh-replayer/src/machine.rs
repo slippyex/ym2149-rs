@@ -403,17 +403,9 @@ impl AtariMachine {
             self.memory.cpu_cycles = self.cpu.total_cycles();
             executed += self.cpu.step(&mut self.memory);
 
-            // Check for cycle-accurate timer interrupts (if enabled)
-            if self.cycle_accurate_timers && !self.in_interrupt {
-                let cpu_cycle = self.cpu.total_cycles();
-                if let Some(next_fire) = self.memory.mfp.next_timer_fire_cycle() {
-                    if cpu_cycle >= next_fire {
-                        if let Some(timer_id) = self.memory.mfp.check_timers_at_cycle(cpu_cycle) {
-                            self.dispatch_timer_interrupt(timer_id);
-                        }
-                    }
-                }
-            }
+            // Note: jsr_limited is used for seek/fast-forward, so we DON'T check
+            // cycle-accurate timers here. Timer interrupts are handled by tick_timers()
+            // which is called via compute_sample_stereo() after each frame during seek.
         }
 
         Ok(self.memory.reset_triggered)
