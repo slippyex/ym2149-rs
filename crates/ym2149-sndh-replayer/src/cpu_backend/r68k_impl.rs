@@ -152,6 +152,8 @@ impl AddressBus for ProxyBus {
 /// r68k CPU backend.
 pub struct R68kBackend {
     cpu: ConfiguredCore<AutoInterruptController, ProxyBus>,
+    /// Total cycles executed since reset
+    total_cycles: u64,
 }
 
 impl Cpu68k for R68kBackend {
@@ -166,7 +168,7 @@ impl Cpu68k for R68kBackend {
         // Atari ST bus timing: 4-cycle boundary alignment due to GLUE/MMU wait states
         // (r68k's Musashi tables provide base cycles, granularity models ST bus)
         cpu.set_cycle_granularity(4);
-        Self { cpu }
+        Self { cpu, total_cycles: 0 }
     }
 
     fn step<M: CpuMemory>(&mut self, memory: &mut M) -> usize {
@@ -184,6 +186,8 @@ impl Cpu68k for R68kBackend {
 
         // Execute one instruction - ProxyBus will access memory via MEMORY_CONTEXT
         let cycles = self.cpu.execute1();
+        let cycle_count = cycles.0 as usize;
+        self.total_cycles += cycle_count as u64;
 
         MEMORY_CONTEXT.with(|ctx| {
             // SAFETY: Clearing the pointer ensures it cannot be used after `memory` is dropped.
@@ -191,7 +195,7 @@ impl Cpu68k for R68kBackend {
             unsafe { *ctx.get() = None };
         });
 
-        cycles.0 as usize
+        cycle_count
     }
 
     fn is_stopped(&self) -> bool {
@@ -234,5 +238,9 @@ impl Cpu68k for R68kBackend {
 
     fn sr(&self) -> u16 {
         self.cpu.status_register()
+    }
+
+    fn total_cycles(&self) -> u64 {
+        self.total_cycles
     }
 }

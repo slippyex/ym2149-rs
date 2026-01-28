@@ -94,6 +94,8 @@ pub(crate) struct AtariMemory {
     pub(crate) reset_triggered: bool,
     /// Host sample rate
     host_rate: u32,
+    /// Current CPU cycle count (for cycle-accurate YM2149 timing)
+    pub(crate) cpu_cycles: u64,
 }
 
 impl AtariMemory {
@@ -107,6 +109,7 @@ impl AtariMemory {
             next_malloc_addr: GEMDOS_MALLOC_START,
             reset_triggered: false,
             host_rate: sample_rate,
+            cpu_cycles: 0,
         }
     }
 
@@ -118,6 +121,11 @@ impl AtariMemory {
         self.lmc1992.reset(self.host_rate);
         self.next_malloc_addr = GEMDOS_MALLOC_START;
         self.reset_triggered = false;
+        self.cpu_cycles = 0;
+        // Sync YM2149 sample timing with CPU cycle counter
+        self.ym2149.sync_sample_cycle(0);
+        // Initialize cycle-accurate MFP timers
+        self.mfp.sync_cpu_cycle(0);
 
         // Setup RTE and RESET instructions in low memory
         self.write_word(RTE_INSTRUCTION_ADDR, 0x4E73); // RTE
@@ -194,9 +202,10 @@ impl AtariMemory {
             return;
         }
 
-        // YM2149 PSG write (immediate mode - cycle-accurate requires CPU integration)
+        // YM2149 PSG write (cycle-accurate timing)
         if (YM2149_START..YM2149_END).contains(&addr) {
-            self.ym2149.write_port_immediate((addr & 0xfe) as u8, value);
+            self.ym2149.set_cpu_cycle(self.cpu_cycles);
+            self.ym2149.write_port((addr & 0xfe) as u8, value);
             return;
         }
 
@@ -248,10 +257,10 @@ impl AtariMemory {
     pub(crate) fn write_word(&mut self, addr: u32, value: u16) {
         let addr = addr & 0x00FF_FFFF;
 
-        // YM2149 PSG word write (immediate mode - cycle-accurate requires CPU integration)
+        // YM2149 PSG word write (cycle-accurate timing)
         if (YM2149_START..YM2149_END).contains(&addr) {
-            self.ym2149
-                .write_port_immediate((addr & 0xfe) as u8, (value >> 8) as u8);
+            self.ym2149.set_cpu_cycle(self.cpu_cycles);
+            self.ym2149.write_port((addr & 0xfe) as u8, (value >> 8) as u8);
             return;
         }
 
@@ -323,6 +332,8 @@ pub struct AtariMachine {
     in_interrupt: bool,
     /// Incremental GEMDOS malloc pointer
     next_gemdos_malloc: u32,
+    /// Enable cycle-accurate timer interrupts (disable during seek for performance)
+    cycle_accurate_timers: bool,
 }
 
 impl AtariMachine {
@@ -333,6 +344,8 @@ impl AtariMachine {
             memory: AtariMemory::new(sample_rate),
             in_interrupt: false,
             next_gemdos_malloc: GEMDOS_MALLOC_START,
+            // MFP cycle-accurate timers disabled - needs more work
+            cycle_accurate_timers: false,
         };
         machine.reset();
         machine
@@ -386,43 +399,62 @@ impl AtariMachine {
 
         let mut executed = 0;
         while executed < max_cycles && !self.memory.reset_triggered && !self.cpu.is_stopped() {
+            // Update memory's cycle counter for cycle-accurate YM2149 writes
+            self.memory.cpu_cycles = self.cpu.total_cycles();
             executed += self.cpu.step(&mut self.memory);
+
+            // Check for cycle-accurate timer interrupts (if enabled)
+            if self.cycle_accurate_timers && !self.in_interrupt {
+                let cpu_cycle = self.cpu.total_cycles();
+                if let Some(next_fire) = self.memory.mfp.next_timer_fire_cycle() {
+                    if cpu_cycle >= next_fire {
+                        if let Some(timer_id) = self.memory.mfp.check_timers_at_cycle(cpu_cycle) {
+                            self.dispatch_timer_interrupt(timer_id);
+                        }
+                    }
+                }
+            }
         }
 
         Ok(self.memory.reset_triggered)
     }
 
-    /// Tick all MFP timers and dispatch their interrupts.
+    /// Tick all MFP timers and dispatch their interrupts (legacy sample-based mode).
     fn tick_timers(&mut self) {
         let fired = self.memory.mfp.tick();
         for (timer_idx, active) in fired.into_iter().enumerate() {
             if !active {
                 continue;
             }
-            let vector_addr = IVECTOR[timer_idx];
-            let pc = self.memory.read_long(vector_addr);
-            let pc24 = pc & 0x00FF_FFFF;
+            self.dispatch_timer_interrupt(TIMER_ID_MAP[timer_idx]);
+        }
+    }
 
-            if pc != 0 && pc != RTE_INSTRUCTION_ADDR && (pc24 as usize) < RAM_SIZE {
-                if self.in_interrupt {
-                    continue;
-                }
-                self.in_interrupt = true;
+    /// Dispatch a timer interrupt (used by both legacy and cycle-accurate modes).
+    fn dispatch_timer_interrupt(&mut self, timer_id: TimerId) {
+        let timer_idx = timer_id as usize;
+        let vector_addr = IVECTOR[timer_idx];
+        let pc = self.memory.read_long(vector_addr);
+        let pc24 = pc & 0x00FF_FFFF;
 
-                // Acknowledge interrupt (sets in-service, clears pending)
-                let timer_id = TIMER_ID_MAP[timer_idx];
-                self.memory.mfp.acknowledge_timer(timer_id);
-
-                self.configure_return_by_rte();
-                self.memory.ym2149.inside_timer_irq(true);
-                let _ = self.jmp_binary(pc, 1);
-                self.memory.ym2149.inside_timer_irq(false);
-
-                // End of interrupt (clears in-service for automatic EOI mode)
-                self.memory.mfp.end_of_interrupt_timer(timer_id);
-
-                self.in_interrupt = false;
+        if pc != 0 && pc != RTE_INSTRUCTION_ADDR && (pc24 as usize) < RAM_SIZE {
+            if self.in_interrupt {
+                return;
             }
+            self.in_interrupt = true;
+
+            // Acknowledge interrupt (sets in-service, clears pending)
+            self.memory.mfp.acknowledge_timer(timer_id);
+
+            self.configure_return_by_rte();
+            self.memory.ym2149.inside_timer_irq(true);
+            let _ = self.jmp_binary_no_timer_check(pc, 1);
+            self.memory.ym2149.inside_timer_irq(false);
+
+            // End of interrupt (clears in-service for automatic EOI mode)
+            self.memory.mfp.end_of_interrupt_timer(timer_id);
+
+            self.in_interrupt = false;
         }
     }
 
@@ -442,6 +474,8 @@ impl AtariMachine {
             config.enable_port + 12,
             self.memory.mfp.read8(config.enable_port + 12) | (1 << config.bit),
         );
+        // Update cycle-accurate timer scheduling
+        self.memory.mfp.sync_cpu_cycle(self.cpu.total_cycles());
     }
 
     fn handle_gemdos(&mut self, func: u16, sp: u32) {
@@ -601,6 +635,27 @@ impl AtariMachine {
         (out_left, out_right)
     }
 
+    /// Synchronize timing systems after a seek or time discontinuity.
+    ///
+    /// Call this after fast-forwarding to ensure MFP timers and YM2149
+    /// are aligned with the current CPU cycle count.
+    pub fn sync_timing(&mut self) {
+        let cpu_cycle = self.cpu.total_cycles();
+        self.memory.mfp.sync_cpu_cycle(cpu_cycle);
+        // Flush any pending YM2149 writes before syncing cycle
+        self.memory.ym2149.flush_pending_writes();
+        self.memory.ym2149.sync_sample_cycle(cpu_cycle);
+        self.memory.cpu_cycles = cpu_cycle;
+    }
+
+    /// Enable or disable cycle-accurate timer interrupts.
+    ///
+    /// Disable during seek/fast-forward for performance and correctness.
+    /// Enable during normal playback for accurate timing.
+    pub fn set_cycle_accurate_timers(&mut self, enabled: bool) {
+        self.cycle_accurate_timers = enabled;
+    }
+
     /// Get reference to YM2149.
     pub fn ym2149(&self) -> &Ym2149 {
         &self.memory.ym2149
@@ -714,6 +769,15 @@ impl AtariMachine {
     }
 
     fn jmp_binary(&mut self, pc: u32, timeout_frames: u32) -> Result<bool> {
+        self.jmp_binary_internal(pc, timeout_frames, true)
+    }
+
+    /// Execute without checking for timer interrupts (used during IRQ handlers).
+    fn jmp_binary_no_timer_check(&mut self, pc: u32, timeout_frames: u32) -> Result<bool> {
+        self.jmp_binary_internal(pc, timeout_frames, false)
+    }
+
+    fn jmp_binary_internal(&mut self, pc: u32, timeout_frames: u32, check_timers: bool) -> Result<bool> {
         self.memory.write_long(0x14, RTE_INSTRUCTION_ADDR);
         self.memory.write_long(4, pc);
 
@@ -746,8 +810,22 @@ impl AtariMachine {
                 break;
             }
 
+            // Update memory's cycle counter for cycle-accurate YM2149 writes
+            self.memory.cpu_cycles = self.cpu.total_cycles();
             let step_cycles = self.cpu.step(&mut self.memory);
             executed += step_cycles;
+
+            // Check for cycle-accurate timer interrupts (if enabled and not in interrupt)
+            if check_timers && self.cycle_accurate_timers && !self.in_interrupt {
+                let cpu_cycle = self.cpu.total_cycles();
+                if let Some(next_fire) = self.memory.mfp.next_timer_fire_cycle() {
+                    if cpu_cycle >= next_fire {
+                        if let Some(timer_id) = self.memory.mfp.check_timers_at_cycle(cpu_cycle) {
+                            self.dispatch_timer_interrupt(timer_id);
+                        }
+                    }
+                }
+            }
         }
 
         if !self.memory.reset_triggered && !self.cpu.is_stopped() {

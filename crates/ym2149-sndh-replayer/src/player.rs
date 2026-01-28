@@ -421,6 +421,10 @@ impl SndhPlayer {
         // Reset inner sample position
         self.inner_sample_pos = self.samples_per_tick as i32;
 
+        // Synchronize YM2149 timing after seek - flushes write queue and
+        // aligns sample_start_cycle with current CPU cycles
+        self.machine.sync_timing();
+
         // Restore playback state
         if was_playing {
             self.state = PlaybackState::Playing;

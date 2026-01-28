@@ -117,6 +117,13 @@ pub enum TimerId {
     Gpi7 = 4,
 }
 
+/// CPU cycles per MFP clock tick (8 MHz CPU / 2.4576 MHz MFP ≈ 3.255)
+/// We use fixed-point math: multiply by 256 for precision
+const CPU_CYCLES_PER_MFP_TICK_FP8: u64 = (8_000_000 * 256) / ATARI_MFP_CLOCK_HZ as u64;
+
+/// MFP prescaler divisors (index by control register bits 0-2)
+const PRESCALER_DIV: [u32; 8] = [0, 4, 10, 16, 50, 64, 100, 200];
+
 #[derive(Default)]
 struct Timer {
     enable: bool,
@@ -126,10 +133,15 @@ struct Timer {
     control_register: u8,
     data_register: u8,
     data_register_init: u8,
+    /// Cycle accumulator for sample-based ticking (legacy)
     inner_clock: u32,
     external_event: bool,
     /// Last input pin state for edge detection
     last_input_state: bool,
+    /// CPU cycle when this timer will next fire (cycle-accurate mode)
+    next_fire_cycle: Option<u64>,
+    /// MFP clock accumulator (fixed-point 24.8 format for precision)
+    mfp_clock_accum_fp8: u64,
 }
 
 impl Timer {
@@ -143,11 +155,15 @@ impl Timer {
         self.inner_clock = 0;
         self.external_event = false;
         self.last_input_state = false;
+        self.next_fire_cycle = None;
+        self.mfp_clock_accum_fp8 = 0;
     }
 
     fn restart(&mut self) {
         self.inner_clock = 0;
         self.data_register = self.data_register_init;
+        self.mfp_clock_accum_fp8 = 0;
+        // next_fire_cycle will be recalculated by update_next_fire_cycle()
     }
 
     fn is_counter_mode(&self) -> bool {
@@ -156,6 +172,41 @@ impl Timer {
 
     fn is_event_mode(&self) -> bool {
         (self.control_register & 8) != 0
+    }
+
+    /// Calculate the number of CPU cycles until this timer fires.
+    /// Returns None if timer is disabled or in event mode.
+    fn calc_cycles_until_fire(&self) -> Option<u64> {
+        if !self.enable || !self.is_counter_mode() {
+            return None;
+        }
+
+        let prescaler = PRESCALER_DIV[(self.control_register & 7) as usize];
+        if prescaler == 0 {
+            return None;
+        }
+
+        // Timer counts down from data_register to 0, then fires
+        // Number of MFP ticks until fire = data_register * prescaler
+        let mfp_ticks = self.data_register as u64 * prescaler as u64;
+
+        // Convert MFP ticks to CPU cycles using fixed-point math
+        // cpu_cycles = mfp_ticks * (8MHz / 2.4576MHz) = mfp_ticks * 3.255...
+        Some((mfp_ticks * CPU_CYCLES_PER_MFP_TICK_FP8) >> 8)
+    }
+
+    /// Update the next_fire_cycle based on current state and CPU cycle.
+    fn update_next_fire_cycle(&mut self, current_cpu_cycle: u64) {
+        self.next_fire_cycle = self.calc_cycles_until_fire().map(|delta| current_cpu_cycle + delta);
+    }
+
+    /// Reset timer state for cycle-accurate mode after seek.
+    /// Restores data_register to init value and clears accumulator.
+    fn reset_for_sync(&mut self, current_cpu_cycle: u64) {
+        self.data_register = self.data_register_init;
+        self.inner_clock = 0;
+        self.mfp_clock_accum_fp8 = 0;
+        self.update_next_fire_cycle(current_cpu_cycle);
     }
 
     fn set_er(&mut self, enable: bool) {
@@ -239,6 +290,26 @@ impl Timer {
 
         // Return true only if masked and pending
         fired && self.mask
+    }
+
+    /// Check if this timer should fire at the given CPU cycle (cycle-accurate mode).
+    /// Returns true if the timer fired and sets pending bit.
+    fn check_fire_at_cycle(&mut self, cpu_cycle: u64) -> bool {
+        if let Some(fire_cycle) = self.next_fire_cycle {
+            if cpu_cycle >= fire_cycle && self.enable && self.is_counter_mode() {
+                // Timer fires
+                self.pending = true;
+                // Reload counter and schedule next fire
+                self.data_register = self.data_register_init;
+                if let Some(delta) = self.calc_cycles_until_fire() {
+                    self.next_fire_cycle = Some(fire_cycle + delta);
+                } else {
+                    self.next_fire_cycle = None;
+                }
+                return self.mask; // Return true only if masked (interrupt enabled)
+            }
+        }
+        false
     }
 
     /// Acknowledge interrupt - sets in_service, clears pending.
@@ -550,7 +621,7 @@ impl Mfp68901 {
         self.write8(port + 1, data as u8);
     }
 
-    /// Tick all timers. Returns array indicating which timers fired.
+    /// Tick all timers (legacy sample-based mode). Returns array indicating which timers fired.
     pub fn tick(&mut self) -> [bool; 5] {
         let mut fired = [false; 5];
         for (i, timer) in self.timers.iter_mut().enumerate() {
@@ -558,6 +629,47 @@ impl Mfp68901 {
         }
         fired
     }
+
+    /// Initialize cycle-accurate timer mode with current CPU cycle.
+    /// Call this after reset and when timers are configured.
+    pub fn sync_cpu_cycle(&mut self, cpu_cycle: u64) {
+        for timer in &mut self.timers[0..4] {
+            // Reset timer state and recalculate next fire cycle
+            // This ensures clean state after seek
+            timer.reset_for_sync(cpu_cycle);
+        }
+    }
+
+    /// Check all timers at the given CPU cycle (cycle-accurate mode).
+    /// Returns the TimerId of the highest-priority timer that fired, if any.
+    /// Priority order: Timer A > Timer B > Timer C > Timer D
+    pub fn check_timers_at_cycle(&mut self, cpu_cycle: u64) -> Option<TimerId> {
+        // Check in priority order (A has highest priority among timers)
+        // Note: GPI7 is not cycle-ticked, it's event-based
+        if self.timers[TimerId::TimerA as usize].check_fire_at_cycle(cpu_cycle) {
+            return Some(TimerId::TimerA);
+        }
+        if self.timers[TimerId::TimerB as usize].check_fire_at_cycle(cpu_cycle) {
+            return Some(TimerId::TimerB);
+        }
+        if self.timers[TimerId::TimerC as usize].check_fire_at_cycle(cpu_cycle) {
+            return Some(TimerId::TimerC);
+        }
+        if self.timers[TimerId::TimerD as usize].check_fire_at_cycle(cpu_cycle) {
+            return Some(TimerId::TimerD);
+        }
+        None
+    }
+
+    /// Get the next CPU cycle at which any timer will fire.
+    /// Returns None if no timers are active.
+    pub fn next_timer_fire_cycle(&self) -> Option<u64> {
+        self.timers[0..4]
+            .iter()
+            .filter_map(|t| t.next_fire_cycle)
+            .min()
+    }
+
 
     /// Set Timer A input pin state (TAI) with edge detection.
     /// Used for external event counting in Timer A event mode.

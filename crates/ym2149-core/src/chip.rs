@@ -429,10 +429,6 @@ impl Ym2149 {
         self.mixer.config.compute_gate_mask(tone_edges, noise_mask)
     }
 
-    /// Generate the next audio sample
-    ///
-    /// This method runs the internal state machine at 250kHz and averages
-    /// the output to produce samples at the host sample rate.
     /// Generate the next audio sample with cycle-accurate write processing.
     ///
     /// This method:

@@ -64,4 +64,7 @@ pub trait Cpu68k {
 
     /// Get the status register.
     fn sr(&self) -> u16;
+
+    /// Get the total number of CPU cycles executed since reset.
+    fn total_cycles(&self) -> u64;
 }
