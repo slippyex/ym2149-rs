@@ -633,7 +633,13 @@ impl AtariMachine {
     /// are aligned with the current CPU cycle count.
     pub fn sync_timing(&mut self) {
         let cpu_cycle = self.cpu.total_cycles();
+
+        // Reset MFP timer states (clears pending/in-service, resets counters)
         self.memory.mfp.sync_cpu_cycle(cpu_cycle);
+
+        // Clear interrupt flag in case we were mid-interrupt during seek
+        self.in_interrupt = false;
+
         // Flush any pending YM2149 writes before syncing cycle
         self.memory.ym2149.flush_pending_writes();
         self.memory.ym2149.sync_sample_cycle(cpu_cycle);

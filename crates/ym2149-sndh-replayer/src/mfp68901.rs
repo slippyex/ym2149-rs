@@ -219,14 +219,20 @@ impl Timer {
         Some(total_fp16 >> 16)
     }
 
-    /// Reset cycle-accurate timer state after seek.
-    /// Only resets cycle-accurate state from configuration (data_register_init).
-    /// Legacy state (legacy_counter, inner_clock) remains untouched.
+    /// Reset timer state after seek for consistent playback.
+    /// Resets both cycle-accurate and legacy states to ensure clean continuation.
     fn reset_for_sync(&mut self, current_cpu_cycle: u64) {
-        // Calculate cycles_until_fire from configuration (data_register_init)
+        // Reset cycle-accurate state
         self.cycles_until_fire = self.calc_cycles_for_period();
         self.last_check_cycle = current_cpu_cycle;
-        // Legacy state (legacy_counter, inner_clock) is NOT modified!
+
+        // Reset legacy state for consistent timing after seek
+        self.inner_clock = 0;
+        self.legacy_counter = self.data_register_init;
+
+        // Clear any pending/in-service interrupts to avoid stale state
+        self.pending = false;
+        self.in_service = false;
     }
 
     fn set_er(&mut self, enable: bool) {
@@ -655,14 +661,17 @@ impl Mfp68901 {
         fired
     }
 
-    /// Initialize cycle-accurate timer mode with current CPU cycle.
-    /// Call this after reset and when timers are configured.
+    /// Synchronize all timer states after seek or time discontinuity.
+    /// Resets both cycle-accurate and legacy states for clean continuation.
     pub fn sync_cpu_cycle(&mut self, cpu_cycle: u64) {
+        // Reset timers A, B, C, D
         for timer in &mut self.timers[0..4] {
-            // Reset timer state and recalculate next fire cycle
-            // This ensures clean state after seek
             timer.reset_for_sync(cpu_cycle);
         }
+
+        // Also clear GPI7 interrupt state (event-based, no timing to reset)
+        self.timers[TimerId::Gpi7 as usize].pending = false;
+        self.timers[TimerId::Gpi7 as usize].in_service = false;
     }
 
     /// Check all timers at the given CPU cycle (cycle-accurate mode).
