@@ -66,6 +66,11 @@ const INIT_TIMEOUT_FRAMES: u32 = 500;
 /// Interrupt vector addresses for MFP timers
 const IVECTOR: [u32; 5] = [0x134, 0x120, 0x114, 0x110, 0x13C];
 
+/// MC68000 Exception Processing Cycles (from MC68000 User Manual, Table 8-14)
+/// These are the cycles consumed by exception entry before the handler runs.
+const CYCLES_INTERRUPT: u64 = 44;  // Interrupt acknowledgment + stack frame
+const CYCLES_TRAP: u64 = 34;       // TRAP instruction exception processing
+
 struct XbiosTimerConfig {
     ctrl_port: u8,
     data_port: u8,
@@ -435,6 +440,9 @@ impl AtariMachine {
             }
             self.in_interrupt = true;
 
+            // Add interrupt exception processing cycles (44 cycles per MC68000 manual)
+            self.cpu.add_cycles(CYCLES_INTERRUPT);
+
             // Acknowledge interrupt (sets in-service, clears pending)
             self.memory.mfp.acknowledge_timer(timer_id);
 
@@ -789,7 +797,9 @@ impl AtariMachine {
             if opcode & 0xFFF0 == 0x4E40 {
                 let vector = (opcode & 0x000F) as u8;
                 if self.handle_trap(vector) {
-                    executed += 40;
+                    // Add TRAP exception processing cycles to CPU counter
+                    self.cpu.add_cycles(CYCLES_TRAP);
+                    executed += CYCLES_TRAP as usize;
                     continue;
                 }
             }

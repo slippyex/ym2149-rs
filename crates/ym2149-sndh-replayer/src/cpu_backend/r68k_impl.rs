@@ -253,4 +253,8 @@ impl Cpu68k for R68kBackend {
     fn total_cycles(&self) -> u64 {
         self.total_cycles
     }
+
+    fn add_cycles(&mut self, cycles: u64) {
+        self.total_cycles += cycles;
+    }
 }

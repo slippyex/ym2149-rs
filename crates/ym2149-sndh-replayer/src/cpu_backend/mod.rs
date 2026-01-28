@@ -75,4 +75,8 @@ pub trait Cpu68k {
 
     /// Get the total number of CPU cycles executed since reset.
     fn total_cycles(&self) -> u64;
+
+    /// Add cycles to the total cycle count (for exception processing overhead).
+    /// Used when emulating exception entry that bypasses normal instruction execution.
+    fn add_cycles(&mut self, cycles: u64);
 }
