@@ -697,6 +697,10 @@ impl AtariMachine {
         // Flush any pending YM2149 writes before syncing cycle
         self.memory.ym2149.flush_pending_writes();
         self.memory.ym2149.sync_sample_cycle(cpu_cycle);
+
+        // Sync STE DAC bus contention tracking
+        self.memory.ste_dac.sync_contention(cpu_cycle);
+
         self.memory.cpu_cycles = cpu_cycle;
     }
 
@@ -860,6 +864,13 @@ impl AtariMachine {
             self.memory.cpu_cycles = self.cpu.total_cycles();
             let step_cycles = self.cpu.step(&mut self.memory);
             executed += step_cycles;
+
+            // Add DMA bus contention cycles (STE DMA steals bus cycles from CPU)
+            let contention = self.memory.ste_dac.get_bus_contention_cycles(self.cpu.total_cycles());
+            if contention > 0 {
+                self.cpu.add_cycles(contention);
+                executed += contention as usize;
+            }
 
             // Check for cycle-accurate timer interrupts (if enabled).
             // Nested interrupt logic is handled in dispatch_timer_interrupt.
