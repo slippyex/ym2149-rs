@@ -66,6 +66,14 @@ const INIT_TIMEOUT_FRAMES: u32 = 500;
 /// Interrupt vector addresses for MFP timers
 const IVECTOR: [u32; 5] = [0x134, 0x120, 0x114, 0x110, 0x13C];
 
+/// MFP interrupt priorities (directly from MFP register bit positions).
+/// Higher value = higher priority. Used for nested interrupt decisions.
+/// GPI7=15, TimerA=13, TimerB=8, TimerC=5, TimerD=4
+const MFP_PRIORITY: [u8; 5] = [13, 8, 5, 4, 15];
+
+/// Maximum interrupt nesting depth to prevent stack overflow.
+const MAX_INTERRUPT_NESTING: u8 = 4;
+
 /// MC68000 Exception Processing Cycles (from MC68000 User Manual, Table 8-14)
 /// These are the cycles consumed by exception entry before the handler runs.
 const CYCLES_INTERRUPT: u64 = 44;  // Interrupt acknowledgment + stack frame
@@ -343,8 +351,10 @@ pub struct AtariMachine {
     cpu: DefaultCpu,
     /// Memory and peripherals
     memory: AtariMemory,
-    /// Prevent nested interrupt execution
-    in_interrupt: bool,
+    /// Current interrupt nesting depth (0 = not in interrupt)
+    interrupt_nesting_depth: u8,
+    /// Priority of the currently executing interrupt (if any)
+    current_interrupt_priority: u8,
     /// Incremental GEMDOS malloc pointer
     next_gemdos_malloc: u32,
     /// Enable cycle-accurate timer interrupts (disable during seek for performance)
@@ -357,7 +367,8 @@ impl AtariMachine {
         let mut machine = Self {
             cpu: DefaultCpu::new(),
             memory: AtariMemory::new(sample_rate),
-            in_interrupt: false,
+            interrupt_nesting_depth: 0,
+            current_interrupt_priority: 0,
             next_gemdos_malloc: GEMDOS_MALLOC_START,
             // MFP cycle-accurate timers enabled (seek-compatible implementation)
             cycle_accurate_timers: true,
@@ -370,7 +381,8 @@ impl AtariMachine {
     pub fn reset(&mut self) {
         self.memory.reset();
         self.cpu = DefaultCpu::new();
-        self.in_interrupt = false;
+        self.interrupt_nesting_depth = 0;
+        self.current_interrupt_priority = 0;
         self.next_gemdos_malloc = GEMDOS_MALLOC_START;
     }
 
@@ -437,35 +449,58 @@ impl AtariMachine {
         }
     }
 
-    /// Dispatch a timer interrupt (used by both legacy and cycle-accurate modes).
+    /// Dispatch a timer interrupt with nested interrupt support.
+    ///
+    /// Nested interrupts are allowed if:
+    /// - We're not at max nesting depth
+    /// - The new interrupt has higher MFP priority than the current one
     fn dispatch_timer_interrupt(&mut self, timer_id: TimerId) {
         let timer_idx = timer_id as usize;
+        let new_priority = MFP_PRIORITY[timer_idx];
         let vector_addr = IVECTOR[timer_idx];
         let pc = self.memory.read_long(vector_addr);
         let pc24 = pc & 0x00FF_FFFF;
 
-        if pc != 0 && pc != RTE_INSTRUCTION_ADDR && (pc24 as usize) < RAM_SIZE {
-            if self.in_interrupt {
+        if pc == 0 || pc == RTE_INSTRUCTION_ADDR || (pc24 as usize) >= RAM_SIZE {
+            return;
+        }
+
+        // Check if we can dispatch this interrupt
+        if self.interrupt_nesting_depth > 0 {
+            // Already in an interrupt - check if nesting is allowed
+            if self.interrupt_nesting_depth >= MAX_INTERRUPT_NESTING {
+                // Max nesting reached - leave pending for later
                 return;
             }
-            self.in_interrupt = true;
-
-            // Add interrupt exception processing cycles (44 cycles per MC68000 manual)
-            self.cpu.add_cycles(CYCLES_INTERRUPT);
-
-            // Acknowledge interrupt (sets in-service, clears pending)
-            self.memory.mfp.acknowledge_timer(timer_id);
-
-            self.configure_return_by_rte();
-            self.memory.ym2149.inside_timer_irq(true);
-            let _ = self.jmp_binary_no_timer_check(pc, 1);
-            self.memory.ym2149.inside_timer_irq(false);
-
-            // End of interrupt (clears in-service for automatic EOI mode)
-            self.memory.mfp.end_of_interrupt_timer(timer_id);
-
-            self.in_interrupt = false;
+            if new_priority <= self.current_interrupt_priority {
+                // Lower or equal priority - leave pending for later
+                return;
+            }
+            // Higher priority - allow nesting
         }
+
+        // Save previous priority and increment nesting
+        let saved_priority = self.current_interrupt_priority;
+        self.current_interrupt_priority = new_priority;
+        self.interrupt_nesting_depth += 1;
+
+        // Add interrupt exception processing cycles (44 cycles per MC68000 manual)
+        self.cpu.add_cycles(CYCLES_INTERRUPT);
+
+        // Acknowledge interrupt (sets in-service, clears pending)
+        self.memory.mfp.acknowledge_timer(timer_id);
+
+        self.configure_return_by_rte();
+        self.memory.ym2149.inside_timer_irq(true);
+        let _ = self.jmp_binary_no_timer_check(pc, 1);
+        self.memory.ym2149.inside_timer_irq(false);
+
+        // End of interrupt (clears in-service for automatic EOI mode)
+        self.memory.mfp.end_of_interrupt_timer(timer_id);
+
+        // Restore previous state
+        self.interrupt_nesting_depth -= 1;
+        self.current_interrupt_priority = saved_priority;
     }
 
     fn xbios_timer_set(&mut self, config: XbiosTimerConfig) {
@@ -655,8 +690,9 @@ impl AtariMachine {
         // Reset MFP timer states (clears pending/in-service, resets counters)
         self.memory.mfp.sync_cpu_cycle(cpu_cycle);
 
-        // Clear interrupt flag in case we were mid-interrupt during seek
-        self.in_interrupt = false;
+        // Clear interrupt state in case we were mid-interrupt during seek
+        self.interrupt_nesting_depth = 0;
+        self.current_interrupt_priority = 0;
 
         // Flush any pending YM2149 writes before syncing cycle
         self.memory.ym2149.flush_pending_writes();
@@ -825,8 +861,9 @@ impl AtariMachine {
             let step_cycles = self.cpu.step(&mut self.memory);
             executed += step_cycles;
 
-            // Check for cycle-accurate timer interrupts (if enabled and not in interrupt)
-            if check_timers && self.cycle_accurate_timers && !self.in_interrupt {
+            // Check for cycle-accurate timer interrupts (if enabled).
+            // Nested interrupt logic is handled in dispatch_timer_interrupt.
+            if check_timers && self.cycle_accurate_timers {
                 let cpu_cycle = self.cpu.total_cycles();
                 if let Some(next_fire) = self.memory.mfp.next_timer_fire_cycle() {
                     // Add MFP-internal latency before dispatch.
