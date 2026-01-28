@@ -2,6 +2,65 @@
 
 All notable changes to the ym2149-rs project.
 
+## 2026/01/28 - v0.9.1
+
+### Improved
+- **SNDH hardware accuracy (~98-99%)** - Major improvements to Atari ST machine emulation:
+  - **MFP FP16 clock precision** - High-precision lookup table using 16-bit fixed-point math with exact ratio 3125/960 for CPU-to-MFP clock conversion, eliminating cumulative rounding errors
+  - **MFP state consistency** - Clean reset of all timer states after seek (counters, pending flags, in-service flags)
+  - **Exception cycle modeling** - Correct cycle counts for interrupts (44 cycles), TRAPs (34 cycles), and RTE (20 cycles)
+  - **MFP interrupt latency** - Models MFP-internal propagation delay (~10 cycles); CPU-side latency implicit through instruction-boundary checking
+  - **Nested interrupt support** - Full MFP interrupt priority handling (GPI7=15, Timer A=13, Timer B=8, Timer C=5, Timer D=4) with max nesting depth of 4
+  - **STE DMA bus contention** - DMA transfers steal ~8 CPU cycles per sample, affecting timer-relative timing
+  - **Phase re-sync after seek** - Virtual cycle accumulation during seek preserves timer phase relationships for multi-timer effects (SID voice, digidrum)
+  - **Cycle-accurate timer counter reads** - TxDR reads return actual countdown value based on CPU cycle, not just the last sampled value
+  - **MFP prescale switch delay** - Per MC68901 manual: changing prescaler while running causes indeterminate 1-200 timer clock delay, modeled as ~100 clocks
+  - **YM2149 access latency** - Additional cycles for PSG register access timing
+  - **Dual-mode timer architecture** - Separate legacy (sample-based) and cycle-accurate timer states for seek compatibility
+- **Code quality overhaul** - Comprehensive review and optimization of the entire codebase:
+  - Removed all dead code (`#[allow(dead_code)]` → removed or gated with `#[cfg(test)]`)
+  - Removed duplicate timer IRQ setter alias (`set_inside_timer_irq`)
+  - Removed debug `console.log` statements from WASM player
+  - DigiDrum magic number `4.0` replaced with named constant `DIGIDRUM_MAX_AMPLITUDE`
+- **Performance optimizations**:
+  - PSG bank mixing: first chip renders directly into output buffer (avoids initial `fill(0.0)`)
+  - SNDH mono conversion uses reusable `stereo_scratch` buffer (`std::mem::take` pattern) instead of per-call heap allocation
+  - Added `#[inline]` on hot-path methods (`next_sample`, `inside_timer_irq`)
+  - Added `#[must_use]` on pure functions (`cpu_cycle`, `pending_write_count`, `read_port`, `read_register`)
+- **WASM code reduction** - Extracted shared helpers to eliminate repetition:
+  - `apply_volume()` helper replaces 4× duplicated volume scaling code
+  - `set_js_prop()` helper replaces 40+ verbose `Reflect::set().ok()` calls
+  - `mono_to_stereo()` helper replaces 2× duplicated stereo conversion
+  - `player.psg_count()` used directly instead of repeated `channel_count().div_ceil(3)`
+- **Safety & robustness**:
+  - Envelope generator uses checked array access (`.get().unwrap_or(0)`) instead of unchecked indexing
+  - MFP68901 timer cycle calculation uses `saturating_mul` to prevent overflow
+  - Division-by-zero protection for SNDH files with `player_rate = 0` (defaults to 50Hz)
+  - SNDH subsong index validation (bounds check for 1-based index)
+  - Early return for empty positions array in Arkos player
+- **Documentation**:
+  - Comprehensive safety documentation for unsafe thread-local CPU backend (`r68k_impl.rs`)
+  - `dc_filter.rs` running sum overflow invariant documented
+  - `tables.rs` ENV_DATA array layout documented
+  - MFP68901 timer counter wrapping behavior documented (`data_register_init = 0` → period 256)
+
+### External: r68k (68000 CPU emulator)
+- **Modernized codebase** - Restructured from multi-crate workspace to single crate, updated to Rust 2024 edition
+- **Cycle granularity API** - `set_cycle_granularity(4)` aligns all instruction cycle counts to 4-cycle boundaries, matching Atari ST GLUE/MMU bus timing
+- **Wait state support** - New `AddressBus::wait_cycles()` trait method allows memory implementations to add per-access wait states (used for YM2149 I/O latency)
+- **Corrected exception cycle counts** - Updated to match MC68000UM Table 8-14:
+  - CHK trap: 40 → 44 cycles
+  - Zero divide trap: 38 → 42 cycles
+  - TRAP #n: 34 → 38 cycles
+- **InterruptController trait** - Extracted interrupt handling into configurable trait with `AutoInterruptController` default implementation
+- **Comprehensive documentation** - Full rustdoc coverage for all public APIs, traits, and modules
+
+### Fixed
+- **SNDH warmup buffer** - Changed from stack allocation (`[0.0f32; 44100]`) to heap allocation (`vec!`) to prevent stack overflow in WASM (176KB on stack exceeded WASM limits for some songs)
+- **SNDH warmup duration** - Corrected buffer size to 44100 stereo samples (500ms), was previously 22050 (250ms)
+- **MFP68901 collapsible if** - Combined nested conditionals per Clippy lint
+- **Clippy warnings** - Resolved all warnings: needless range loops converted to iterators, `.cloned()` → `.copied()` for primitives, `.max().min()` → `.clamp()`, format string inlining
+
 ## 2026/01/14 - v0.9.0
 
 ### Added
