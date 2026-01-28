@@ -4364,7 +4364,9 @@ checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
 name = "r68k"
-version = "0.2.1"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c49adfe3298c8a853615220b70d5c60c9bd359ca66f277aa0ad399d65f678a8"
 
 [[package]]
 name = "radsort"
